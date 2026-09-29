@@ -918,14 +918,15 @@ function elementsAt(id, jd) {
   const k = KEP[id];
   return { a: k.a, e: k.e, i: k.i, node: k.node, peri: k.peri, M: k.M + 0.9856076686 / Math.pow(k.a, 1.5) * (jd - k.epoch) };
 }
+// Kepler's equation E − e·sin E = M for M in [−π, π]. The left side is monotonic there, so bisection always converges,
+// even for comet-like eccentricities where Newton's method can jump between branches.
 function solveKepler(M, e) {
-  let E = e > 0.8 ? PI : M;
-  for (let k = 0; k < 60; k++) {
-    const d = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
-    E -= d;
-    if (Math.abs(d) < 1e-12) break;
+  let lo = -PI, hi = PI;
+  for (let k = 0; k < 52; k++) {
+    const E = (lo + hi) / 2;
+    if (E - e * Math.sin(E) - M > 0) hi = E; else lo = E;
   }
-  return E;
+  return (lo + hi) / 2;
 }
 // Heliocentric ecliptic position (AU) for eccentric anomaly E, in scene axes: x → vernal equinox, y → ecliptic north.
 function posFromE(el, E, out) {
@@ -1196,7 +1197,7 @@ function renderInfo(b) {
   let rows = data.stats;
   if (b) {
     const isMoon = b.parent && b.id !== "moon";
-    const note = b.id === "earth" ? "еталон для порівняння" : isMoon ? fmtRatio(b.d, MOON_D, "Місяця") : fmtRatio(b.d, EARTH_D, "Землі");
+    const note = b.comet ? "ядро" : b.id === "earth" ? "еталон для порівняння" : isMoon ? fmtRatio(b.d, MOON_D, "Місяця") : fmtRatio(b.d, EARTH_D, "Землі");
     rows = [["Діаметр", b.dText || (b.d.toLocaleString("uk-UA") + " км"), note]].concat(b.stats);
   }
   $("stats").innerHTML = rows.map(r => `<div><dt>${r[0]}</dt><dd>${r[1]}${r[2] ? `<small>${r[2]}</small>` : ""}</dd></div>`).join("");
@@ -1324,10 +1325,11 @@ function setLive(on) {
 }
 function jumpTo(ms, rate, label) {
   state.simMs = Math.min(MAX_MS, Math.max(MIN_MS, ms));
+  state.jumped = true;
   setLive(false);
   if (rate != null) setRate(rate);
   if (state.paused) $("pause").click();
-  if (label) showToast(`${label}: ${new Date(state.simMs).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" })}. Час іде зі швидкістю ${RATES[state.rate][1]}.`, 5000);
+  if (label) showToast(`${label}: ${new Date(state.simMs).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" })} Час іде зі швидкістю ${RATES[state.rate][1]}.`, 5000);
 }
 const fmtNum = (x, d) => x.toFixed(d).replace(".", ",");
 function fmtAU(au) {
@@ -1535,6 +1537,14 @@ function tick() {
   }
   const jd = jdOf(state.simMs), dDays = dt * rateS / 86400, fine = rateS <= 86400;
   placeAll(jd, dDays, fine);
+  if (state.jumped) {
+    // After a date jump, glide to the body's new place instead of snapping the camera across the system.
+    state.jumped = false;
+    for (const b of BODIES) b.dq.identity();
+    scene.updateMatrixWorld();
+    for (const b of BODIES) b.group.getWorldPosition(b.world);
+    if (state.index >= 0) focusBody(state.index);
+  }
 
   for (const b of BODIES) {
     if (b.parent || !b.rot) continue;
