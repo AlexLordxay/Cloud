@@ -94,6 +94,9 @@ button { font: inherit; color: inherit; }
 .fact span:first-child { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ice); }
 .hint { margin: 0; font-size: 12px; color: var(--muted); }
 .more { display: none; }
+.credits { margin: 0; font-size: 11px; color: var(--muted); }
+.credits a { color: var(--ice); text-decoration: none; }
+.credits a:hover { text-decoration: underline; }
 
 /* Dock */
 .dock {
@@ -193,6 +196,7 @@ button { font: inherit; color: inherit; }
   <p class="desc collapsible" id="desc"></p>
   <p class="fact collapsible"><span>Цікавий факт</span><span id="fact"></span></p>
   <p class="hint collapsible">Тягніть, щоб обертати. Колесо миші або два пальці наближають. Стрілки ← → перемикають планети, Esc повертає до огляду.</p>
+  <p class="credits collapsible">Текстури: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; Меркурій — NASA MESSENGER; нічна Земля й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>.</p>
 </aside>
 
 <nav class="dock glass" aria-label="Планети">
@@ -204,7 +208,7 @@ button { font: inherit; color: inherit; }
 <div class="loader" id="loader">
   <b>Планетарій</b>
   <div class="bar"><i id="barFill"></i></div>
-  <span id="loadText">Готуємо поверхні планет…</span>
+  <span id="loadText">Завантажуємо карти поверхонь…</span>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
@@ -278,97 +282,8 @@ const OVERVIEW = {
   fact: "1 астрономічна одиниця (а. о.) — це середня відстань від Землі до Сонця, приблизно 149,6 млн км.",
 };
 
-/* ---------- Procedural noise ---------- */
-function hash3(x, y, z, s) {
-  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177) ^ Math.imul(s, 1103515245);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
-}
-function noise3(x, y, z, s) {
-  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
-  const xf = x - xi, yf = y - yi, zf = z - zi;
-  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
-  const a = hash3(xi, yi, zi, s), b = hash3(xi + 1, yi, zi, s);
-  const c = hash3(xi, yi + 1, zi, s), d = hash3(xi + 1, yi + 1, zi, s);
-  const e = hash3(xi, yi, zi + 1, s), f = hash3(xi + 1, yi, zi + 1, s);
-  const g = hash3(xi, yi + 1, zi + 1, s), h = hash3(xi + 1, yi + 1, zi + 1, s);
-  const x1 = a + (b - a) * u, x2 = c + (d - c) * u, x3 = e + (f - e) * u, x4 = g + (h - g) * u;
-  const y1 = x1 + (x2 - x1) * v, y2 = x3 + (x4 - x3) * v;
-  return y1 + (y2 - y1) * w;
-}
-function fbm(x, y, z, s, oct) {
-  let sum = 0, amp = 0.5, f = 1, norm = 0;
-  for (let i = 0; i < oct; i++) {
-    sum += amp * noise3(x * f, y * f, z * f, s + i * 17);
-    norm += amp; amp *= 0.5; f *= 2.03;
-  }
-  return sum / norm;
-}
+/* ---------- Helpers & texture list ---------- */
 const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
-const smooth = (a, b, t) => { t = clamp01((t - a) / (b - a)); return t * t * (3 - 2 * t); };
-function ramp(stops, t, o) {
-  t = clamp01(t);
-  for (let i = 1; i < stops.length; i++) {
-    if (t <= stops[i][0]) {
-      const A = stops[i - 1], B = stops[i], k = (t - A[0]) / (B[0] - A[0]);
-      o[0] = A[1][0] + (B[1][0] - A[1][0]) * k;
-      o[1] = A[1][1] + (B[1][1] - A[1][1]) * k;
-      o[2] = A[1][2] + (B[1][2] - A[1][2]) * k;
-      return o;
-    }
-  }
-  const L = stops[stops.length - 1][1];
-  o[0] = L[0]; o[1] = L[1]; o[2] = L[2];
-  return o;
-}
-function mixInto(o, c, k) { o[0] += (c[0] - o[0]) * k; o[1] += (c[1] - o[1]) * k; o[2] += (c[2] - o[2]) * k; }
-function shade(o, s) { o[0] *= s; o[1] *= s; o[2] *= s; }
-
-function makeCraters(n, seed, minR, maxR) {
-  let s = seed >>> 0;
-  const rnd = () => (s = (Math.imul(s, 1664525) + 1013904223) >>> 0) / 4294967296;
-  const list = [];
-  for (let i = 0; i < n; i++) {
-    const u = rnd() * 2 - 1, t = rnd() * TAU, r = Math.sqrt(1 - u * u);
-    list.push([r * Math.cos(t), u, r * Math.sin(t), minR + Math.pow(rnd(), 3) * (maxR - minR)]);
-  }
-  return list;
-}
-function craterShade(x, y, z, craters) {
-  let s = 0;
-  for (let i = 0; i < craters.length; i++) {
-    const c = craters[i], dx = x - c[0], dy = y - c[1], dz = z - c[2], r = c[3];
-    const d2 = dx * dx + dy * dy + dz * dz;
-    if (d2 > r * r * 1.8) continue;
-    const t = Math.sqrt(d2) / r;
-    if (t < 1) s -= 0.2 * (1 - t * t);
-    const rim = (t - 1) / 0.16;
-    s += 0.14 * Math.exp(-rim * rim);
-  }
-  return s;
-}
-
-function sphereTexture(w, h, fn) {
-  const cv = document.createElement("canvas");
-  cv.width = w; cv.height = h;
-  const ctx = cv.getContext("2d");
-  const img = ctx.createImageData(w, h), data = img.data;
-  const o = [0, 0, 0, 255];
-  let k = 0;
-  for (let j = 0; j < h; j++) {
-    const lat = PI / 2 - (j + 0.5) / h * PI, cl = Math.cos(lat), y = Math.sin(lat);
-    for (let i = 0; i < w; i++) {
-      const lon = (i + 0.5) / w * TAU;
-      o[3] = 255;
-      fn(cl * Math.cos(lon), y, cl * Math.sin(lon), lat, lon, o);
-      data[k] = o[0]; data[k + 1] = o[1]; data[k + 2] = o[2]; data[k + 3] = o[3];
-      k += 4;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-  return cv;
-}
 function ringTexture(profile) {
   const w = 1024, h = 4, cv = document.createElement("canvas");
   cv.width = w; cv.height = h;
@@ -383,126 +298,21 @@ function ringTexture(profile) {
   ctx.putImageData(img, 0, 0);
   return cv;
 }
-
-/* ---------- Surface recipes ---------- */
-const mercuryCraters = makeCraters(220, 7, 0.015, 0.16);
-const moonCraters = makeCraters(160, 99, 0.015, 0.14);
-const marsCraters = makeCraters(70, 31, 0.015, 0.09);
-
-const RECIPES = {
-  sun: [640, 320, (x, y, z, lat, lon, o) => {
-    const n = fbm(x * 5, y * 5, z * 5, 1, 5);
-    const g = noise3(x * 38, y * 38, z * 38, 9);
-    ramp([[0, [210, 70, 10]], [0.45, [250, 150, 40]], [0.7, [255, 205, 95]], [1, [255, 245, 210]]], n * 0.85 + g * 0.3 - 0.05, o);
-  }],
-  mercury: [640, 320, (x, y, z, lat, lon, o) => {
-    const n = fbm(x * 3, y * 3, z * 3, 3, 5);
-    const v = 0.42 + n * 0.35 + craterShade(x, y, z, mercuryCraters);
-    const t = clamp01(v) * 255;
-    o[0] = t * 1.0; o[1] = t * 0.96; o[2] = t * 0.9;
-  }],
-  venus: [640, 320, (x, y, z, lat, lon, o) => {
-    const warp = fbm(x * 2.5, y * 2.5, z * 2.5, 5, 4);
-    const n = fbm(x * 2 + warp * 2.2, y * 7 + warp, z * 2 + warp * 2.2, 13, 5);
-    ramp([[0, [176, 118, 56]], [0.45, [222, 176, 108]], [0.75, [240, 214, 160]], [1, [252, 240, 212]]], (n - 0.2) * 1.6, o);
-  }],
-  earth: [1024, 512, (x, y, z, lat, lon, o) => {
-    const h = fbm(x * 1.7 + 3.1, y * 1.7, z * 1.7, 11, 6);
-    const alat = Math.abs(lat) / DEG;
-    const sea = 0.515;
-    if (h < sea) {
-      ramp([[0, [5, 22, 60]], [0.7, [12, 50, 110]], [1, [34, 104, 158]]], smooth(0.36, sea, h), o);
-    } else {
-      const m = fbm(x * 3, y * 3, z * 3, 41, 3);
-      const dryBelt = 1 - Math.min(1, Math.abs(alat - 24) / 22);
-      const desert = smooth(0.46, 0.6, m + dryBelt * 0.12) * (alat < 45 ? 1 : 0.25);
-      o[0] = 58; o[1] = 100; o[2] = 46;
-      if (alat > 50) { o[0] = 70; o[1] = 92; o[2] = 60; }
-      mixInto(o, [198, 172, 118], desert);
-      const e = h - sea;
-      mixInto(o, [112, 96, 78], smooth(0.07, 0.17, e));
-      mixInto(o, [236, 238, 242], smooth(0.2, 0.25, e));
-      shade(o, 0.9 + noise3(x * 30, y * 30, z * 30, 3) * 0.2);
-    }
-    const ice = alat + (fbm(x * 4, y * 4, z * 4, 51, 3) - 0.5) * 16;
-    mixInto(o, [236, 242, 248], smooth(71, 75, ice));
-  }],
-  earthClouds: [1024, 512, (x, y, z, lat, lon, o) => {
-    const warp = fbm(x * 4, y * 4, z * 4, 61, 3);
-    const c = fbm(x * 2.4 + warp * 1.3, y * 4.5, z * 2.4 + warp * 1.3, 71, 5);
-    o[0] = o[1] = o[2] = 255;
-    o[3] = smooth(0.53, 0.72, c) * 215;
-  }],
-  moon: [512, 256, (x, y, z, lat, lon, o) => {
-    const maria = smooth(0.5, 0.62, fbm(x * 1.6, y * 1.6, z * 1.6, 81, 4));
-    const n = fbm(x * 6, y * 6, z * 6, 83, 4);
-    const v = 0.62 - maria * 0.22 + (n - 0.5) * 0.18 + craterShade(x, y, z, moonCraters);
-    const t = clamp01(v) * 255;
-    o[0] = o[1] = t; o[2] = t * 0.97;
-  }],
-  mars: [768, 384, (x, y, z, lat, lon, o) => {
-    const n = fbm(x * 2.6, y * 2.6, z * 2.6, 21, 6);
-    const dark = smooth(0.52, 0.66, fbm(x * 1.4 + 7, y * 1.4, z * 1.4, 23, 4));
-    ramp([[0, [112, 44, 22]], [0.5, [184, 86, 44]], [1, [222, 140, 86]]], n * 1.4 - 0.15, o);
-    mixInto(o, [84, 42, 28], dark * 0.55);
-    shade(o, 1 + craterShade(x, y, z, marsCraters));
-    const alat = Math.abs(lat) / DEG + (fbm(x * 5, y * 5, z * 5, 27, 3) - 0.5) * 10;
-    mixInto(o, [240, 236, 230], smooth(76, 80, alat));
-  }],
-  jupiter: [1024, 512, (x, y, z, lat, lon, o) => {
-    const w = fbm(x * 3, y * 3, z * 3, 31, 4);
-    const b = Math.sin(y * 21 + (w - 0.5) * 3.2 + Math.sin(y * 7) * 0.8);
-    const fine = noise3(x * 9, y * 46, z * 9, 33);
-    ramp([[0, [150, 92, 60]], [0.35, [196, 140, 96]], [0.65, [226, 206, 176]], [1, [242, 232, 214]]], b * 0.45 + 0.5 + (fine - 0.5) * 0.25, o);
-    const alat = Math.abs(lat) / DEG;
-    mixInto(o, [150, 130, 118], smooth(60, 80, alat) * 0.6);
-    let dl = lon - 1.2; dl = Math.atan2(Math.sin(dl), Math.cos(dl));
-    const e = Math.pow((lat + 22 * DEG) / (7 * DEG), 2) + Math.pow(dl / 0.3, 2);
-    if (e < 1.6) {
-      mixInto(o, [236, 214, 190], smooth(1.6, 1.1, e) * 0.7);
-      mixInto(o, [196, 86, 52], smooth(1.0, 0.2, e + (fine - 0.5) * 0.3));
-    }
-  }],
-  saturn: [1024, 512, (x, y, z, lat, lon, o) => {
-    const w = fbm(x * 3, y * 3, z * 3, 41, 3);
-    const b = Math.sin(y * 16 + (w - 0.5) * 1.6 + Math.sin(y * 5) * 0.6);
-    const fine = noise3(x * 6, y * 60, z * 6, 43);
-    ramp([[0, [176, 144, 96]], [0.5, [214, 188, 136]], [1, [238, 220, 176]]], b * 0.3 + 0.55 + (fine - 0.5) * 0.18, o);
-    mixInto(o, [150, 150, 140], smooth(65, 85, Math.abs(lat) / DEG) * 0.5);
-  }],
-  uranus: [512, 256, (x, y, z, lat, lon, o) => {
-    const b = Math.sin(y * 9 + (fbm(x * 2, y * 2, z * 2, 51, 3) - 0.5) * 1.2);
-    ramp([[0, [138, 200, 208]], [1, [184, 228, 232]]], 0.55 + b * 0.12, o);
-    mixInto(o, [214, 240, 240], smooth(55, 85, Math.abs(lat) / DEG) * 0.5);
-  }],
-  neptune: [768, 384, (x, y, z, lat, lon, o) => {
-    const w = fbm(x * 3, y * 3, z * 3, 61, 4);
-    const b = Math.sin(y * 12 + (w - 0.5) * 2.6);
-    ramp([[0, [34, 62, 170]], [0.5, [56, 100, 214]], [1, [92, 140, 236]]], 0.5 + b * 0.3, o);
-    const streak = fbm(x * 3, y * 24, z * 3, 63, 4);
-    mixInto(o, [220, 232, 255], smooth(0.62, 0.74, streak) * 0.8);
-    let dl = lon - 2.4; dl = Math.atan2(Math.sin(dl), Math.cos(dl));
-    const e = Math.pow((lat + 20 * DEG) / (6 * DEG), 2) + Math.pow(dl / 0.26, 2);
-    mixInto(o, [20, 34, 110], smooth(1, 0.3, e) * 0.85);
-  }],
-};
-
-const saturnRing = t => {
-  const fine = noise3(t * 190, 0.5, 0.5, 5) * 0.55 + noise3(t * 55, 0.3, 0.7, 6) * 0.45;
-  let a, c;
-  if (t < 0.28) { a = 0.22 + 0.2 * fine; c = [150, 136, 116]; }
-  else if (t < 0.69) { a = 0.72 + 0.28 * fine; c = [228, 208, 168]; }
-  else if (t < 0.77) { a = 0.05; c = [120, 110, 96]; }
-  else { a = 0.5 + 0.28 * fine; c = [206, 190, 158]; if (Math.abs(t - 0.94) < 0.007) a = 0.04; }
-  a *= smooth(0, 0.02, t) * (1 - smooth(0.985, 1, t));
-  return [c[0], c[1], c[2], a * 255];
-};
 const uranusRing = t => {
   const lines = [0.05, 0.18, 0.3, 0.42, 0.55, 0.97];
   let a = 0;
   for (const l of lines) a = Math.max(a, Math.exp(-Math.pow((t - l) / 0.006, 2)));
   return [200, 215, 220, a * 150];
 };
+
+// Real surface maps: Solar System Scope (CC BY 4.0, based on NASA data), NASA MESSENGER (Mercury), three.js examples (Earth night, specular, normal, clouds).
+const TEXTURES = {
+  sun: "sun.jpg", mercury: "mercury.jpg", venus: "venus_atmosphere.jpg",
+  earth: "earth_day.jpg", earthNight: "earth_night.jpg", earthSpec: "earth_specular.jpg", earthClouds: "earth_clouds.png",
+  moon: "moon.jpg", mars: "mars.jpg", jupiter: "jupiter.jpg", saturn: "saturn.jpg", saturnRing: "saturn_ring.png",
+  uranus: "uranus.jpg", neptune: "neptune.jpg",
+};
+const COLOR_MAPS = new Set(["sun", "mercury", "venus", "earth", "earthNight", "moon", "mars", "jupiter", "saturn", "saturnRing", "uranus", "neptune"]);
 
 /* ---------- Three.js scene ---------- */
 const canvas = document.getElementById("scene");
@@ -514,7 +324,7 @@ const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x04060c);
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 6000);
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.5, 6000);
 const controls = new THREE.OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
@@ -554,14 +364,14 @@ function atmosphere(radius, rgb, power, strength) {
   });
   return new THREE.Mesh(new THREE.SphereGeometry(radius, 64, 48), mat);
 }
-function ringMesh(inner, outer, cv, tint) {
+function ringMesh(inner, outer, map, tint) {
   const geo = new THREE.RingGeometry(inner, outer, 160, 1);
   const pos = geo.attributes.position, uv = geo.attributes.uv, v = new THREE.Vector3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     uv.setXY(i, (v.length() - inner) / (outer - inner), 0.5);
   }
-  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: toTexture(cv), color: tint, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map, color: tint, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
   m.rotation.x = -PI / 2;
   return m;
 }
@@ -580,6 +390,44 @@ function ringMesh(inner, outer, cv, tint) {
   g.setAttribute("color", new THREE.BufferAttribute(col, 3));
   scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true })));
 })();
+
+// Earth: day map lit by the Sun, city lights on the night side, sun glint on oceans.
+function earthMaterial(tex) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      dayMap: { value: tex.earth }, nightMap: { value: tex.earthNight }, specMap: { value: tex.earthSpec },
+      sunPos: { value: new THREE.Vector3(0, 0, 0) },
+    },
+    vertexShader: `
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW;
+      void main() {
+        vUv = uv;
+        vN = normalize(mat3(modelMatrix) * normal);
+        vec4 w = modelMatrix * vec4(position, 1.0);
+        vW = w.xyz;
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: `
+      uniform sampler2D dayMap; uniform sampler2D nightMap; uniform sampler2D specMap; uniform vec3 sunPos;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW;
+      void main() {
+        vec3 N = normalize(vN);
+        vec3 L = normalize(sunPos - vW);
+        vec3 V = normalize(cameraPosition - vW);
+        float ndl = dot(N, L);
+        vec3 day = pow(texture2D(dayMap, vUv).rgb, vec3(2.2));
+        vec3 night = pow(texture2D(nightMap, vUv).rgb, vec3(2.2));
+        float ocean = texture2D(specMap, vUv).r;
+        float lit = smoothstep(-0.08, 0.25, ndl);
+        vec3 col = day * (0.03 + 1.25 * max(ndl, 0.0));
+        col += night * vec3(1.0, 0.8, 0.55) * 2.2 * (1.0 - smoothstep(-0.2, 0.08, ndl));
+        vec3 H = normalize(L + V);
+        col += vec3(1.0, 0.93, 0.8) * pow(max(dot(N, H), 0.0), 160.0) * ocean * 0.35 * lit;
+        gl_FragColor = vec4(col, 1.0);
+        #include <encodings_fragment>
+      }`,
+  });
+}
 
 const orbitMats = [];
 const pickables = [];
@@ -601,9 +449,11 @@ function buildBody(b, i, tex) {
     mat = new THREE.MeshBasicMaterial({ map: tex[b.id] });
     b.group.add(glowSprite("255,190,110", b.radius * 5.2, 0.9));
     b.group.add(glowSprite("255,150,70", b.radius * 11, 0.35));
+  } else if (b.id === "earth") {
+    mat = earthMaterial(tex);
   } else {
     const bumpy = b.id === "mercury" || b.id === "mars";
-    mat = new THREE.MeshStandardMaterial({ map: tex[b.id], roughness: 1, metalness: 0, bumpMap: bumpy ? tex[b.id] : null, bumpScale: bumpy ? 0.04 : 0 });
+    mat = new THREE.MeshStandardMaterial({ map: tex[b.id], roughness: 1, metalness: 0, bumpMap: bumpy ? tex[b.id] : null, bumpScale: bumpy ? 0.015 : 0 });
   }
   b.mesh = new THREE.Mesh(geo, mat);
   b.mesh.userData.index = i;
@@ -613,17 +463,17 @@ function buildBody(b, i, tex) {
   if (b.atmo) b.tiltGroup.add(atmosphere(b.radius * 1.045, b.atmo, b.id === "venus" ? 2.2 : 3.0, b.id === "venus" ? 0.9 : 1.2));
 
   if (b.id === "earth") {
-    earthClouds = new THREE.Mesh(new THREE.SphereGeometry(b.radius * 1.012, 96, 64), new THREE.MeshStandardMaterial({ map: tex.earthClouds, transparent: true, depthWrite: false, roughness: 1 }));
+    earthClouds = new THREE.Mesh(new THREE.SphereGeometry(b.radius * 1.012, 96, 64), new THREE.MeshStandardMaterial({ color: 0xffffff, alphaMap: tex.earthClouds, transparent: true, depthWrite: false, roughness: 1, opacity: 0.9 }));
     b.tiltGroup.add(earthClouds);
     moonPivot = new THREE.Group();
     moonPivot.rotation.z = 5.1 * DEG;
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(0.46, 64, 48), new THREE.MeshStandardMaterial({ map: tex.moon, bumpMap: tex.moon, bumpScale: 0.03, roughness: 1 }));
+    const moon = new THREE.Mesh(new THREE.SphereGeometry(0.46, 64, 48), new THREE.MeshStandardMaterial({ map: tex.moon, bumpMap: tex.moon, bumpScale: 0.01, roughness: 1 }));
     moon.position.x = 3.6;
     moonPivot.add(moon);
     b.group.add(moonPivot);
   }
-  if (b.rings === "saturn") b.tiltGroup.add(ringMesh(b.radius * 1.24, b.radius * 2.27, ringTexture(saturnRing), 0xe6dccb));
-  if (b.rings === "uranus") b.tiltGroup.add(ringMesh(b.radius * 1.6, b.radius * 2.05, ringTexture(uranusRing), 0xffffff));
+  if (b.rings === "saturn") b.tiltGroup.add(ringMesh(b.radius * 1.24, b.radius * 2.27, tex.saturnRing, 0xffffff));
+  if (b.rings === "uranus") b.tiltGroup.add(ringMesh(b.radius * 1.6, b.radius * 2.05, toTexture(ringTexture(uranusRing)), 0xffffff));
 
   if (b.orbit) {
     const pts = [];
@@ -792,7 +642,13 @@ function tick() {
     }
     b.mesh.rotation.y += b.spin * sdt;
   }
-  if (earthClouds) earthClouds.rotation.y += 0.02 * sdt;
+  if (earthClouds) {
+    earthClouds.rotation.y += 0.02 * sdt;
+    // The cloud map is low-res, so thin it out as the camera nears the surface.
+    const e = BODIES[3], alt = camera.position.distanceTo(e.group.position) / e.radius - 1;
+    const k = clamp01((alt - 0.05) / 0.9);
+    earthClouds.material.opacity = 0.12 + 0.63 * k * k * (3 - 2 * k);
+  }
   if (moonPivot) moonPivot.rotation.y += 0.45 * sdt;
 
   const f = state.flight;
@@ -809,8 +665,8 @@ function tick() {
       state.flight = null;
       controls.enabled = true;
       if (f.relBody) {
-        controls.minDistance = f.relBody.radius * 1.5;
-        controls.maxDistance = f.relBody.radius * 16;
+        controls.minDistance = f.relBody.radius * (f.relBody.id === "sun" ? 1.25 : 1.04);
+        controls.maxDistance = f.relBody.radius * 24;
       } else {
         controls.minDistance = 25; controls.maxDistance = 900;
       }
@@ -819,6 +675,18 @@ function tick() {
     tmp.copy(camera.position).sub(controls.target).applyAxisAngle(Y, curDTheta);
     controls.target.copy(cur.group.position);
     camera.position.copy(controls.target).add(tmp);
+  }
+  // Near plane and drag speed follow the altitude, so the camera can skim the surface.
+  const focusR = cur ? cur.radius : 0;
+  const dist = camera.position.distanceTo(controls.target);
+  const near = cur ? Math.max(0.002, Math.min(0.5, (dist - focusR) * 0.3)) : 0.5;
+  if (Math.abs(camera.near - near) > near * 0.05) { camera.near = near; camera.updateProjectionMatrix(); }
+  if (cur && !state.flight) {
+    const alt = dist / focusR - 1;
+    controls.rotateSpeed = Math.max(0.03, Math.min(0.6, alt * 0.35));
+    controls.zoomSpeed = Math.max(0.3, Math.min(0.9, alt * 0.8));
+  } else {
+    controls.rotateSpeed = 0.6; controls.zoomSpeed = 0.8;
   }
   if (!state.flight) controls.update();
 
@@ -837,19 +705,31 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
-/* ---------- Build (progressive, so the loader can update) ---------- */
-const frame = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+/* ---------- Build ---------- */
+function loadTextures() {
+  const keys = Object.keys(TEXTURES), tex = {};
+  let done = 0;
+  const loader = new THREE.TextureLoader();
+  return Promise.all(keys.map(k => new Promise((resolve, reject) => {
+    loader.load("textures/" + TEXTURES[k], t => {
+      if (COLOR_MAPS.has(k)) t.encoding = THREE.sRGBEncoding;
+      t.anisotropy = maxAniso;
+      tex[k] = t;
+      done++;
+      $("barFill").style.width = `${(done / keys.length) * 100}%`;
+      $("loadText").textContent = `Завантажено карт: ${done} з ${keys.length}`;
+      resolve();
+    }, undefined, () => reject(new Error(TEXTURES[k])));
+  }))).then(() => tex);
+}
 async function build() {
-  const names = { sun: "Сонце", mercury: "Меркурій", venus: "Венера", earth: "Земля", earthClouds: "хмари Землі", moon: "Місяць", mars: "Марс", jupiter: "Юпітер", saturn: "Сатурн", uranus: "Уран", neptune: "Нептун" };
-  const keys = Object.keys(RECIPES), tex = {};
-  for (let i = 0; i < keys.length; i++) {
-    $("loadText").textContent = `Малюємо поверхню: ${names[keys[i]]}`;
-    $("barFill").style.width = `${(i / keys.length) * 100}%`;
-    await frame();
-    const [w, h, fn] = RECIPES[keys[i]];
-    tex[keys[i]] = toTexture(sphereTexture(w, h, fn));
+  let tex;
+  try {
+    tex = await loadTextures();
+  } catch (err) {
+    loaderEl.innerHTML = `<b>Планетарій</b><p class="error">Не вдалося завантажити карту поверхні (${err.message}). Оновіть сторінку. Якщо відкриваєте файл локально, запустіть його через вебсервер, наприклад: python3 -m http.server</p>`;
+    return;
   }
-  $("barFill").style.width = "100%";
   BODIES.forEach((b, i) => buildBody(b, i, tex));
   renderInfo(OVERVIEW, null);
   setActive(-1);
@@ -858,7 +738,8 @@ async function build() {
   camera.position.set(end.x * 3.2, end.y * 1.6, end.z * 3.2);
   controls.target.set(0, 0, 0);
   camera.lookAt(0, 0, 0);
-  await frame();
+  renderer.compile(scene, camera);
+  await new Promise(r => requestAnimationFrame(r));
   loaderEl.classList.add("done");
   startFlight(() => tmp2.set(0, 0, 0), end, 3200, null);
   tick();
