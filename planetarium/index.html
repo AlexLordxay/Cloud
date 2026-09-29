@@ -835,7 +835,6 @@ function createSunFx(sun, tex) {
       const d = randDir(38);
       flares[i].set(d.x, d.y, d.z, 0);
       flareState[i] = { age: 0, peak: rnd(0.5, 1.1) };
-      if (api.onFlare) api.onFlare(flareState[i].peak);
       if (Math.random() < 0.6) {
         const oldest = proms.reduce((a, b) => (b.age / b.dur > a.age / a.dur ? b : a));
         shapeProm(oldest, d, true);
@@ -855,8 +854,7 @@ function createSunFx(sun, tex) {
     }
   }
   const smoothstepJS = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
-  const api = { material: surface, update, onFlare: null };
-  return api;
+  return { material: surface, update };
 }
 
 const pickables = [];
@@ -1010,9 +1008,8 @@ function renderInfo(b) {
 
 /* ---------- Sound of the Sun ---------- */
 // Space is silent. What plays here is a sonification of real data:
-// - the hum is built from the Sun's acoustic p-modes (large separation ≈135 µHz, peak ≈3.1 mHz,
+// the hum is built from the Sun's acoustic p-modes (large separation ≈135 µHz, peak ≈3.1 mHz,
 //   periods around 5 minutes), sped up 42 000× into the audible range, as in Stanford/SOHO sonifications;
-// - each flare adds a falling whistle, the way Type III solar radio bursts sound on a radio receiver.
 const SPEEDUP = 42000;
 function createSunAudio() {
   const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -1067,30 +1064,6 @@ function createSunAudio() {
   excite();
   const timer = setInterval(excite, 900);
 
-  function flare(peak) {
-    if (ctx.state !== "running") return;
-    const now = ctx.currentTime, dur = 1.6 + Math.random() * 1.2;
-    const src = ctx.createBufferSource();
-    src.buffer = noiseBuf; src.loop = true;
-    const bp = ctx.createBiquadFilter();
-    bp.type = "bandpass"; bp.Q.value = 7;
-    bp.frequency.setValueAtTime(3600, now);
-    bp.frequency.exponentialRampToValueAtTime(160, now + dur);
-    const tone = ctx.createOscillator();
-    tone.frequency.setValueAtTime(2400, now);
-    tone.frequency.exponentialRampToValueAtTime(110, now + dur);
-    const tg = ctx.createGain(); tg.gain.value = 0.05;
-    const env = ctx.createGain();
-    env.gain.setValueAtTime(0, now);
-    env.gain.linearRampToValueAtTime(1.6 * peak, now + 0.06);
-    env.gain.exponentialRampToValueAtTime(0.001, now + dur);
-    src.connect(bp).connect(env);
-    tone.connect(tg).connect(env);
-    env.connect(master);
-    src.start(now); tone.start(now);
-    src.stop(now + dur + 0.1); tone.stop(now + dur + 0.1);
-  }
-
   let on = false, level = 0;
   return {
     get on() { return on; },
@@ -1106,7 +1079,6 @@ function createSunAudio() {
       level = v;
       if (on) master.gain.setTargetAtTime(level, ctx.currentTime, 0.25);
     },
-    flare,
     dispose() { clearInterval(timer); ctx.close(); },
   };
 }
@@ -1194,13 +1166,12 @@ $("sound").addEventListener("click", async () => {
   if (!sunAudio) {
     sunAudio = createSunAudio();
     if (!sunAudio) { showToast("Цей браузер не підтримує звук на вебсторінках.", 5000); return; }
-    if (sunFx) sunFx.onFlare = peak => sunAudio.flare(peak);
   }
   const on = await sunAudio.toggle();
   $("sound").setAttribute("aria-pressed", String(on));
   if (on && !soundExplained) {
     soundExplained = true;
-    showToast("У космосі тиша: звук там не поширюється. Ви чуєте справжні коливання Сонця, прискорені в 42 000 разів, а спалахи — як радіосплески. Підлетіть до Сонця, щоб стало гучніше.", 9000);
+    showToast("У космосі тиша: звук там не поширюється. Ви чуєте справжні коливання Сонця, прискорені в 42 000 разів. Підлетіть до Сонця, щоб стало гучніше.", 9000);
   }
 });
 $("more").addEventListener("click", () => {
