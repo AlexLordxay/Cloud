@@ -130,7 +130,15 @@ button { font: inherit; color: inherit; }
   white-space: nowrap; transition: opacity .3s, color .2s;
 }
 .tag:hover { color: var(--sun); }
-.tags.off .tag { opacity: 0; pointer-events: none; }
+.tag.dwarf { color: rgba(200,188,230,0.8); }
+.tag.moon { font-size: 10.5px; color: rgba(233,237,246,0.7); }
+[hidden] { display: none !important; }
+.sep { flex: none; width: 1px; height: 20px; margin: 0 4px; background: var(--line); align-self: center; }
+.moons { display: grid; gap: 8px; }
+.moons .label { margin: 0; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.moon-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.moon-list .chip { padding: 6px 10px; font-size: 12.5px; background: rgba(255,255,255,0.04); }
+.moon-list .chip[aria-current="true"] { background: var(--sun); color: var(--void); }
 
 /* Loader */
 .loader {
@@ -192,14 +200,18 @@ button { font: inherit; color: inherit; }
     </div>
     <button class="more" id="more" type="button" aria-expanded="false">Детальніше</button>
   </div>
+  <div class="moons" id="moons" hidden>
+    <p class="label" id="moonsLabel">Супутники</p>
+    <div class="moon-list" id="moonList"></div>
+  </div>
   <dl class="stats collapsible" id="stats"></dl>
   <p class="desc collapsible" id="desc"></p>
   <p class="fact collapsible"><span>Цікавий факт</span><span id="fact"></span></p>
-  <p class="hint collapsible">Тягніть, щоб обертати. Колесо миші або два пальці наближають. Стрілки ← → перемикають планети, Esc повертає до огляду.</p>
-  <p class="credits collapsible">Текстури: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; Меркурій — NASA MESSENGER; нічна Земля й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>.</p>
+  <p class="hint collapsible">Тягніть, щоб обертати. Колесо миші або два пальці наближають. Стрілки ← → перемикають тіла, Esc повертає до огляду.</p>
+  <p class="credits collapsible">Карти поверхонь: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; супутники, Церера й Плутон — мозаїки NASA/JPL/USGS (Galileo, Cassini, Voyager, Dawn, New Horizons), частина з приблизним кольором; нічна Земля, океани й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>. Фобос і Деймос показано з умовною текстурою.</p>
 </aside>
 
-<nav class="dock glass" aria-label="Планети">
+<nav class="dock glass" aria-label="Планети та карликові планети">
   <button class="nav" id="prev" type="button" aria-label="Попереднє тіло">‹</button>
   <div class="chips" id="chips"></div>
   <button class="nav" id="next" type="button" aria-label="Наступне тіло">›</button>
@@ -227,58 +239,165 @@ const PI = Math.PI, TAU = PI * 2, DEG = PI / 180;
 const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /* ---------- Data ---------- */
-const EARTH_D = 12742;
+// Sizes and distances are stylised. a = orbit radius (scene units), e = eccentricity, incl/node = orbit plane (deg).
+// period: years for bodies around the Sun, days for moons. Moons use planeTilt (deg) for their orbit plane.
+const EARTH_D = 12742, MOON_D = 3474;
 const BODIES = [
   { id: "sun", name: "Сонце", kind: "Зоря · жовтий карлик G2V", dot: "#f7b955",
-    radius: 10, orbit: 0, period: 0, spin: 0.04, tilt: 7.25, d: 1392700,
-    stats: [["Діаметр", "1 392 700 км"], ["Температура поверхні", "≈ 5 500 °C"], ["Вік", "≈ 4,6 млрд років"], ["Оберт на екваторі", "≈ 25 діб"], ["Частка маси системи", "99,86 %"], ["Світло до Землі", "8 хв 20 с"]],
+    radius: 10, a: 0, spin: 0.04, tilt: 7.25, d: 1392700,
+    stats: [["Температура поверхні", "≈ 5 500 °C"], ["Вік", "≈ 4,6 млрд років"], ["Оберт на екваторі", "≈ 25 діб"], ["Частка маси системи", "99,86 %"], ["Світло до Землі", "8 хв 20 с"]],
     desc: "Зоря в центрі нашої системи. Її гравітація утримує всі планети, а енергія зігріває Землю й підтримує життя на ній.",
     fact: "У Сонці помістилося б близько 1,3 мільйона таких планет, як Земля." },
   { id: "mercury", name: "Меркурій", kind: "Планета земної групи", dot: "#a9a39b",
-    radius: 0.8, orbit: 20, period: 0.241, spin: 0.03, tilt: 0.03, d: 4879,
+    radius: 0.8, a: 20, period: 0.241, spin: 0.03, tilt: 0.03, d: 4879, bump: 0.012,
     stats: [["Від Сонця", "57,9 млн км", "0,39 а. о."], ["Рік", "88 діб"], ["Оберт навколо осі", "58,6 доби"], ["Супутники", "0"], ["Температура", "−173…+427 °C"]],
     desc: "Найменша планета й найближча до Сонця. Атмосфери майже немає, тому вдень поверхня розжарюється, а вночі різко холоне.",
     fact: "Одна сонячна доба на Меркурії триває 176 земних діб, тобто два його роки." },
   { id: "venus", name: "Венера", kind: "Планета земної групи", dot: "#e8c589",
-    radius: 1.6, orbit: 28, period: 0.615, spin: -0.02, tilt: 177.4, d: 12104, atmo: [1.0, 0.85, 0.55],
+    radius: 1.6, a: 28, period: 0.615, spin: -0.02, tilt: 177.4, d: 12104, atmo: [1.0, 0.85, 0.55],
     stats: [["Від Сонця", "108,2 млн км", "0,72 а. о."], ["Рік", "224,7 доби"], ["Оберт навколо осі", "243 доби", "у зворотний бік"], ["Супутники", "0"], ["Температура", "≈ +464 °C"]],
     desc: "Найгарячіша планета системи. Щільна атмосфера з вуглекислого газу утримує тепло, а хмари сірчаної кислоти повністю приховують поверхню.",
     fact: "Венера обертається у зворотний бік, тому Сонце там сходить на заході." },
   { id: "earth", name: "Земля", kind: "Планета земної групи", dot: "#5d9ee8",
-    radius: 1.7, orbit: 37, period: 1, spin: 0.25, tilt: 23.4, d: 12742, atmo: [0.35, 0.6, 1.0],
+    radius: 1.7, a: 37, period: 1, spin: 0.25, tilt: 23.4, d: 12742, atmo: [0.35, 0.6, 1.0],
     stats: [["Від Сонця", "149,6 млн км", "1 а. о."], ["Рік", "365,25 доби"], ["Оберт навколо осі", "23 год 56 хв"], ["Супутники", "1", "Місяць"], ["Середня температура", "≈ +15 °C"]],
     desc: "Єдина відома планета з життям і рідкою водою на поверхні. Океани вкривають близько 71 % її площі.",
     fact: "Місяць щороку віддаляється від Землі приблизно на 3,8 см." },
+  { id: "moon", name: "Місяць", kind: "Супутник Землі", parent: "earth", dot: "#c9c6c0",
+    radius: 0.46, a: 3.6, period: 27.32, planeTilt: 5.1, d: 3474, bump: 0.006,
+    stats: [["Від Землі", "384 400 км"], ["Оберт навколо Землі", "27,3 доби"], ["Сила тяжіння", "16 % земної"], ["Перші люди", "1969", "Аполлон-11"], ["Температура", "−173…+127 °C"]],
+    desc: "Єдиний природний супутник Землі й п'ятий за розміром у Сонячній системі. Його притягання спричиняє припливи й відпливи.",
+    fact: "Місяць завжди повернутий до Землі одним боком: його доба дорівнює місяцю." },
   { id: "mars", name: "Марс", kind: "Планета земної групи", dot: "#d9744a",
-    radius: 1.1, orbit: 46, period: 1.881, spin: 0.24, tilt: 25.2, d: 6779, atmo: [1.0, 0.6, 0.45],
+    radius: 1.1, a: 46, period: 1.881, spin: 0.24, tilt: 25.2, d: 6779, atmo: [1.0, 0.6, 0.45], bump: 0.012,
     stats: [["Від Сонця", "227,9 млн км", "1,52 а. о."], ["Рік", "687 діб"], ["Оберт навколо осі", "24 год 37 хв"], ["Супутники", "2", "Фобос і Деймос"], ["Середня температура", "≈ −63 °C"]],
     desc: "Холодна пустельна планета з тонкою атмосферою. Червоний колір їй дає оксид заліза в ґрунті.",
     fact: "Тут розташована гора Олімп, найвищий відомий вулкан у Сонячній системі: близько 22 км заввишки." },
+  { id: "phobos", name: "Фобос", kind: "Супутник Марса", parent: "mars", dot: "#9b9189", tex: "moon",
+    radius: 0.13, a: 2.0, period: 0.319, d: 22.5, dText: "27 × 22 × 18 км", shape: [1, 0.67, 0.81], bump: 0.004, texNote: true,
+    stats: [["Від Марса", "9 376 км"], ["Оберт навколо Марса", "7 год 39 хв"], ["Відкрито", "1877", "Асаф Голл"]],
+    desc: "Більший із двох супутників Марса, неправильної форми, схожий на картоплину. Обертається так близько, що обганяє добовий оберт планети.",
+    fact: "Фобос повільно наближається до Марса й приблизно через 50 млн років розпадеться на кільце або впаде на планету." },
+  { id: "deimos", name: "Деймос", kind: "Супутник Марса", parent: "mars", dot: "#a89f95", tex: "moon",
+    radius: 0.1, a: 2.9, period: 1.263, d: 12.4, dText: "15 × 12 × 11 км", shape: [1, 0.73, 0.8], bump: 0.004, texNote: true,
+    stats: [["Від Марса", "23 460 км"], ["Оберт навколо Марса", "30,3 год"], ["Відкрито", "1877", "Асаф Голл"]],
+    desc: "Менший і дальший супутник Марса. Його поверхню вкриває товстий шар пилу, що згладжує кратери.",
+    fact: "З поверхні Марса Деймос виглядає як яскрава зоря, а не як диск." },
   { id: "jupiter", name: "Юпітер", kind: "Газовий гігант", dot: "#d8b48c",
-    radius: 5.5, orbit: 66, period: 11.86, spin: 0.6, tilt: 3.1, d: 139820,
-    stats: [["Від Сонця", "778,5 млн км", "5,2 а. о."], ["Рік", "11,86 року"], ["Оберт навколо осі", "9 год 56 хв"], ["Супутники", "понад 90"], ["Температура хмар", "≈ −110 °C"]],
+    radius: 5.5, a: 72, period: 11.86, spin: 0.6, tilt: 3.1, d: 139820,
+    stats: [["Від Сонця", "778,5 млн км", "5,2 а. о."], ["Рік", "11,86 року"], ["Оберт навколо осі", "9 год 56 хв"], ["Супутники", "понад 90", "4 великі — галілеєві"], ["Температура хмар", "≈ −110 °C"]],
     desc: "Найбільша планета системи. Юпітер масивніший за всі інші планети разом узяті.",
     fact: "Велика червона пляма — шторм, більший за Землю. Астрономи спостерігають його вже понад 150 років." },
+  { id: "io", name: "Іо", kind: "Супутник Юпітера", parent: "jupiter", dot: "#d9c56a",
+    radius: 0.48, a: 8.2, period: 1.769, d: 3643,
+    stats: [["Від Юпітера", "421 700 км"], ["Оберт навколо Юпітера", "1,77 доби"], ["Відкрито", "1610", "Галілео Галілей"]],
+    desc: "Найближчий із великих супутників Юпітера. Припливні сили постійно розігрівають його надра.",
+    fact: "Найвулканічніше тіло Сонячної системи: на Іо понад 400 активних вулканів." },
+  { id: "europa", name: "Європа", kind: "Супутник Юпітера", parent: "jupiter", dot: "#d8cdb8",
+    radius: 0.41, a: 9.8, period: 3.551, d: 3122,
+    stats: [["Від Юпітера", "671 000 км"], ["Оберт навколо Юпітера", "3,55 доби"], ["Відкрито", "1610", "Галілео Галілей"]],
+    desc: "Крижаний світ, поверхню якого перетинають довгі тріщини. Один із головних кандидатів на пошук життя поза Землею.",
+    fact: "Під крижаною корою Європи ховається солоний океан, у якому може бути вдвічі більше води, ніж у всіх океанах Землі." },
+  { id: "ganymede", name: "Ганімед", kind: "Супутник Юпітера", parent: "jupiter", dot: "#a59a88",
+    radius: 0.7, a: 12, period: 7.155, d: 5268,
+    stats: [["Від Юпітера", "1 070 400 км"], ["Оберт навколо Юпітера", "7,15 доби"], ["Відкрито", "1610", "Галілео Галілей"]],
+    desc: "Найбільший супутник у Сонячній системі: він більший за Меркурій.",
+    fact: "Ганімед — єдиний відомий супутник із власним магнітним полем." },
+  { id: "callisto", name: "Каллісто", kind: "Супутник Юпітера", parent: "jupiter", dot: "#7d7266",
+    radius: 0.64, a: 14.5, period: 16.69, d: 4821,
+    stats: [["Від Юпітера", "1 882 700 км"], ["Оберт навколо Юпітера", "16,7 доби"], ["Відкрито", "1610", "Галілео Галілей"]],
+    desc: "Темний давній світ, майже не змінений геологічною активністю.",
+    fact: "Поверхня Каллісто — одна з найгустіше вкритих кратерами в Сонячній системі." },
   { id: "saturn", name: "Сатурн", kind: "Газовий гігант", dot: "#e6cf98",
-    radius: 4.6, orbit: 90, period: 29.46, spin: 0.55, tilt: 26.7, d: 116460, rings: "saturn",
+    radius: 4.6, a: 104, period: 29.46, spin: 0.55, tilt: 26.7, d: 116460, rings: "saturn",
     stats: [["Від Сонця", "1,43 млрд км", "9,5 а. о."], ["Рік", "29,5 року"], ["Оберт навколо осі", "10 год 33 хв"], ["Супутники", "понад 270"], ["Температура хмар", "≈ −140 °C"]],
     desc: "Газовий гігант з найяскравішими кільцями. Вони складаються з криги та каміння: від пилинок до брил завбільшки з будинок.",
     fact: "Середня густина Сатурна менша за густину води." },
+  { id: "enceladus", name: "Енцелад", kind: "Супутник Сатурна", parent: "saturn", dot: "#e4ecf4",
+    radius: 0.13, a: 11.4, period: 1.37, d: 504,
+    stats: [["Від Сатурна", "238 000 км"], ["Оберт навколо Сатурна", "1,37 доби"], ["Відкрито", "1789", "Вільям Гершель"]],
+    desc: "Невеликий і дуже світлий крижаний супутник: він відбиває майже все сонячне світло.",
+    fact: "З тріщин біля південного полюса Енцелада б'ють гейзери водяної пари та криги." },
+  { id: "rhea", name: "Рея", kind: "Супутник Сатурна", parent: "saturn", dot: "#bdb8b0",
+    radius: 0.22, a: 12.8, period: 4.518, d: 1527,
+    stats: [["Від Сатурна", "527 000 км"], ["Оберт навколо Сатурна", "4,52 доби"], ["Відкрито", "1672", "Джованні Кассіні"]],
+    desc: "Другий за розміром супутник Сатурна, майже повністю з водяного льоду.",
+    fact: "Температура на поверхні Реї опускається нижче за −200 °C." },
+  { id: "titan", name: "Титан", kind: "Супутник Сатурна", parent: "saturn", dot: "#d9a24e", atmo: [1.0, 0.7, 0.3],
+    radius: 0.68, a: 15.5, period: 15.95, d: 5150,
+    stats: [["Від Сатурна", "1 221 870 км"], ["Оберт навколо Сатурна", "15,9 доби"], ["Відкрито", "1655", "Християн Гюйгенс"]],
+    desc: "Найбільший супутник Сатурна й єдиний у Сонячній системі зі щільною атмосферою. Карта поверхні зроблена в інфрачервоному світлі крізь серпанок.",
+    fact: "На Титані є озера й моря, але вони з рідкого метану та етану, а не з води." },
   { id: "uranus", name: "Уран", kind: "Крижаний гігант", dot: "#9fdde3",
-    radius: 2.8, orbit: 112, period: 84.0, spin: -0.35, tilt: 97.8, d: 50724, atmo: [0.6, 0.9, 0.95], rings: "uranus",
+    radius: 2.8, a: 132, period: 84.0, spin: -0.35, tilt: 97.8, d: 50724, atmo: [0.6, 0.9, 0.95], rings: "uranus",
     stats: [["Від Сонця", "2,87 млрд км", "19,2 а. о."], ["Рік", "84 роки"], ["Оберт навколо осі", "17 год 14 хв", "у зворотний бік"], ["Супутники", "29"], ["Температура хмар", "≈ −195 °C"]],
     desc: "Крижаний гігант, що обертається «лежачи на боці»: його вісь нахилена майже на 98°.",
     fact: "Через такий нахил на кожному полюсі близько 42 років триває день, а потім 42 роки ніч." },
+  { id: "miranda", name: "Міранда", kind: "Супутник Урана", parent: "uranus", dot: "#b5b3b0",
+    radius: 0.13, a: 6.6, period: 1.413, d: 472,
+    stats: [["Від Урана", "129 900 км"], ["Оберт навколо Урана", "1,41 доби"], ["Відкрито", "1948", "Джерард Койпер"]],
+    desc: "Найменший із великих супутників Урана з дивним «клаптиковим» рельєфом. Voyager 2 зняв лише південну півкулю, тож решта карти заповнена рівним тоном.",
+    fact: "Тут є урвище Верона — близько 20 км заввишки, одне з найвищих у Сонячній системі." },
+  { id: "titania", name: "Титанія", kind: "Супутник Урана", parent: "uranus", dot: "#b4aca4",
+    radius: 0.21, a: 8.4, period: 8.706, d: 1578,
+    stats: [["Від Урана", "436 300 км"], ["Оберт навколо Урана", "8,71 доби"], ["Відкрито", "1787", "Вільям Гершель"]],
+    desc: "Найбільший супутник Урана. Його поверхню розрізають величезні каньйони. Voyager 2 зняв лише одну півкулю.",
+    fact: "Назви супутників Урана взято з творів Шекспіра та Александра Поупа." },
+  { id: "oberon", name: "Оберон", kind: "Супутник Урана", parent: "uranus", dot: "#9d948c",
+    radius: 0.2, a: 9.8, period: 13.46, d: 1523,
+    stats: [["Від Урана", "583 500 км"], ["Оберт навколо Урана", "13,5 доби"], ["Відкрито", "1787", "Вільям Гершель"]],
+    desc: "Найвіддаленіший із великих супутників Урана. Поверхня темна й густо вкрита кратерами.",
+    fact: "На Обероні є гора заввишки близько 11 км." },
   { id: "neptune", name: "Нептун", kind: "Крижаний гігант", dot: "#4f7ee8",
-    radius: 2.7, orbit: 130, period: 164.8, spin: 0.37, tilt: 28.3, d: 49244, atmo: [0.35, 0.55, 1.0],
+    radius: 2.7, a: 150, period: 164.8, spin: 0.37, tilt: 28.3, d: 49244, atmo: [0.35, 0.55, 1.0],
     stats: [["Від Сонця", "4,5 млрд км", "30,1 а. о."], ["Рік", "164,8 року"], ["Оберт навколо осі", "16 год 6 хв"], ["Супутники", "16"], ["Температура хмар", "≈ −200 °C"]],
     desc: "Найвіддаленіша планета. На ній дмуть найшвидші вітри в Сонячній системі.",
     fact: "Нептун спершу «знайшли» математично, за збуренням орбіти Урана, і лише потім побачили в телескоп." },
+  { id: "triton", name: "Тритон", kind: "Супутник Нептуна", parent: "neptune", dot: "#c4c1b8",
+    radius: 0.36, a: 5.2, period: 5.877, planeTilt: 157, d: 2707,
+    stats: [["Від Нептуна", "354 800 км"], ["Оберт навколо Нептуна", "5,88 доби", "у зворотний бік"], ["Відкрито", "1846", "Вільям Ласселл"]],
+    desc: "Найбільший супутник Нептуна. Обертається у зворотний бік, тож, імовірно, колись був захоплений із поясу Койпера.",
+    fact: "Voyager 2 побачив на Тритоні гейзери, що викидають азот на висоту до 8 км." },
+  { id: "ceres", name: "Церера", kind: "Карликова планета · пояс астероїдів", dot: "#8f8a84", dwarf: true,
+    radius: 0.2, a: 54, e: 0.08, incl: 10.6, node: 80, period: 4.6, spin: 0.3, tilt: 4, d: 939, bump: 0.006,
+    stats: [["Від Сонця", "414 млн км", "2,77 а. о."], ["Рік", "4,6 року"], ["Оберт навколо осі", "9 год 4 хв"], ["Супутники", "0"], ["Відкрито", "1801", "Джузеппе Піацці"]],
+    desc: "Найбільше тіло поясу астероїдів між Марсом і Юпітером. У 2015–2018 роках її вивчав апарат NASA Dawn.",
+    fact: "У кратері Оккатор світяться яскраві плями — відклади солей, що піднялися з надр." },
+  { id: "pluto", name: "Плутон", kind: "Карликова планета · пояс Койпера", dot: "#d6b89a", dwarf: true,
+    radius: 0.47, a: 170, e: 0.25, incl: 17.1, node: 110, period: 248, spin: -0.12, tilt: 57.5, d: 2377,
+    stats: [["Від Сонця", "5,9 млрд км", "39,5 а. о."], ["Рік", "248 років"], ["Оберт навколо осі", "6,4 доби", "у зворотний бік"], ["Супутники", "5", "найбільший — Харон"], ["Температура", "≈ −230 °C"]],
+    desc: "До 2006 року вважався дев'ятою планетою. У 2015 році повз нього пролетів апарат New Horizons.",
+    fact: "На Плутоні є величезна рівнина з азотного льоду у формі серця — область Томбо." },
+  { id: "charon", name: "Харон", kind: "Супутник Плутона", parent: "pluto", dot: "#b8b0a8",
+    radius: 0.24, a: 1.5, period: 6.387, d: 1212,
+    stats: [["Від Плутона", "19 600 км"], ["Оберт навколо Плутона", "6,39 доби"], ["Відкрито", "1978", "Джеймс Крісті"]],
+    desc: "Найбільший супутник Плутона: він лише вдвічі менший за саму карликову планету. Полярна область частково не знята, тому заповнена рівним тоном.",
+    fact: "Плутон і Харон завжди повернуті одне до одного одним боком." },
+  { id: "haumea", name: "Хаумеа", kind: "Карликова планета · пояс Койпера", dot: "#d9d4ce", dwarf: true,
+    radius: 0.42, a: 182, e: 0.19, incl: 28.2, node: 122, period: 284, spin: 2.2, tilt: 30, d: 1560, dText: "≈ 2 320 × 1 700 × 1 030 км",
+    shape: [1, 0.44, 0.73], ring: [1.9, 2.05], texNote: true,
+    stats: [["Від Сонця", "6,5 млрд км", "43,1 а. о."], ["Рік", "284 роки"], ["Оберт навколо осі", "3,9 год"], ["Супутники", "2", "Хіʻіака й Намака"], ["Відкрито", "2004–2005"]],
+    desc: "Витягнута, схожа на м'яч для регбі: вона обертається так швидко, що розтягнулась. Детальних знімків немає, тому карта поверхні умовна.",
+    fact: "У 2017 році навколо Хаумеа знайшли кільце — перше в карликової планети." },
+  { id: "makemake", name: "Макемаке", kind: "Карликова планета · пояс Койпера", dot: "#c9a787", dwarf: true,
+    radius: 0.3, a: 190, e: 0.16, incl: 29, node: 79, period: 306, spin: 0.3, tilt: 10, d: 1430, texNote: true,
+    stats: [["Від Сонця", "6,8 млрд км", "45,8 а. о."], ["Рік", "306 років"], ["Оберт навколо осі", "22,8 год"], ["Супутники", "1"], ["Відкрито", "2005", "Майкл Браун та ін."]],
+    desc: "Одне з найяскравіших тіл поясу Койпера. Відкрита невдовзі після Великодня 2005 року й названа на честь бога з міфології острова Пасхи. Карта поверхні умовна.",
+    fact: "Поверхню Макемаке вкриває метановий лід, що надає їй червонуватого відтінку." },
+  { id: "eris", name: "Ерида", kind: "Карликова планета · розсіяний диск", dot: "#e6e2dc", dwarf: true,
+    radius: 0.46, a: 205, e: 0.44, incl: 44, node: 36, period: 559, spin: 0.05, tilt: 78, d: 2326, texNote: true,
+    stats: [["Від Сонця", "10,1 млрд км", "67,8 а. о. в середньому"], ["Рік", "559 років"], ["Оберт навколо осі", "≈ 15,8 доби"], ["Супутники", "1", "Дисномія"], ["Відкрито", "2005", "Майкл Браун та ін."]],
+    desc: "Майже такого ж розміру, як Плутон, але масивніша. Саме її відкриття у 2005 році спричинило суперечку про статус Плутона. Карта поверхні умовна.",
+    fact: "Орбіта Ериди сильно витягнута й нахилена на 44° до площини планет." },
 ];
+const byId = Object.fromEntries(BODIES.map(b => [b.id, b]));
+BODIES.forEach(b => { if (b.parent) { b.parent = byId[b.parent]; (b.parent.moons ||= []).push(b); } });
+const MAIN = BODIES.filter(b => !b.parent);
+
 const OVERVIEW = {
   name: "Сонячна система", kind: "Огляд",
-  stats: [["Вік", "≈ 4,6 млрд років"], ["Планети", "8"], ["Карликові планети", "5 визнаних"], ["До Нептуна", "≈ 30 а. о.", "4,5 млрд км"]],
-  desc: "Оберіть планету на панелі внизу або натисніть на неї у просторі, щоб підлетіти ближче. Розміри й відстані не в масштабі: у справжніх пропорціях більшість планет були б меншими за піксель.",
+  stats: [["Вік", "≈ 4,6 млрд років"], ["Планети", "8"], ["Карликові планети", "5 визнаних"], ["Супутники в моделі", "16"]],
+  desc: "Оберіть тіло на панелі внизу або натисніть на нього у просторі, щоб підлетіти ближче. Розміри й відстані не в масштабі: у справжніх пропорціях більшість планет були б меншими за піксель.",
   fact: "1 астрономічна одиниця (а. о.) — це середня відстань від Землі до Сонця, приблизно 149,6 млн км.",
 };
 
@@ -304,15 +423,17 @@ const uranusRing = t => {
   for (const l of lines) a = Math.max(a, Math.exp(-Math.pow((t - l) / 0.006, 2)));
   return [200, 215, 220, a * 150];
 };
+const thinRing = t => [210, 205, 200, Math.exp(-Math.pow((t - 0.5) / 0.22, 2)) * 170];
 
-// Real surface maps: Solar System Scope (CC BY 4.0, based on NASA data), NASA MESSENGER (Mercury), three.js examples (Earth night, specular, normal, clouds).
+// Planets load before the scene opens; moons and dwarf planets stream in afterwards.
 const TEXTURES = {
   sun: "sun.jpg", mercury: "mercury.jpg", venus: "venus_atmosphere.jpg",
   earth: "earth_day.jpg", earthNight: "earth_night.jpg", earthSpec: "earth_specular.jpg", earthClouds: "earth_clouds.png",
   moon: "moon.jpg", mars: "mars.jpg", jupiter: "jupiter.jpg", saturn: "saturn.jpg", saturnRing: "saturn_ring.png",
   uranus: "uranus.jpg", neptune: "neptune.jpg",
 };
-const COLOR_MAPS = new Set(["sun", "mercury", "venus", "earth", "earthNight", "moon", "mars", "jupiter", "saturn", "saturnRing", "uranus", "neptune"]);
+const LATE_TEXTURES = ["io", "europa", "ganymede", "callisto", "enceladus", "rhea", "titan", "miranda", "titania", "oberon", "triton", "ceres", "pluto", "charon", "haumea", "makemake", "eris"];
+const DATA_MAPS = new Set(["earthSpec", "earthClouds"]);
 
 /* ---------- Three.js scene ---------- */
 const canvas = document.getElementById("scene");
@@ -324,7 +445,7 @@ const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x04060c);
-const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.5, 6000);
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.5, 8000);
 const controls = new THREE.OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
@@ -375,12 +496,24 @@ function ringMesh(inner, outer, map, tint) {
   m.rotation.x = -PI / 2;
   return m;
 }
+function beltPoints(n, rMin, rMax, height, color, size, opacity) {
+  const pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * TAU, r = rMin + (rMax - rMin) * Math.pow(Math.random(), 0.8);
+    pos[i * 3] = Math.cos(a) * r; pos[i * 3 + 1] = (Math.random() + Math.random() - 1) * height; pos[i * 3 + 2] = Math.sin(a) * r;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const p = new THREE.Points(g, new THREE.PointsMaterial({ color, size, sizeAttenuation: false, transparent: true, opacity, depthWrite: false }));
+  scene.add(p);
+  return p;
+}
 
 // Starfield
 (() => {
   const n = 7000, pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    const u = Math.random() * 2 - 1, t = Math.random() * TAU, r = Math.sqrt(1 - u * u), R = 1800 + Math.random() * 600;
+    const u = Math.random() * 2 - 1, t = Math.random() * TAU, r = Math.sqrt(1 - u * u), R = 2600 + Math.random() * 800;
     pos[i * 3] = r * Math.cos(t) * R; pos[i * 3 + 1] = u * R; pos[i * 3 + 2] = r * Math.sin(t) * R;
     const b = 0.35 + Math.pow(Math.random(), 3) * 0.65, tint = Math.random();
     col[i * 3] = b * (tint > 0.8 ? 1 : 0.85); col[i * 3 + 1] = b * 0.9; col[i * 3 + 2] = b * (tint < 0.3 ? 1 : 0.85);
@@ -390,6 +523,8 @@ function ringMesh(inner, outer, map, tint) {
   g.setAttribute("color", new THREE.BufferAttribute(col, 3));
   scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true })));
 })();
+const asteroidBelt = beltPoints(4000, 50, 58, 1.2, 0xa89a88, 1.4, 0.7);
+const kuiperBelt = beltPoints(3500, 158, 215, 7, 0x8fa0bc, 1.3, 0.45);
 
 // Earth: day map lit by the Sun, city lights on the night side, sun glint on oceans.
 function earthMaterial(tex) {
@@ -429,108 +564,161 @@ function earthMaterial(tex) {
   });
 }
 
-const orbitMats = [];
 const pickables = [];
-let earthClouds = null, moonPivot = null;
+let earthClouds = null;
+
+// Position on an orbit: eccentric ellipse with the focus at the parent, in the plane's local XZ.
+function orbitPoint(b, theta, out) {
+  const e = b.e || 0, r = b.a * (1 - e * e) / (1 + e * Math.cos(theta));
+  return out.set(Math.cos(theta) * r, 0, -Math.sin(theta) * r);
+}
 
 function buildBody(b, i, tex) {
   b.index = i;
   b.theta = Math.random() * TAU;
-  b.omega = b.period ? (TAU / 40) / b.period : 0;
-  b.group = new THREE.Group();
-  b.tiltGroup = new THREE.Group();
-  b.tiltGroup.rotation.z = b.tilt * DEG;
-  b.group.add(b.tiltGroup);
-  scene.add(b.group);
+  b.omega = !b.a ? 0 : b.parent ? Math.min(1.4, 3.2 / Math.sqrt(b.period)) : (TAU / 40) / b.period;
+  b.world = new THREE.Vector3();
+  b.lastD = 0;
 
-  const geo = new THREE.SphereGeometry(b.radius, 96, 64);
+  // plane: orbit plane (inclined for dwarf planets, equatorial for moons); group: moves along the orbit.
+  b.plane = new THREE.Group();
+  b.plane.rotation.order = "YXZ";
+  if (b.parent) {
+    b.plane.rotation.z = (b.planeTilt != null ? b.planeTilt : b.parent.tilt || 0) * DEG;
+    b.parent.group.add(b.plane);
+  } else {
+    b.plane.rotation.y = (b.node || 0) * DEG;
+    b.plane.rotation.x = (b.incl || 0) * DEG;
+    scene.add(b.plane);
+  }
+  b.plane.updateMatrixWorld(true);
+  b.axis = new THREE.Vector3(0, 1, 0).applyQuaternion(b.plane.quaternion);
+
+  b.group = new THREE.Group();
+  b.plane.add(b.group);
+  b.tiltGroup = new THREE.Group();
+  b.tiltGroup.rotation.z = (b.tilt || 0) * DEG;
+  b.group.add(b.tiltGroup);
+
+  const geo = new THREE.SphereGeometry(b.radius, b.radius > 1 ? 96 : 64, b.radius > 1 ? 64 : 48);
   let mat;
   if (b.id === "sun") {
-    mat = new THREE.MeshBasicMaterial({ map: tex[b.id] });
+    mat = new THREE.MeshBasicMaterial({ map: tex.sun });
     b.group.add(glowSprite("255,190,110", b.radius * 5.2, 0.9));
     b.group.add(glowSprite("255,150,70", b.radius * 11, 0.35));
   } else if (b.id === "earth") {
     mat = earthMaterial(tex);
   } else {
-    const bumpy = b.id === "mercury" || b.id === "mars";
-    mat = new THREE.MeshStandardMaterial({ map: tex[b.id], roughness: 1, metalness: 0, bumpMap: bumpy ? tex[b.id] : null, bumpScale: bumpy ? 0.015 : 0 });
+    const map = tex[b.tex || b.id] || null;
+    mat = new THREE.MeshStandardMaterial({ map, color: map ? 0xffffff : new THREE.Color(b.dot), roughness: 1, metalness: 0, bumpMap: b.bump ? map : null, bumpScale: b.bump || 0 });
   }
   b.mesh = new THREE.Mesh(geo, mat);
+  if (b.shape) b.mesh.scale.set(b.shape[0], b.shape[1], b.shape[2]);
   b.mesh.userData.index = i;
   b.tiltGroup.add(b.mesh);
   pickables.push(b.mesh);
 
-  if (b.atmo) b.tiltGroup.add(atmosphere(b.radius * 1.045, b.atmo, b.id === "venus" ? 2.2 : 3.0, b.id === "venus" ? 0.9 : 1.2));
-
+  if (b.atmo) b.tiltGroup.add(atmosphere(b.radius * 1.045, b.atmo, b.id === "venus" ? 2.2 : 3.0, b.id === "venus" ? 0.9 : b.id === "titan" ? 1.4 : 1.2));
   if (b.id === "earth") {
     earthClouds = new THREE.Mesh(new THREE.SphereGeometry(b.radius * 1.012, 96, 64), new THREE.MeshStandardMaterial({ color: 0xffffff, alphaMap: tex.earthClouds, transparent: true, depthWrite: false, roughness: 1, opacity: 0.9 }));
     b.tiltGroup.add(earthClouds);
-    moonPivot = new THREE.Group();
-    moonPivot.rotation.z = 5.1 * DEG;
-    const moon = new THREE.Mesh(new THREE.SphereGeometry(0.46, 64, 48), new THREE.MeshStandardMaterial({ map: tex.moon, bumpMap: tex.moon, bumpScale: 0.01, roughness: 1 }));
-    moon.position.x = 3.6;
-    moonPivot.add(moon);
-    b.group.add(moonPivot);
   }
   if (b.rings === "saturn") b.tiltGroup.add(ringMesh(b.radius * 1.24, b.radius * 2.27, tex.saturnRing, 0xffffff));
   if (b.rings === "uranus") b.tiltGroup.add(ringMesh(b.radius * 1.6, b.radius * 2.05, toTexture(ringTexture(uranusRing)), 0xffffff));
+  if (b.ring) b.tiltGroup.add(ringMesh(b.radius * b.ring[0], b.radius * b.ring[1], toTexture(ringTexture(thinRing)), 0xffffff));
 
-  if (b.orbit) {
-    const pts = [];
-    for (let k = 0; k <= 256; k++) { const a = k / 256 * TAU; pts.push(new THREE.Vector3(Math.cos(a) * b.orbit, 0, -Math.sin(a) * b.orbit)); }
-    const m = new THREE.LineBasicMaterial({ color: 0x9fb2d8, transparent: true, opacity: 0.16 });
-    b.orbitLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), m);
-    scene.add(b.orbitLine);
-    orbitMats.push(m);
+  if (b.a) {
+    const pts = [], v = new THREE.Vector3();
+    for (let k = 0; k <= 360; k++) pts.push(orbitPoint(b, k / 360 * TAU, v).clone());
+    b.baseOpacity = b.parent ? 0.14 : b.dwarf ? 0.11 : 0.16;
+    b.orbitLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: b.dwarf ? 0xb7a6d8 : 0x9fb2d8, transparent: true, opacity: b.baseOpacity }));
+    b.plane.add(b.orbitLine);
   }
-  placeBody(b);
+  orbitPoint(b, b.theta, b.group.position);
 }
-function placeBody(b) {
-  b.group.position.set(Math.cos(b.theta) * b.orbit, 0, -Math.sin(b.theta) * b.orbit);
+function applyLateTexture(key, t) {
+  for (const b of BODIES) {
+    if ((b.tex || b.id) !== key || !b.mesh || b.id === "earth" || b.id === "sun") continue;
+    const m = b.mesh.material;
+    m.map = t; m.color.set(0xffffff);
+    if (b.bump) m.bumpMap = t;
+    m.needsUpdate = true;
+  }
 }
 
 /* ---------- UI ---------- */
 const $ = id => document.getElementById(id);
-const chipsEl = $("chips"), tagsEl = $("tags"), infoEl = $("info");
+const chipsEl = $("chips"), tagsEl = $("tags"), infoEl = $("info"), moonsEl = $("moons"), moonListEl = $("moonList");
 const SPEEDS = [0, 0.25, 1, 3, 8, 20, 50];
 
-BODIES.forEach((b, i) => {
+function makeChip(b) {
   const chip = document.createElement("button");
   chip.className = "chip"; chip.type = "button";
   chip.innerHTML = `<i style="background:${b.dot};color:${b.dot}"></i>${b.name}`;
-  chip.addEventListener("click", () => focusBody(i));
-  chipsEl.appendChild(chip);
-  b.chip = chip;
+  chip.addEventListener("click", () => focusBody(b.index));
+  return chip;
+}
+BODIES.forEach((b, i) => {
+  b.index = i;
+  if (!b.parent) {
+    if (b.id === "ceres") {
+      const sep = document.createElement("span");
+      sep.className = "sep"; sep.setAttribute("aria-hidden", "true");
+      chipsEl.appendChild(sep);
+    }
+    b.chip = makeChip(b);
+    chipsEl.appendChild(b.chip);
+  }
   const tag = document.createElement("button");
-  tag.className = "tag"; tag.type = "button"; tag.textContent = b.name; tag.tabIndex = -1;
+  tag.className = "tag" + (b.parent ? " moon" : b.dwarf ? " dwarf" : "");
+  tag.type = "button"; tag.textContent = b.name; tag.tabIndex = -1;
   tag.addEventListener("click", () => focusBody(i));
   tagsEl.appendChild(tag);
   b.tag = tag;
 });
 
-function fmtRatio(d) {
-  const r = d / EARTH_D;
+function fmtRatio(d, ref, refName) {
+  const r = d / ref;
   const s = r >= 10 ? Math.round(r).toString() : r.toFixed(r < 1 ? 2 : 1).replace(".", ",");
-  return `${s} × Землі`;
+  return `${s} × ${refName}`;
 }
-function renderInfo(data, body) {
+function renderInfo(b) {
+  const data = b || OVERVIEW;
   $("kind").textContent = data.kind;
   $("name").textContent = data.name;
-  const rows = body ? [["Діаметр", data.d.toLocaleString("uk-UA") + " км", body.id === "earth" ? "еталон для порівняння" : fmtRatio(data.d)]].concat(body.id === "sun" ? data.stats.slice(1) : data.stats) : data.stats;
+  let rows = data.stats;
+  if (b) {
+    const isMoon = b.parent && b.id !== "moon";
+    const note = b.id === "earth" ? "еталон для порівняння" : isMoon ? fmtRatio(b.d, MOON_D, "Місяця") : fmtRatio(b.d, EARTH_D, "Землі");
+    rows = [["Діаметр", b.dText || (b.d.toLocaleString("uk-UA") + " км"), note]].concat(b.stats);
+  }
   $("stats").innerHTML = rows.map(r => `<div><dt>${r[0]}</dt><dd>${r[1]}${r[2] ? `<small>${r[2]}</small>` : ""}</dd></div>`).join("");
   $("desc").textContent = data.desc;
   $("fact").textContent = data.fact;
+
+  const family = b ? (b.parent || b) : null;
+  moonListEl.innerHTML = "";
+  moonsEl.hidden = !(family && family.moons);
+  if (family && family.moons) {
+    $("moonsLabel").textContent = b.parent ? `Система: ${family.name}` : "Супутники";
+    const list = b.parent ? [family].concat(family.moons) : family.moons;
+    for (const m of list) {
+      const c = makeChip(m);
+      c.setAttribute("aria-current", m === b ? "true" : "false");
+      moonListEl.appendChild(c);
+    }
+  }
 }
 
 /* ---------- Camera state ---------- */
 const state = { mode: "overview", index: -1, paused: reduceMotion, speed: 1, flight: null, orbits: true };
-const Y = new THREE.Vector3(0, 1, 0);
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+const ORIGIN = new THREE.Vector3();
 
 function overviewCam() {
   const aspect = innerWidth / innerHeight;
   const k = Math.max(1, 1.5 / aspect);
-  return new THREE.Vector3(0, 150 * k, 235 * k);
+  return new THREE.Vector3(0, 190 * k, 300 * k);
 }
 function startFlight(getTarget, offset, dur, relBody) {
   controls.enabled = false;
@@ -541,39 +729,42 @@ function startFlight(getTarget, offset, dur, relBody) {
     getTarget, offset, relBody,
   };
 }
-function setActive(i) {
-  BODIES.forEach((b, k) => {
-    b.chip.setAttribute("aria-current", k === i ? "true" : "false");
-    if (b.orbitLine) b.orbitLine.material.opacity = k === i ? 0.5 : 0.16;
-  });
-  if (i >= 0) BODIES[i].chip.scrollIntoView({ block: "nearest", inline: "center" });
-  $("overview").setAttribute("aria-pressed", i < 0 ? "true" : "false");
-  tagsEl.classList.toggle("off", i >= 0);
+function setActive(b) {
+  const main = b ? (b.parent || b) : null;
+  for (const m of MAIN) m.chip.setAttribute("aria-current", m === main ? "true" : "false");
+  for (const x of BODIES) if (x.orbitLine) x.orbitLine.material.opacity = x === b ? 0.55 : x.baseOpacity;
+  if (main) main.chip.scrollIntoView({ block: "nearest", inline: "center" });
+  $("overview").setAttribute("aria-pressed", b ? "false" : "true");
 }
 function focusBody(i) {
-  i = (i + BODIES.length) % BODIES.length;
   const b = BODIES[i];
   state.mode = "focus"; state.index = i;
-  const p = b.group.position;
-  const dir = b.orbit ? p.clone().normalize() : new THREE.Vector3(0, 0, 1);
+  const dir = b.a ? b.world.clone().normalize() : new THREE.Vector3(0, 0, 1);
   const narrow = Math.max(1, 1.1 / (innerWidth / innerHeight));
-  const dist = b.radius * (b.rings === "saturn" ? 5.6 : b.id === "sun" ? 3.4 : 4.4) * narrow;
-  const offset = dir.multiplyScalar(-dist).applyAxisAngle(Y, b.id === "sun" ? 0 : 0.62);
+  const dist = b.radius * (b.rings === "saturn" ? 5.6 : b.id === "sun" ? 3.4 : b.ring ? 6 : 4.4) * narrow;
+  const offset = dir.multiplyScalar(-dist).applyAxisAngle(tmp2.set(0, 1, 0), b.id === "sun" ? 0 : 0.62);
   offset.y += dist * 0.26;
-  if (!b.orbit) offset.set(0, dist * 0.3, dist);
-  startFlight(() => b.group.position, offset, 1900, b);
-  renderInfo(b, b);
-  setActive(i);
+  if (!b.a) offset.set(0, dist * 0.3, dist);
+  startFlight(() => b.world, offset, 1900, b);
+  renderInfo(b);
+  setActive(b);
+}
+function stepMain(dir) {
+  const cur = state.index >= 0 ? BODIES[state.index] : null;
+  const main = cur ? (cur.parent || cur) : null;
+  let k = main ? MAIN.indexOf(main) + dir : dir > 0 ? 0 : MAIN.length - 1;
+  k = (k + MAIN.length) % MAIN.length;
+  focusBody(MAIN[k].index);
 }
 function showOverview() {
   state.mode = "overview"; state.index = -1;
-  startFlight(() => tmp2.set(0, 0, 0), overviewCam(), 2000, null);
-  renderInfo(OVERVIEW, null);
-  setActive(-1);
+  startFlight(() => ORIGIN, overviewCam(), 2000, null);
+  renderInfo(null);
+  setActive(null);
 }
 
-$("prev").addEventListener("click", () => focusBody(state.index < 0 ? BODIES.length - 1 : state.index - 1));
-$("next").addEventListener("click", () => focusBody(state.index + 1));
+$("prev").addEventListener("click", () => stepMain(-1));
+$("next").addEventListener("click", () => stepMain(1));
 $("overview").addEventListener("click", showOverview);
 $("pause").addEventListener("click", () => {
   state.paused = !state.paused;
@@ -597,14 +788,14 @@ $("more").addEventListener("click", () => {
 });
 addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT") return;
-  if (e.key === "ArrowRight") focusBody(state.index + 1);
-  else if (e.key === "ArrowLeft") focusBody(state.index < 0 ? BODIES.length - 1 : state.index - 1);
+  if (e.key === "ArrowRight") stepMain(1);
+  else if (e.key === "ArrowLeft") stepMain(-1);
   else if (e.key === "Escape") showOverview();
   else if (e.key === " " && e.target === document.body) { e.preventDefault(); $("pause").click(); }
 });
 if (state.paused) { $("pause").setAttribute("aria-pressed", "true"); $("pause").textContent = "Далі"; }
 
-// Click / tap a planet in space
+// Click / tap a body in space
 const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
 let downAt = null;
 canvas.addEventListener("pointerdown", e => { downAt = [e.clientX, e.clientY]; });
@@ -631,29 +822,36 @@ function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const sdt = state.paused ? 0 : dt * state.speed;
   const cur = state.index >= 0 ? BODIES[state.index] : null;
-  let curDTheta = 0;
 
   for (const b of BODIES) {
-    if (b.orbit) {
-      const d = b.omega * sdt;
-      b.theta += d;
-      if (b === cur) curDTheta = d;
-      placeBody(b);
+    if (b.a) {
+      // Faster near periapsis, like a real orbit.
+      const e = b.e || 0, q = 1 + e * Math.cos(b.theta);
+      b.lastD = b.omega * sdt * q * q / Math.pow(1 - e * e, 1.5);
+      b.theta += b.lastD;
+      orbitPoint(b, b.theta, b.group.position);
     }
-    b.mesh.rotation.y += b.spin * sdt;
+    if (b.parent) b.tiltGroup.rotation.y = b.theta + PI / 2;   // tidally locked
+    else b.mesh.rotation.y += (b.spin || 0) * sdt;
   }
+  asteroidBelt.rotation.y += 0.004 * sdt;
+  kuiperBelt.rotation.y += 0.0008 * sdt;
+  scene.updateMatrixWorld();
+  for (const b of BODIES) b.group.getWorldPosition(b.world);
+
   if (earthClouds) {
     earthClouds.rotation.y += 0.02 * sdt;
     // The cloud map is low-res, so thin it out as the camera nears the surface.
-    const e = BODIES[3], alt = camera.position.distanceTo(e.group.position) / e.radius - 1;
+    const e = byId.earth, alt = camera.position.distanceTo(e.world) / e.radius - 1;
     const k = clamp01((alt - 0.05) / 0.9);
     earthClouds.material.opacity = 0.12 + 0.63 * k * k * (3 - 2 * k);
   }
-  if (moonPivot) moonPivot.rotation.y += 0.45 * sdt;
 
+  // Keep the lighting angle steady while following: rotate the camera offset with the body's path around the Sun.
+  const root = cur ? (cur.parent || cur) : null;
   const f = state.flight;
   if (f) {
-    if (f.relBody && curDTheta) f.offset.applyAxisAngle(Y, curDTheta);
+    if (root && root.lastD) f.offset.applyAxisAngle(root.axis, root.lastD);
     const t = clamp01((performance.now() - f.t0) / f.dur), e = ease(t);
     const target = f.getTarget();
     const endCam = tmp.copy(target).add(f.offset);
@@ -665,24 +863,26 @@ function tick() {
       state.flight = null;
       controls.enabled = true;
       if (f.relBody) {
-        controls.minDistance = f.relBody.radius * (f.relBody.id === "sun" ? 1.25 : 1.04);
-        controls.maxDistance = f.relBody.radius * 24;
+        const minR = f.relBody.shape ? f.relBody.radius * Math.max(...f.relBody.shape) : f.relBody.radius;
+        controls.minDistance = minR * (f.relBody.id === "sun" ? 1.25 : 1.05);
+        controls.maxDistance = Math.max(f.relBody.radius * 24, 12);
       } else {
-        controls.minDistance = 25; controls.maxDistance = 900;
+        controls.minDistance = 25; controls.maxDistance = 1400;
       }
     }
   } else if (cur) {
-    tmp.copy(camera.position).sub(controls.target).applyAxisAngle(Y, curDTheta);
-    controls.target.copy(cur.group.position);
+    tmp.copy(camera.position).sub(controls.target);
+    if (root.lastD) tmp.applyAxisAngle(root.axis, root.lastD);
+    controls.target.copy(cur.world);
     camera.position.copy(controls.target).add(tmp);
   }
   // Near plane and drag speed follow the altitude, so the camera can skim the surface.
-  const focusR = cur ? cur.radius : 0;
+  const focusR = cur ? cur.radius * (cur.shape ? Math.min(...cur.shape) : 1) : 0;
   const dist = camera.position.distanceTo(controls.target);
-  const near = cur ? Math.max(0.002, Math.min(0.5, (dist - focusR) * 0.3)) : 0.5;
+  const near = cur ? Math.max(0.001, Math.min(0.5, (dist - focusR) * 0.3)) : 0.5;
   if (Math.abs(camera.near - near) > near * 0.05) { camera.near = near; camera.updateProjectionMatrix(); }
   if (cur && !state.flight) {
-    const alt = dist / focusR - 1;
+    const alt = dist / cur.radius - 1;
     controls.rotateSpeed = Math.max(0.03, Math.min(0.6, alt * 0.35));
     controls.zoomSpeed = Math.max(0.3, Math.min(0.9, alt * 0.8));
   } else {
@@ -690,15 +890,18 @@ function tick() {
   }
   if (!state.flight) controls.update();
 
-  if (state.mode === "overview") {
-    const w = innerWidth, h = innerHeight;
-    for (const b of BODIES) {
-      tmp.copy(b.group.position); tmp.y += b.radius + 1.2;
+  // Labels: main bodies in the overview; the focused body's family when close.
+  const w = innerWidth, h = innerHeight;
+  for (const b of BODIES) {
+    const show = !cur ? !b.parent : root.moons && (b === root || b.parent === root) && b !== cur;
+    let vis = false;
+    if (show) {
+      tmp.copy(b.world); tmp.y += b.radius + (b.parent ? 0.3 : 1.2);
       tmp.project(camera);
-      const vis = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
-      b.tag.style.visibility = vis ? "visible" : "hidden";
+      vis = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
       if (vis) b.tag.style.transform = `translate(${(tmp.x * 0.5 + 0.5) * w}px, ${(-tmp.y * 0.5 + 0.5) * h}px) translate(-50%, -100%)`;
     }
+    b.tag.hidden = !vis;
   }
 
   renderer.render(scene, camera);
@@ -706,20 +909,24 @@ function tick() {
 }
 
 /* ---------- Build ---------- */
+const loader = new THREE.TextureLoader();
+function loadTexture(file, key) {
+  return new Promise((resolve, reject) => {
+    loader.load("textures/" + file, t => {
+      if (!DATA_MAPS.has(key)) t.encoding = THREE.sRGBEncoding;
+      t.anisotropy = maxAniso;
+      resolve(t);
+    }, undefined, () => reject(new Error(file)));
+  });
+}
 function loadTextures() {
   const keys = Object.keys(TEXTURES), tex = {};
   let done = 0;
-  const loader = new THREE.TextureLoader();
-  return Promise.all(keys.map(k => new Promise((resolve, reject) => {
-    loader.load("textures/" + TEXTURES[k], t => {
-      if (COLOR_MAPS.has(k)) t.encoding = THREE.sRGBEncoding;
-      t.anisotropy = maxAniso;
-      tex[k] = t;
-      done++;
-      $("barFill").style.width = `${(done / keys.length) * 100}%`;
-      $("loadText").textContent = `Завантажено карт: ${done} з ${keys.length}`;
-      resolve();
-    }, undefined, () => reject(new Error(TEXTURES[k])));
+  return Promise.all(keys.map(k => loadTexture(TEXTURES[k], k).then(t => {
+    tex[k] = t;
+    done++;
+    $("barFill").style.width = `${(done / keys.length) * 100}%`;
+    $("loadText").textContent = `Завантажено карт: ${done} з ${keys.length}`;
   }))).then(() => tex);
 }
 async function build() {
@@ -731,8 +938,10 @@ async function build() {
     return;
   }
   BODIES.forEach((b, i) => buildBody(b, i, tex));
-  renderInfo(OVERVIEW, null);
-  setActive(-1);
+  scene.updateMatrixWorld();
+  BODIES.forEach(b => b.group.getWorldPosition(b.world));
+  renderInfo(null);
+  setActive(null);
 
   const end = overviewCam();
   camera.position.set(end.x * 3.2, end.y * 1.6, end.z * 3.2);
@@ -741,8 +950,13 @@ async function build() {
   renderer.compile(scene, camera);
   await new Promise(r => requestAnimationFrame(r));
   loaderEl.classList.add("done");
-  startFlight(() => tmp2.set(0, 0, 0), end, 3200, null);
+  startFlight(() => ORIGIN, end, 3200, null);
   tick();
+
+  // Moons and dwarf planets: shown in their own colour until the map arrives.
+  for (const key of LATE_TEXTURES) {
+    loadTexture(key + ".jpg", key).then(t => applyLateTexture(key, t)).catch(() => {});
+  }
 }
 build();
 })();
