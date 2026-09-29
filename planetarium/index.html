@@ -246,8 +246,8 @@ const BODIES = [
   { id: "sun", name: "Сонце", kind: "Зоря · жовтий карлик G2V", dot: "#f7b955",
     radius: 10, a: 0, spin: 0.04, tilt: 7.25, d: 1392700,
     stats: [["Температура поверхні", "≈ 5 500 °C"], ["Вік", "≈ 4,6 млрд років"], ["Оберт на екваторі", "≈ 25 діб"], ["Частка маси системи", "99,86 %"], ["Світло до Землі", "8 хв 20 с"]],
-    desc: "Зоря в центрі нашої системи. Її гравітація утримує всі планети, а енергія зігріває Землю й підтримує життя на ній.",
-    fact: "У Сонці помістилося б близько 1,3 мільйона таких планет, як Земля." },
+    desc: "Зоря в центрі нашої системи. Її поверхня постійно кипить, над нею здіймаються протуберанці — петлі плазми, утримувані магнітним полем, а спалахи за хвилини вивільняють енергію мільйонів водневих бомб. Анімація тут — симуляція, а не запис реальних спостережень.",
+    fact: "Кожна яскрава гранула на поверхні Сонця завбільшки приблизно з Україну, а живе лише 10–20 хвилин." },
   { id: "mercury", name: "Меркурій", kind: "Планета земної групи", dot: "#a9a39b",
     radius: 0.8, a: 20, period: 0.241, spin: 0.03, tilt: 0.03, d: 4879, bump: 0.012,
     stats: [["Від Сонця", "57,9 млн км", "0,39 а. о."], ["Рік", "88 діб"], ["Оберт навколо осі", "58,6 доби"], ["Супутники", "0"], ["Температура", "−173…+427 °C"]],
@@ -564,8 +564,292 @@ function earthMaterial(tex) {
   });
 }
 
+/* ---------- The living Sun: boiling photosphere, sunspots, flares, corona, prominences ---------- */
+// 3D simplex noise: Ashima Arts / Stefan Gustavson (MIT licence).
+const NOISE_GLSL = `
+vec3 mod289(vec3 x){ return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 mod289(vec4 x){ return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 permute(vec4 x){ return mod289(((x * 34.0) + 1.0) * x); }
+vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy;
+  vec4 y = y_ * ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0) * 2.0 + 1.0;
+  vec4 s1 = floor(b1) * 2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0, p0), dot(p1, p1), dot(p2, p2), dot(p3, p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0, x0), dot(x1, x1), dot(x2, x2), dot(x3, x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m * m, vec4(dot(p0, x0), dot(p1, x1), dot(p2, x2), dot(p3, x3)));
+}
+float fbm(vec3 p){
+  float s = 0.0, a = 0.5;
+  for (int i = 0; i < 4; i++) { s += a * snoise(p); p *= 2.03; a *= 0.5; }
+  return s;
+}
+`;
+
+function createSunFx(sun, tex) {
+  const R = sun.radius;
+  const SPOTS = 6, FLARES = 4;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const randDir = (maxLat) => {
+    const lat = rnd(-maxLat, maxLat) * DEG, lon = Math.random() * TAU;
+    return new THREE.Vector3(Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon));
+  };
+
+  // Sunspots sit in the "royal belts" between roughly 5° and 35° latitude.
+  const spots = [];
+  for (let i = 0; i < SPOTS; i++) {
+    const d = randDir(35);
+    if (Math.abs(d.y) < 0.09) d.y = Math.sign(d.y || 1) * 0.12;
+    d.normalize();
+    spots.push(new THREE.Vector4(d.x, d.y, d.z, rnd(0.025, 0.06)));
+  }
+  const flares = [];
+  for (let i = 0; i < FLARES; i++) flares.push(new THREE.Vector4(0, 1, 0, 0));
+
+  const surface = new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 }, map: { value: tex.sun }, spots: { value: spots }, flares: { value: flares } },
+    extensions: { derivatives: true },
+    vertexShader: `
+      varying vec3 vP; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
+      void main() {
+        vP = normalize(position); vUv = uv;
+        vN = normalize(mat3(modelMatrix) * normal);
+        vec4 w = modelMatrix * vec4(position, 1.0);
+        vW = w.xyz;
+        gl_Position = projectionMatrix * viewMatrix * w;
+      }`,
+    fragmentShader: NOISE_GLSL + `
+      uniform float time; uniform sampler2D map;
+      uniform vec4 spots[${SPOTS}]; uniform vec4 flares[${FLARES}];
+      varying vec3 vP; varying vec3 vN; varying vec3 vW; varying vec2 vUv;
+      vec3 hash3(vec3 p) {
+        p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
+        return fract(sin(p) * 43758.5453123);
+      }
+      // Cellular noise: F1 and F2 distances to the nearest moving feature points.
+      vec2 worley(vec3 x, float t) {
+        vec3 n = floor(x), f = fract(x);
+        float F1 = 8.0, F2 = 8.0;
+        for (int k = -1; k <= 1; k++)
+        for (int j = -1; j <= 1; j++)
+        for (int i = -1; i <= 1; i++) {
+          vec3 g = vec3(float(i), float(j), float(k));
+          vec3 o = hash3(n + g);
+          o = 0.5 + 0.38 * sin(t + 6.2831 * o);
+          vec3 r = g + o - f;
+          float d = dot(r, r);
+          if (d < F1) { F2 = F1; F1 = d; } else if (d < F2) { F2 = d; }
+        }
+        return sqrt(vec2(F1, F2));
+      }
+      vec3 ramp(float h) {
+        h = clamp(h, 0.0, 1.0);
+        vec3 c1 = vec3(0.35, 0.05, 0.0), c2 = vec3(0.92, 0.3, 0.02), c3 = vec3(1.0, 0.68, 0.2), c4 = vec3(1.0, 0.93, 0.72);
+        if (h < 0.4) return mix(c1, c2, h / 0.4);
+        if (h < 0.75) return mix(c2, c3, (h - 0.4) / 0.35);
+        return mix(c3, c4, (h - 0.75) / 0.25);
+      }
+      void main() {
+        vec3 p = vP;
+        float t = time;
+        // Large convection cells, slowly churning (domain-warped noise).
+        vec3 q = p * 2.2 + vec3(fbm(p * 1.6 + t * 0.02), fbm(p * 1.6 + 7.3 - t * 0.02), fbm(p * 1.6 + 13.1 + t * 0.015));
+        float big = fbm(q + vec3(0.0, 0.0, t * 0.03)) * 0.5 + 0.5;
+        // Granulation: bright cells split by dark lanes, boiling quickly.
+        vec3 gp = p * 70.0 + snoise(p * 22.0 + t * 0.05) * 0.35;
+        vec2 F = worley(gp, t * 0.6);
+        float lanes = smoothstep(0.0, 0.14, F.y - F.x);
+        float cell = 1.0 - F.x * 0.55;
+        float fw = fwidth(gp.x) + fwidth(gp.y);
+        float detail = 1.0 - smoothstep(0.35, 1.0, fw);
+        float gran = mix(0.62, lanes * cell * (0.9 + 0.2 * snoise(gp * 0.4 + t * 0.1)), detail);
+        float activity = dot(texture2D(map, vUv).rgb, vec3(0.3, 0.5, 0.2));
+        float heat = 0.18 + big * 0.42 + gran * 0.28 + activity * 0.3;
+
+        // Sunspots: dark umbra, ragged penumbra, bright faculae around them.
+        for (int i = 0; i < ${SPOTS}; i++) {
+          float ang = acos(clamp(dot(p, spots[i].xyz), -1.0, 1.0));
+          float w = spots[i].w * (1.0 + 0.25 * snoise(p * 40.0 + float(i)));
+          float pen = 1.0 - smoothstep(w * 0.55, w, ang);
+          float umb = 1.0 - smoothstep(w * 0.2, w * 0.45, ang);
+          float fac = (1.0 - smoothstep(w, w * 2.8, ang)) * (1.0 - pen);
+          heat = heat * (1.0 - 0.42 * pen) * (1.0 - 0.55 * umb) + fac * 0.08;
+        }
+        vec3 col = ramp(heat);
+
+        // Flares: sudden white-hot bursts.
+        for (int i = 0; i < ${FLARES}; i++) {
+          float ang = acos(clamp(dot(p, flares[i].xyz), -1.0, 1.0));
+          float ribbon = 0.6 + 0.4 * snoise(p * 90.0 + t * 0.8);
+          col += vec3(1.0, 0.92, 0.75) * flares[i].w * (1.0 - smoothstep(0.0, 0.07, ang)) * ribbon * 1.6;
+          col += vec3(1.0, 0.55, 0.2) * flares[i].w * (1.0 - smoothstep(0.0, 0.2, ang)) * 0.35;
+        }
+
+        // Limb darkening and reddening towards the edge of the disc.
+        float mu = clamp(dot(normalize(vN), normalize(cameraPosition - vW)), 0.0, 1.0);
+        col *= 0.6 + 0.4 * pow(mu, 0.6);
+        col = mix(col * vec3(1.0, 0.72, 0.5), col, pow(mu, 0.3));
+        gl_FragColor = vec4(col * 1.08, 1.0);
+      }`,
+  });
+
+  // Corona: camera-facing disc of glow, streamers and flickering flames that hugs the visible limb.
+  const HALF = 4.5;
+  const corona = new THREE.Mesh(new THREE.PlaneGeometry(R * HALF * 2, R * HALF * 2), new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 } },
+    vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+    fragmentShader: NOISE_GLSL + `
+      uniform float time; varying vec2 vUv;
+      void main() {
+        vec2 c = vUv * 2.0 - 1.0;
+        float r = length(c) * ${HALF.toFixed(1)};
+        if (r < 0.9) discard;
+        vec2 d = normalize(c);
+        float x = max(r - 1.0, 0.0);
+        float base = exp(-x * 2.4) * 0.28 + exp(-x * 10.0) * 0.7;
+        float streamers = pow(fbm(vec3(d * 2.4, time * 0.02)) * 0.5 + 0.5, 2.6) * exp(-x * 1.1) * 0.8;
+        float flames = pow(snoise(vec3(d * 9.0, x * 4.0 - time * 0.45)) * 0.5 + 0.5, 3.0) * exp(-x * 5.5) * 2.0;
+        float I = (base + streamers + flames) * smoothstep(0.96, 1.0, r) * (1.0 - smoothstep(${(HALF * 0.7).toFixed(2)}, ${(HALF * 0.98).toFixed(2)}, r));
+        vec3 col = mix(vec3(1.0, 0.42, 0.08), vec3(1.0, 0.86, 0.6), clamp(1.0 - x * 0.7, 0.0, 1.0));
+        gl_FragColor = vec4(col, clamp(I, 0.0, 1.0));
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+  sun.group.add(corona);
+
+  // Prominences: arches of plasma that rise from the surface, hang, and sometimes erupt.
+  const promMat = () => new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 }, life: { value: 0 }, grow: { value: 0 }, seed: { value: Math.random() * 100 }, R: { value: R } },
+    vertexShader: `
+      uniform float grow; uniform float R;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() {
+        vUv = uv;
+        vec3 d = normalize(position);
+        vec3 p = d * (R + (length(position) - R) * grow);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        vN = normalize(normalMatrix * normal);
+        vV = normalize(-mv.xyz);
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: NOISE_GLSL + `
+      uniform float time; uniform float life; uniform float seed;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() {
+        float core = pow(abs(dot(normalize(vN), vV)), 2.6);
+        float fil = snoise(vec3(vUv.x * 6.0 - time * 0.35 + seed, sin(vUv.y * 6.2831) * 0.8, time * 0.2 + seed)) * 0.5 + 0.5;
+        float env = smoothstep(0.0, 0.15, life) * (1.0 - smoothstep(0.7, 1.0, life));
+        float I = core * (0.2 + 0.9 * fil * fil) * env * 0.7;
+        vec3 col = mix(vec3(0.95, 0.22, 0.04), vec3(1.0, 0.55, 0.18), fil);
+        gl_FragColor = vec4(col, I);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  });
+  const proms = [];
+  function shapeProm(p, at, erupt) {
+    const A = at ? at.clone() : randDir(50);
+    const side = new THREE.Vector3().crossVectors(A, Math.abs(A.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
+    side.applyAxisAngle(A, Math.random() * TAU);
+    const sep = rnd(0.08, 0.28), height = erupt ? rnd(0.25, 0.45) : rnd(0.12, 0.5), twist = rnd(-0.06, 0.06);
+    const B = A.clone().applyAxisAngle(side, sep);
+    const normal = new THREE.Vector3().crossVectors(A, B).normalize();
+    const pts = [];
+    for (let k = 0; k <= 24; k++) {
+      const s = k / 24, dir = new THREE.Vector3().lerpVectors(A, B, s).normalize();
+      dir.addScaledVector(normal, Math.sin(PI * s) * twist).normalize();
+      pts.push(dir.multiplyScalar(R * (0.995 + height * Math.sin(PI * s) * (1 + 0.15 * Math.sin(3 * PI * s)))));
+    }
+    if (p.mesh.geometry) p.mesh.geometry.dispose();
+    p.mesh.geometry = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 64, R * rnd(0.025, 0.05), 10, false);
+    p.erupt = erupt;
+    p.dur = erupt ? rnd(7, 11) : rnd(10, 20);
+    p.age = 0;
+  }
+  for (let i = 0; i < 7; i++) {
+    const p = { mesh: new THREE.Mesh(new THREE.BufferGeometry(), promMat()) };
+    shapeProm(p, null, Math.random() < 0.2);
+    p.age = Math.random() * p.dur;
+    sun.mesh.add(p.mesh);
+    proms.push(p);
+  }
+
+  let time = Math.random() * 100, nextFlare = rnd(2, 5);
+  const flareState = flares.map(() => ({ age: 99 }));
+
+  function update(dt, camera) {
+    time += dt;
+    surface.uniforms.time.value = time;
+    corona.material.uniforms.time.value = time;
+
+    // Keep the corona facing the camera; scale it so its inner edge matches the visible limb from this distance.
+    corona.lookAt(camera.position);
+    const D = Math.max(camera.position.distanceTo(sun.world), R * 1.001);
+    const limb = D / Math.sqrt(D * D - R * R);
+    corona.scale.setScalar(limb);
+
+    // Flares: fast rise, slow fade; a big one often launches an eruptive prominence.
+    nextFlare -= dt;
+    if (nextFlare <= 0) {
+      nextFlare = rnd(4, 10);
+      const i = flareState.findIndex(f => f.age > 4) >= 0 ? flareState.findIndex(f => f.age > 4) : 0;
+      const d = randDir(38);
+      flares[i].set(d.x, d.y, d.z, 0);
+      flareState[i] = { age: 0, peak: rnd(0.5, 1.1) };
+      if (Math.random() < 0.6) {
+        const oldest = proms.reduce((a, b) => (b.age / b.dur > a.age / a.dur ? b : a));
+        shapeProm(oldest, d, true);
+      }
+    }
+    flareState.forEach((f, i) => {
+      f.age += dt;
+      flares[i].w = f.age > 6 ? 0 : f.peak * Math.min(1, f.age / 0.35) * Math.exp(-Math.max(0, f.age - 0.35) / 1.3);
+    });
+
+    for (const p of proms) {
+      p.age += dt;
+      if (p.age >= p.dur) shapeProm(p, null, Math.random() < 0.22);
+      const life = p.age / p.dur, u = p.mesh.material.uniforms;
+      u.life.value = life; u.time.value = time;
+      u.grow.value = 0.25 + 0.75 * smoothstepJS(0, 0.25, life) + (p.erupt ? 1.3 * Math.pow(smoothstepJS(0.4, 1, life), 2) : 0);
+    }
+  }
+  const smoothstepJS = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+  return { material: surface, update };
+}
+
 const pickables = [];
-let earthClouds = null;
+let earthClouds = null, sunFx = null;
 
 // Position on an orbit: eccentric ellipse with the focus at the parent, in the plane's local XZ.
 function orbitPoint(b, theta, out) {
@@ -604,8 +888,7 @@ function buildBody(b, i, tex) {
   let mat;
   if (b.id === "sun") {
     mat = new THREE.MeshBasicMaterial({ map: tex.sun });
-    b.group.add(glowSprite("255,190,110", b.radius * 5.2, 0.9));
-    b.group.add(glowSprite("255,150,70", b.radius * 11, 0.35));
+    b.group.add(glowSprite("255,150,70", b.radius * 11, 0.22));
   } else if (b.id === "earth") {
     mat = earthMaterial(tex);
   } else {
@@ -616,6 +899,10 @@ function buildBody(b, i, tex) {
   if (b.shape) b.mesh.scale.set(b.shape[0], b.shape[1], b.shape[2]);
   b.mesh.userData.index = i;
   b.tiltGroup.add(b.mesh);
+  if (b.id === "sun") {
+    sunFx = createSunFx(b, tex);
+    b.mesh.material = sunFx.material;
+  }
   pickables.push(b.mesh);
 
   if (b.atmo) b.tiltGroup.add(atmosphere(b.radius * 1.045, b.atmo, b.id === "venus" ? 2.2 : 3.0, b.id === "venus" ? 0.9 : b.id === "titan" ? 1.4 : 1.2));
@@ -838,6 +1125,8 @@ function tick() {
   kuiperBelt.rotation.y += 0.0008 * sdt;
   scene.updateMatrixWorld();
   for (const b of BODIES) b.group.getWorldPosition(b.world);
+  // The Sun boils in real time (not sped up with the orbit clock).
+  if (sunFx) sunFx.update(state.paused ? 0 : dt * (reduceMotion ? 0.3 : 1), camera);
 
   if (earthClouds) {
     earthClouds.rotation.y += 0.02 * sdt;
@@ -864,7 +1153,7 @@ function tick() {
       controls.enabled = true;
       if (f.relBody) {
         const minR = f.relBody.shape ? f.relBody.radius * Math.max(...f.relBody.shape) : f.relBody.radius;
-        controls.minDistance = minR * (f.relBody.id === "sun" ? 1.25 : 1.05);
+        controls.minDistance = minR * (f.relBody.id === "sun" ? 1.1 : 1.05);
         controls.maxDistance = Math.max(f.relBody.radius * 24, 12);
       } else {
         controls.minDistance = 25; controls.maxDistance = 1400;
