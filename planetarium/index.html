@@ -152,6 +152,12 @@ button { font: inherit; color: inherit; }
 .bar i { display: block; height: 100%; width: 0; background: var(--sun); transition: width .2s; }
 
 .error { max-width: 420px; padding: 0 16px; color: var(--muted); }
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 78px);
+  width: min(460px, calc(100% - 32px)); margin: 0; padding: 12px 16px; border-radius: 12px;
+  font-size: 13.5px; line-height: 1.45; color: var(--fg); z-index: 3;
+}
+@media (max-width: 720px) { .toast { top: calc(env(safe-area-inset-top, 0px) + 128px); } }
 
 @media (max-width: 720px) {
   .brand span { display: none; }
@@ -188,6 +194,7 @@ button { font: inherit; color: inherit; }
     <button class="btn" id="overview" type="button" aria-pressed="true">Огляд</button>
     <button class="btn" id="pause" type="button" aria-pressed="false">Пауза</button>
     <button class="btn" id="orbits" type="button" aria-pressed="true">Орбіти</button>
+    <button class="btn" id="sound" type="button" aria-pressed="false" title="Звук Сонця">Звук</button>
     <label class="speed" for="speed">Час <input id="speed" type="range" min="0" max="6" step="1" value="2"><output id="speedOut">×1</output></label>
   </div>
 </header>
@@ -216,6 +223,8 @@ button { font: inherit; color: inherit; }
   <div class="chips" id="chips"></div>
   <button class="nav" id="next" type="button" aria-label="Наступне тіло">›</button>
 </nav>
+
+<p class="toast glass" id="toast" role="status" hidden></p>
 
 <div class="loader" id="loader">
   <b>Планетарій</b>
@@ -246,7 +255,7 @@ const BODIES = [
   { id: "sun", name: "Сонце", kind: "Зоря · жовтий карлик G2V", dot: "#f7b955",
     radius: 10, a: 0, spin: 0.04, tilt: 7.25, d: 1392700,
     stats: [["Температура поверхні", "≈ 5 500 °C"], ["Вік", "≈ 4,6 млрд років"], ["Оберт на екваторі", "≈ 25 діб"], ["Частка маси системи", "99,86 %"], ["Світло до Землі", "8 хв 20 с"]],
-    desc: "Зоря в центрі нашої системи. Її поверхня постійно кипить, над нею здіймаються протуберанці — петлі плазми, утримувані магнітним полем, а спалахи за хвилини вивільняють енергію мільйонів водневих бомб. Анімація тут — симуляція, а не запис реальних спостережень.",
+    desc: "Зоря в центрі нашої системи. Її поверхня постійно кипить, над нею здіймаються протуберанці — петлі плазми, утримувані магнітним полем, а спалахи за хвилини вивільняють енергію мільйонів водневих бомб. Анімація тут — симуляція, а не запис реальних спостережень. Увімкніть «Звук», щоб почути, як «гуде» Сонце.",
     fact: "Кожна яскрава гранула на поверхні Сонця завбільшки приблизно з Україну, а живе лише 10–20 хвилин." },
   { id: "mercury", name: "Меркурій", kind: "Планета земної групи", dot: "#a9a39b",
     radius: 0.8, a: 20, period: 0.241, spin: 0.03, tilt: 0.03, d: 4879, bump: 0.012,
@@ -826,6 +835,7 @@ function createSunFx(sun, tex) {
       const d = randDir(38);
       flares[i].set(d.x, d.y, d.z, 0);
       flareState[i] = { age: 0, peak: rnd(0.5, 1.1) };
+      if (api.onFlare) api.onFlare(flareState[i].peak);
       if (Math.random() < 0.6) {
         const oldest = proms.reduce((a, b) => (b.age / b.dur > a.age / a.dur ? b : a));
         shapeProm(oldest, d, true);
@@ -845,7 +855,8 @@ function createSunFx(sun, tex) {
     }
   }
   const smoothstepJS = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
-  return { material: surface, update };
+  const api = { material: surface, update, onFlare: null };
+  return api;
 }
 
 const pickables = [];
@@ -997,6 +1008,110 @@ function renderInfo(b) {
   }
 }
 
+/* ---------- Sound of the Sun ---------- */
+// Space is silent. What plays here is a sonification of real data:
+// - the hum is built from the Sun's acoustic p-modes (large separation ≈135 µHz, peak ≈3.1 mHz,
+//   periods around 5 minutes), sped up 42 000× into the audible range, as in Stanford/SOHO sonifications;
+// - each flare adds a falling whistle, the way Type III solar radio bursts sound on a radio receiver.
+const SPEEDUP = 42000;
+function createSunAudio() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  const ctx = new Ctx();
+  const master = ctx.createGain();
+  master.gain.value = 0;
+  const comp = ctx.createDynamicsCompressor();
+  master.connect(comp).connect(ctx.destination);
+
+  // Acoustic modes of degree l = 0, 1, 2: ν ≈ Δν (n + l/2 + ε) − l(l+1)·D0, weighted by a Gaussian around ν_max.
+  const dNu = 135e-6, eps = 1.45, D0 = 1.5e-6, nuMax = 3.09e-3, width = 0.62e-3;
+  const hum = ctx.createGain();
+  hum.gain.value = 0.9;
+  hum.connect(master);
+  const modes = [];
+  for (let n = 13; n <= 30; n++) {
+    for (let l = 0; l <= 2; l++) {
+      const nu = dNu * (n + l / 2 + eps) - l * (l + 1) * D0;
+      const w = Math.exp(-Math.pow((nu - nuMax) / width, 2)) * (l === 1 ? 1 : l === 0 ? 0.85 : 0.6);
+      if (w < 0.04) continue;
+      const osc = ctx.createOscillator();
+      osc.frequency.value = nu * SPEEDUP;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      osc.connect(g).connect(hum);
+      osc.start();
+      modes.push({ g, w });
+    }
+  }
+  const norm = 0.28 / Math.sqrt(modes.reduce((s, m) => s + m.w * m.w, 0));
+
+  // Granulation background: the Sun's low-frequency "noise floor", as soft filtered rumble.
+  const noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate);
+  const data = noiseBuf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < data.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; data[i] = last * 3.5; }
+  const rumble = ctx.createBufferSource();
+  rumble.buffer = noiseBuf; rumble.loop = true;
+  const rumbleLp = ctx.createBiquadFilter();
+  rumbleLp.type = "lowpass"; rumbleLp.frequency.value = 220;
+  const rumbleGain = ctx.createGain();
+  rumbleGain.gain.value = 0.25;
+  rumble.connect(rumbleLp).connect(rumbleGain).connect(master);
+  rumble.start();
+
+  // Modes are excited at random by convection and die away: let each amplitude wander.
+  function excite() {
+    const now = ctx.currentTime;
+    for (const m of modes) m.g.gain.setTargetAtTime(m.w * norm * (0.25 + Math.random() * 1.1), now, 1.2);
+  }
+  excite();
+  const timer = setInterval(excite, 900);
+
+  function flare(peak) {
+    if (ctx.state !== "running") return;
+    const now = ctx.currentTime, dur = 1.6 + Math.random() * 1.2;
+    const src = ctx.createBufferSource();
+    src.buffer = noiseBuf; src.loop = true;
+    const bp = ctx.createBiquadFilter();
+    bp.type = "bandpass"; bp.Q.value = 7;
+    bp.frequency.setValueAtTime(3600, now);
+    bp.frequency.exponentialRampToValueAtTime(160, now + dur);
+    const tone = ctx.createOscillator();
+    tone.frequency.setValueAtTime(2400, now);
+    tone.frequency.exponentialRampToValueAtTime(110, now + dur);
+    const tg = ctx.createGain(); tg.gain.value = 0.05;
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, now);
+    env.gain.linearRampToValueAtTime(1.6 * peak, now + 0.06);
+    env.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    src.connect(bp).connect(env);
+    tone.connect(tg).connect(env);
+    env.connect(master);
+    src.start(now); tone.start(now);
+    src.stop(now + dur + 0.1); tone.stop(now + dur + 0.1);
+  }
+
+  let on = false, level = 0;
+  return {
+    get on() { return on; },
+    async toggle() {
+      on = !on;
+      if (on) await ctx.resume();
+      master.gain.setTargetAtTime(on ? level : 0, ctx.currentTime, 0.3);
+      if (!on) setTimeout(() => { if (!on) ctx.suspend(); }, 1500);
+      return on;
+    },
+    setLevel(v) {
+      if (Math.abs(v - level) < 0.01) return;
+      level = v;
+      if (on) master.gain.setTargetAtTime(level, ctx.currentTime, 0.25);
+    },
+    flare,
+    dispose() { clearInterval(timer); ctx.close(); },
+  };
+}
+let sunAudio = null;
+
 /* ---------- Camera state ---------- */
 const state = { mode: "overview", index: -1, paused: reduceMotion, speed: 1, flight: null, orbits: true };
 const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
@@ -1067,6 +1182,27 @@ $("speed").addEventListener("input", e => {
   state.speed = SPEEDS[+e.target.value];
   $("speedOut").textContent = "×" + String(state.speed).replace(".", ",");
 });
+let toastTimer = 0;
+function showToast(text, ms) {
+  const t = $("toast");
+  t.textContent = text; t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, ms);
+}
+let soundExplained = false;
+$("sound").addEventListener("click", async () => {
+  if (!sunAudio) {
+    sunAudio = createSunAudio();
+    if (!sunAudio) { showToast("Цей браузер не підтримує звук на вебсторінках.", 5000); return; }
+    if (sunFx) sunFx.onFlare = peak => sunAudio.flare(peak);
+  }
+  const on = await sunAudio.toggle();
+  $("sound").setAttribute("aria-pressed", String(on));
+  if (on && !soundExplained) {
+    soundExplained = true;
+    showToast("У космосі тиша: звук там не поширюється. Ви чуєте справжні коливання Сонця, прискорені в 42 000 разів, а спалахи — як радіосплески. Підлетіть до Сонця, щоб стало гучніше.", 9000);
+  }
+});
 $("more").addEventListener("click", () => {
   const open = !infoEl.classList.contains("open");
   infoEl.classList.toggle("open", open);
@@ -1127,6 +1263,13 @@ function tick() {
   for (const b of BODIES) b.group.getWorldPosition(b.world);
   // The Sun boils in real time (not sped up with the orbit clock).
   if (sunFx) sunFx.update(state.paused ? 0 : dt * (reduceMotion ? 0.3 : 1), camera);
+  if (sunAudio && sunAudio.on) {
+    // Loud next to the Sun, fading with distance; near other bodies it is barely audible.
+    const sun = byId.sun, dR = camera.position.distanceTo(sun.world) / sun.radius;
+    const k = clamp01((dR - 1.2) / 10.8), near = 1 - k * k * (3 - 2 * k);
+    const focusOther = state.index >= 0 && BODIES[state.index] !== sun;
+    sunAudio.setLevel(state.paused ? 0 : near * (focusOther ? 0.08 : 1));
+  }
 
   if (earthClouds) {
     earthClouds.rotation.y += 0.02 * sdt;
