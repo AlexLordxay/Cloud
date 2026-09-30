@@ -455,6 +455,12 @@ const BODIES = [
     desc: "Найвідоміша комета: її видно неозброєним оком приблизно раз на людське життя. Біля Сонця лід на ядрі випаровується, з'являються кома й два хвости — блакитний іонний, завжди спрямований від Сонця, і жовтуватий пиловий, що вигинається вздовж орбіти. Зараз комета далеко за Нептуном і хвоста не має.",
     fact: "Пил комети Галлея щороку дає два зорепади: Ета-Аквариди в травні й Оріоніди в жовтні.",
     actions: [["Показати 1986 рік", "1986-01-20T12:00:00Z"], ["Показати 2061 рік", "2061-07-10T12:00:00Z"]] },
+  { id: "cg67p", name: "Комета Чурюмова–Герасименко", short: "67P", kind: "Комета · 67P/Чурюмова–Герасименко", dot: "#d8c8b0", comet: true, tex: "moon",
+    radius: 0.12, d: 4.1, dText: "≈ 4,1 × 3,3 × 1,8 км (більша частина)", shape: [1, 0.8, 0.6], lobe: true, activity: 0.45, tilt: 52,
+    stats: [["Період", "6,4 року"], ["Найближче до Сонця", "1,24 а. о.", "між орбітами Землі й Марса"], ["Найдалі від Сонця", "5,7 а. о.", "біля орбіти Юпітера"], ["Відкрито", "1969", "Київ"], ["Наступний прохід", "2028"]],
+    desc: "Комету відкрили 1969 року в Києві українські астрономи Клим Чурюмов і Світлана Герасименко. У 2014 році апарат Європейського космічного агентства Rosetta вийшов на орбіту навколо неї, а модуль Philae вперше в історії сів на ядро комети. Ядро схоже на гумову качечку: дві брили льоду й пилу, що колись злиплися. Комета невелика й неяскрава, тож хвіст у неї скромний.",
+    fact: "Rosetta «почула» комету: коливання магнітного поля навколо неї, перетворені на звук, нагадують цвірінькання — її прозвали співочою кометою.",
+    actions: [["Посадка Philae, 2014", "2014-11-12T08:00:00Z", 3], ["Найближче до Сонця, 2015", "2015-07-20T00:00:00Z", 3], ["Наступний прохід, 2028", "2028-03-01T00:00:00Z", 3]] },
 ];
 const byId = Object.fromEntries(BODIES.map(b => [b.id, b]));
 BODIES.forEach(b => { if (b.parent) { b.parent = byId[b.parent]; (b.parent.moons ||= []).push(b); } });
@@ -1699,6 +1705,9 @@ const KEP = {
   eris: { a: 67.864, e: 0.43607, i: 44.040, node: 35.951, peri: 151.639, M: 205.989, epoch: 2459000.5 },
   // 1P/Halley: perihelion 9 Feb 1986; a chosen so the next perihelion falls in mid-2061.
   halley: { a: 17.86, e: 0.96714, i: 162.26, node: 58.42, peri: 111.33, M: 0, epoch: 2446470.96 },
+  // 67P/Churyumov–Gerasimenko: timed on its real perihelia (13 Aug 2015, 2 Nov 2021),
+  // so both passages land on their true dates despite Jupiter's small nudges to the orbit.
+  cg67p: { a: 3.4630, e: 0.6405, i: 7.0405, node: 50.147, peri: 12.780, M: 0, epoch: 2459520.55, perihelia: [2457247.59, 2459520.55] },
 };
 function elementsAt(id, jd) {
   const j = JPL[id];
@@ -1707,8 +1716,17 @@ function elementsAt(id, jd) {
     const wb = v[4] + r[4] * T, node = v[5] + r[5] * T;
     return { a: v[0] + r[0] * T, e: v[1] + r[1] * T, i: v[2] + r[2] * T, node, peri: wb - node, M: v[3] + r[3] * T - wb };
   }
-  const k = KEP[id];
-  return { a: k.a, e: k.e, i: k.i, node: k.node, peri: k.peri, M: k.M + 0.9856076686 / Math.pow(k.a, 1.5) * (jd - k.epoch) };
+  const k = KEP[id], n = 0.9856076686 / Math.pow(k.a, 1.5);
+  let M = k.M + n * (jd - k.epoch);
+  if (k.perihelia) {
+    // Between two known perihelia, spread one full orbit evenly over the real interval (continuous at both ends);
+    // outside them, run on from the nearest one at the mean rate.
+    const p = k.perihelia;
+    if (jd < p[0]) M = n * (jd - p[0]);
+    else if (jd >= p[p.length - 1]) M = n * (jd - p[p.length - 1]);
+    else for (let i = 0; i < p.length - 1; i++) if (jd < p[i + 1]) { M = 360 * (jd - p[i]) / (p[i + 1] - p[i]); break; }
+  }
+  return { a: k.a, e: k.e, i: k.i, node: k.node, peri: k.peri, M };
 }
 // Kepler's equation E − e·sin E = M for M in [−π, π]. The left side is monotonic there, so bisection always converges,
 // even for comet-like eccentricities where Newton's method can jump between branches.
@@ -1777,7 +1795,7 @@ function moonPos(jd) {
 // Galilean moons: mean longitudes (Meeus), good to a few degrees. Other moons use their real period with an arbitrary phase.
 const GALILEAN = { io: [106.07719, 203.48895579], europa: [175.73161, 101.374724735], ganymede: [120.55883, 50.317609207], callisto: [84.44459, 21.571071177] };
 // Sidereal rotation periods (days); negative = retrograde.
-const ROT = { sun: 25.38, mercury: 58.646, venus: -243.02, earth: 0.99727, mars: 1.02596, jupiter: 0.41354, saturn: 0.44401, uranus: -0.71833, neptune: 0.67125, ceres: 0.3781, pluto: -6.3872, haumea: 0.1631, makemake: 0.9511, eris: 15.786, halley: 2.2 };
+const ROT = { sun: 25.38, mercury: 58.646, venus: -243.02, earth: 0.99727, mars: 1.02596, jupiter: 0.41354, saturn: 0.44401, uranus: -0.71833, neptune: 0.67125, ceres: 0.3781, pluto: -6.3872, haumea: 0.1631, makemake: 0.9511, eris: 15.786, halley: 2.2, cg67p: 0.517 };
 const clampAbs = (x, m) => x > m ? m : x < -m ? -m : x;
 
 /* ---------- Comet: coma and two tails ---------- */
@@ -1862,7 +1880,7 @@ function createCometFx(b) {
     },
   };
 }
-let cometFx = null;
+const cometFxs = [];
 
 const pickables = [];
 let earthClouds = null, sunFx = null;
@@ -1917,7 +1935,14 @@ function buildBody(b, i, tex, jd) {
     sunFx = createSunFx(b, tex);
     b.mesh.material = sunFx.material;
   }
-  if (b.comet) cometFx = createCometFx(b);
+  if (b.comet) cometFxs.push({ b, fx: createCometFx(b) });
+  if (b.lobe) {
+    // The smaller "head" of a two-lobed nucleus (67P's rubber-duck shape).
+    const head = new THREE.Mesh(new THREE.SphereGeometry(b.radius * 0.7, 48, 32), b.mesh.material);
+    head.position.set(b.radius * 1.2, b.radius * 0.2, 0);
+    head.scale.set(1, 0.85, 0.9);
+    b.mesh.add(head);
+  }
   if (b.id === "moon") b.mesh.material = moonMaterial(tex);
   if (b.id === "io") ioFx = createIoFx(b);
   if (b.id === "venus") b.mesh.material = venusMaterial(tex);
@@ -1985,7 +2010,7 @@ const RATES = [[1, "реальний"], [60, "1 хв/с"], [3600, "1 год/с"]
 function makeChip(b) {
   const chip = document.createElement("button");
   chip.className = "chip"; chip.type = "button";
-  chip.innerHTML = `<i style="background:${b.dot};color:${b.dot}"></i>${b.name}`;
+  chip.innerHTML = `<i style="background:${b.dot};color:${b.dot}"></i>${b.short || b.name}`;
   chip.addEventListener("click", () => focusBody(b.index));
   return chip;
 }
@@ -2002,7 +2027,7 @@ BODIES.forEach((b, i) => {
   }
   const tag = document.createElement("button");
   tag.className = "tag" + (b.parent ? " moon" : b.dwarf ? " dwarf" : b.comet ? " comet" : "");
-  tag.type = "button"; tag.textContent = b.name; tag.tabIndex = -1;
+  tag.type = "button"; tag.textContent = b.short || b.name; tag.tabIndex = -1;
   tag.addEventListener("click", () => focusBody(i));
   tagsEl.appendChild(tag);
   b.tag = tag;
@@ -2749,12 +2774,12 @@ function tick() {
   // The Sun boils in real time (not sped up with the orbit clock).
   if (sunFx) sunFx.update(state.paused ? 0 : dt * (reduceMotion ? 0.3 : 1), camera);
   if (ioFx) ioFx.update(state.paused ? 0 : dt);
-  if (cometFx) {
-    const c = byId.halley;
-    helioAU("halley", jd + 1, tAU);
+  for (const { b: c, fx } of cometFxs) {
+    helioAU(c.id, jd + 1, tAU);
     toScene(tAU, tA).sub(c.group.position).normalize();
-    cometFx.update(state.paused ? 0 : dt, clamp01(1.6 / c.au - 0.4), tB.copy(c.world).normalize(), tA);
+    fx.update(state.paused ? 0 : dt, clamp01(1.6 / c.au - 0.4) * (c.activity || 1), tB.copy(c.world).normalize(), tA);
   }
+
   if (sunAudio && sunAudio.on) {
     // Loud next to the Sun, fading with distance; near other bodies it is barely audible.
     const sun = byId.sun, dR = camera.position.distanceTo(sun.world) / sun.radius;
