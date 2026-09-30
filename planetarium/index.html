@@ -290,7 +290,7 @@ const BODIES = [
   { id: "earth", name: "Земля", kind: "Планета земної групи", dot: "#5d9ee8",
     radius: 1.7, a: 37, period: 1, spin: 0.25, tilt: 23.4, d: 12742, atmo: [0.35, 0.6, 1.0],
     stats: [["Від Сонця", "149,6 млн км", "1 а. о."], ["Рік", "365,25 доби"], ["Оберт навколо осі", "23 год 56 хв"], ["Супутники", "1", "Місяць"], ["Середня температура", "≈ +15 °C"]],
-    desc: "Єдина відома планета з життям і рідкою водою на поверхні. Океани вкривають близько 71 % її площі.",
+    desc: "Єдина відома планета з життям і рідкою водою на поверхні. Океани вкривають близько 71 % її площі. День, ніч і пори року тут відповідають обраній даті, а рух хмар, блискавки й полярне сяйво — художня симуляція.",
     fact: "Місяць щороку віддаляється від Землі приблизно на 3,8 см." },
   { id: "moon", name: "Місяць", kind: "Супутник Землі", parent: "earth", dot: "#c9c6c0",
     radius: 0.46, a: 3.6, period: 27.32, planeTilt: 0, d: 3474, bump: 0.006,
@@ -561,42 +561,153 @@ function beltPoints(n, rMin, rMax, height, color, size, opacity) {
 const asteroidBelt = beltPoints(4000, 50, 58, 1.2, 0xa89a88, 1.4, 0.7);
 const kuiperBelt = beltPoints(3500, 152, 200, 7, 0x8fa0bc, 1.3, 0.45);
 
-// Earth: day map lit by the Sun, city lights on the night side, sun glint on oceans.
+// Living Earth: shared uniforms for the surface, the cloud deck, the atmosphere and the aurora.
+// Clouds are two drifting copies of one map blended with a slowly moving weight, so they change shape without new textures.
+const earthU = {
+  time: { value: 0 },
+  drift: { value: new THREE.Vector2(0, 0.37) },
+  cloudOpacity: { value: 0.85 },
+  sunPos: { value: new THREE.Vector3(0, 0, 0) },
+};
+const CLOUDS_GLSL = `
+  uniform sampler2D cloudMap; uniform vec2 drift; uniform float time;
+  float cloudAt(vec2 uv) {
+    float a = texture2D(cloudMap, vec2(uv.x - drift.x, uv.y)).r;
+    float b = texture2D(cloudMap, vec2(uv.x - drift.y, 1.0 - uv.y * 0.985 - 0.0075)).r;
+    float w = 0.5 + 0.5 * sin(time * 0.045 + uv.x * 18.85 + uv.y * 9.0);
+    return clamp(mix(a, b, w) * 1.15, 0.0, 1.0);
+  }
+`;
+const EARTH_VERT = `
+  varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+  void main() {
+    vUv = uv; vObj = normalize(position);
+    vN = normalize(mat3(modelMatrix) * normal);
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vW = w.xyz;
+    gl_Position = projectionMatrix * viewMatrix * w;
+  }`;
+
 function earthMaterial(tex) {
   return new THREE.ShaderMaterial({
-    uniforms: {
-      dayMap: { value: tex.earth }, nightMap: { value: tex.earthNight }, specMap: { value: tex.earthSpec },
-      sunPos: { value: new THREE.Vector3(0, 0, 0) },
-    },
-    vertexShader: `
-      varying vec2 vUv; varying vec3 vN; varying vec3 vW;
-      void main() {
-        vUv = uv;
-        vN = normalize(mat3(modelMatrix) * normal);
-        vec4 w = modelMatrix * vec4(position, 1.0);
-        vW = w.xyz;
-        gl_Position = projectionMatrix * viewMatrix * w;
-      }`,
-    fragmentShader: `
+    uniforms: Object.assign({
+      dayMap: { value: tex.earth }, nightMap: { value: tex.earthNight }, specMap: { value: tex.earthSpec }, cloudMap: { value: tex.earthClouds },
+    }, earthU),
+    vertexShader: EARTH_VERT,
+    fragmentShader: CLOUDS_GLSL + `
       uniform sampler2D dayMap; uniform sampler2D nightMap; uniform sampler2D specMap; uniform vec3 sunPos;
-      varying vec2 vUv; varying vec3 vN; varying vec3 vW;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
       void main() {
         vec3 N = normalize(vN);
         vec3 L = normalize(sunPos - vW);
         vec3 V = normalize(cameraPosition - vW);
         float ndl = dot(N, L);
+        float mu = clamp(dot(N, V), 0.0, 1.0);
         vec3 day = pow(texture2D(dayMap, vUv).rgb, vec3(2.2));
         vec3 night = pow(texture2D(nightMap, vUv).rgb, vec3(2.2));
         float ocean = texture2D(specMap, vUv).r;
         float lit = smoothstep(-0.08, 0.25, ndl);
-        vec3 col = day * (0.03 + 1.25 * max(ndl, 0.0));
-        col += night * vec3(1.0, 0.8, 0.55) * 2.2 * (1.0 - smoothstep(-0.2, 0.08, ndl));
+
+        // Cloud shadows on the ground (sampled a little towards the Sun).
+        vec2 sh = vec2(-dot(L, cross(vec3(0.0, 1.0, 0.0), N)) * 0.0015, 0.0);
+        float shadow = cloudAt(vUv + sh) * 0.45 * lit;
+
+        // Warm light near the day–night line.
+        vec3 sunTint = mix(vec3(1.0, 0.55, 0.32), vec3(1.0), smoothstep(0.0, 0.28, ndl));
+        vec3 col = day * (0.03 + 1.25 * max(ndl, 0.0)) * sunTint * (1.0 - shadow);
+        col += night * vec3(1.0, 0.8, 0.55) * 2.2 * (1.0 - smoothstep(-0.2, 0.08, ndl)) * (1.0 - cloudAt(vUv) * 0.7);
+
+        // Sun glint on the sea, shimmering as if on waves.
         vec3 H = normalize(L + V);
-        col += vec3(1.0, 0.93, 0.8) * pow(max(dot(N, H), 0.0), 160.0) * ocean * 0.35 * lit;
+        float waves = 0.65 + 0.35 * sin(vUv.x * 2600.0 + time * 1.7) * sin(vUv.y * 1300.0 - time * 1.3);
+        col += vec3(1.0, 0.93, 0.8) * pow(max(dot(N, H), 0.0), 160.0) * ocean * 0.4 * waves * lit * (1.0 - shadow);
+
+        // Blue haze of the atmosphere towards the edge of the day side.
+        col += vec3(0.18, 0.38, 0.85) * pow(1.0 - mu, 2.5) * lit * 0.55;
         gl_FragColor = vec4(col, 1.0);
         #include <encodings_fragment>
       }`,
   });
+}
+
+function earthCloudMaterial(tex) {
+  return new THREE.ShaderMaterial({
+    uniforms: Object.assign({ cloudMap: { value: tex.earthClouds } }, earthU),
+    vertexShader: EARTH_VERT,
+    fragmentShader: CLOUDS_GLSL + `
+      uniform vec3 sunPos; uniform float cloudOpacity;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      void main() {
+        vec3 N = normalize(vN);
+        vec3 L = normalize(sunPos - vW);
+        float ndl = dot(N, L);
+        float c = cloudAt(vUv);
+        vec3 tint = mix(vec3(1.0, 0.5, 0.28), vec3(1.0), smoothstep(0.0, 0.3, ndl));
+        vec3 col = tint * (0.03 + 1.1 * max(ndl, 0.0));
+        float night = 1.0 - smoothstep(-0.15, 0.05, ndl);
+
+        // Lightning: rare flickering flashes inside thick clouds on the night side, mostly in the tropics.
+        vec2 g = vUv * vec2(110.0, 55.0);
+        vec2 cell = floor(g), f = fract(g) - 0.5;
+        float h = hash(cell);
+        float t = time * (0.7 + h) + h * 50.0;
+        float beat = hash(cell + floor(t));
+        float flash = step(0.965, beat) * exp(-fract(t) * 5.0) * (0.55 + 0.45 * sin(fract(t) * 55.0)) * exp(-dot(f, f) * 9.0);
+        float storms = smoothstep(0.22, 0.45, c) * (1.0 - smoothstep(0.4, 0.65, abs(vObj.y)));
+        col += vec3(0.75, 0.82, 1.0) * flash * storms * night * 4.0;
+
+        float bolt = flash * storms * night;
+        gl_FragColor = vec4(col, clamp(c * cloudOpacity + bolt * 1.6, 0.0, 1.0));
+        #include <encodings_fragment>
+      }`,
+    transparent: true, depthWrite: false,
+  });
+}
+
+// Atmosphere shell that knows where the Sun is: blue on the day side, orange-red at sunrise and sunset, nothing at night.
+function earthAtmosphere(radius) {
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), new THREE.ShaderMaterial({
+    uniforms: { sunPos: earthU.sunPos },
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform vec3 sunPos;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW), V = normalize(cameraPosition - vW);
+        float ndl = dot(N, L);
+        float rim = pow(1.0 - abs(dot(N, V)), 3.0);
+        float dayside = smoothstep(-0.3, 0.25, ndl);
+        vec3 col = mix(vec3(1.0, 0.42, 0.15), vec3(0.3, 0.58, 1.0), smoothstep(-0.05, 0.3, ndl));
+        gl_FragColor = vec4(col, rim * dayside * 1.3);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+}
+
+// Aurora: waving green-violet curtains around both poles, visible on the night side.
+function earthAurora(radius) {
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 128, 64), new THREE.ShaderMaterial({
+    uniforms: { sunPos: earthU.sunPos, time: earthU.time },
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform vec3 sunPos; uniform float time;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW), V = normalize(cameraPosition - vW);
+        float lat = asin(clamp(vObj.y, -1.0, 1.0));
+        float lon = atan(vObj.z, vObj.x);
+        float wave = 0.045 * sin(lon * 5.0 + time * 0.25) + 0.02 * sin(lon * 11.0 - time * 0.4);
+        float band = exp(-pow((abs(lat) - 1.16 + wave) / 0.045, 2.0));
+        float rays = 0.45 + 0.55 * pow(0.5 + 0.5 * sin(lon * 60.0 + time * 1.2 + 3.0 * sin(lon * 7.0 + time * 0.35)), 2.0);
+        float pulse = 0.75 + 0.25 * sin(time * 0.6 + lon * 3.0);
+        float night = 1.0 - smoothstep(-0.25, 0.05, dot(N, L));
+        float edge = 0.4 + 1.6 * pow(1.0 - abs(dot(N, V)), 2.0);
+        vec3 col = mix(vec3(0.15, 1.0, 0.45), vec3(0.65, 0.3, 1.0), smoothstep(0.0, 1.0, pow(1.0 - band, 3.0)));
+        gl_FragColor = vec4(col, band * rays * pulse * night * edge * 0.9);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
 }
 
 /* ---------- The living Sun: boiling photosphere, sunspots, flares, corona, prominences ---------- */
@@ -1120,10 +1231,14 @@ function buildBody(b, i, tex, jd) {
   if (b.comet) cometFx = createCometFx(b);
   pickables.push(b.mesh);
 
-  if (b.atmo) b.tiltGroup.add(atmosphere(b.radius * 1.045, b.atmo, b.id === "venus" ? 2.2 : 3.0, b.id === "venus" ? 0.9 : b.id === "titan" ? 1.4 : 1.2));
+  if (b.id === "earth") b.tiltGroup.add(earthAtmosphere(b.radius * 1.045), earthAurora(b.radius * 1.025));
+  else if (b.atmo) b.tiltGroup.add(atmosphere(b.radius * 1.045, b.atmo, b.id === "venus" ? 2.2 : 3.0, b.id === "venus" ? 0.9 : b.id === "titan" ? 1.4 : 1.2));
   if (b.id === "earth") {
-    earthClouds = new THREE.Mesh(new THREE.SphereGeometry(b.radius * 1.012, 96, 64), new THREE.MeshStandardMaterial({ color: 0xffffff, alphaMap: tex.earthClouds, transparent: true, depthWrite: false, roughness: 1, opacity: 0.9 }));
-    b.tiltGroup.add(earthClouds);
+    tex.earthClouds.wrapS = THREE.RepeatWrapping;
+    tex.earthClouds.needsUpdate = true;
+    // The cloud deck turns with the planet; its own drift happens in the shader.
+    earthClouds = new THREE.Mesh(new THREE.SphereGeometry(b.radius * 1.012, 96, 64), earthCloudMaterial(tex));
+    b.mesh.add(earthClouds);
   }
   if (b.rings === "saturn") b.tiltGroup.add(ringMesh(b.radius * 1.24, b.radius * 2.27, tex.saturnRing, 0xffffff));
   if (b.rings === "uranus") b.tiltGroup.add(ringMesh(b.radius * 1.6, b.radius * 2.05, toTexture(ringTexture(uranusRing)), 0xffffff));
@@ -1573,11 +1688,14 @@ function tick() {
   }
 
   if (earthClouds) {
-    earthClouds.rotation.y += clampAbs(dDays * 0.4, 0.004);
+    // Clouds drift with simulated time (capped at high speeds); shimmer, lightning and aurora run in real time.
+    earthU.time.value += state.paused ? 0 : dt;
+    earthU.drift.value.x += clampAbs(dDays * 0.02, 0.0004);
+    earthU.drift.value.y += clampAbs(dDays * 0.031, 0.0006);
     // The cloud map is low-res, so thin it out as the camera nears the surface.
     const e = byId.earth, alt = camera.position.distanceTo(e.world) / e.radius - 1;
     const k = clamp01((alt - 0.05) / 0.9);
-    earthClouds.material.opacity = 0.12 + 0.63 * k * k * (3 - 2 * k);
+    earthU.cloudOpacity.value = 0.14 + 0.71 * k * k * (3 - 2 * k);
   }
 
   // Clock readout.
