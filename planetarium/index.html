@@ -102,7 +102,14 @@ button { font: inherit; color: inherit; }
 .fact { margin: 0; padding: 12px 14px; border-radius: 10px; background: rgba(156,194,255,0.08); border: 1px solid rgba(156,194,255,0.18); font-size: 14px; display: grid; gap: 4px; }
 .fact span:first-child { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--ice); }
 .hint { margin: 0; font-size: 12px; color: var(--muted); }
-.more { display: none; }
+.info-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.more {
+  display: inline-flex; flex: none; border: 1px solid var(--line); background: transparent; cursor: pointer;
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; color: var(--fg);
+}
+.more:hover { background: rgba(255,255,255,0.07); }
+/* Collapsed: only the name row stays, so the planet can be seen. */
+.info:not(.open) .collapsible { display: none; }
 .credits { margin: 0; font-size: 11px; color: var(--muted); }
 .credits a { color: var(--ice); text-decoration: none; }
 .credits a:hover { text-decoration: underline; }
@@ -181,12 +188,6 @@ button { font: inherit; color: inherit; }
     padding: 14px 16px; gap: 12px;
   }
   .info h1 { font-size: 22px; }
-  .info-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-  .more {
-    display: inline-flex; flex: none; border: 1px solid var(--line); background: transparent; cursor: pointer;
-    border-radius: 999px; padding: 6px 12px; font-size: 12px; color: var(--fg);
-  }
-  .info:not(.open) .collapsible { display: none; }
   .dock { left: 16px; right: 16px; transform: none; max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -226,9 +227,9 @@ button { font: inherit; color: inherit; }
     </div>
     <button class="more" id="more" type="button" aria-expanded="false">Детальніше</button>
   </div>
-  <p class="live" id="live" hidden></p>
-  <div class="actions" id="actions" hidden></div>
-  <div class="moons" id="moons" hidden>
+  <p class="live collapsible" id="live" hidden></p>
+  <div class="actions collapsible" id="actions" hidden></div>
+  <div class="moons collapsible" id="moons" hidden>
     <p class="label" id="moonsLabel">Супутники</p>
     <div class="moon-list" id="moonList"></div>
   </div>
@@ -2305,12 +2306,18 @@ $("sound").addEventListener("click", async () => {
     showToast("У космосі тиша: звук там не поширюється. Ви чуєте справжні коливання Сонця, прискорені в 42 000 разів. Підлетіть до Сонця, щоб стало гучніше.", 9000);
   }
 });
-$("more").addEventListener("click", () => {
-  const open = !infoEl.classList.contains("open");
+// The info panel folds down to its name row; the choice is remembered (open by default on wide screens only).
+const INFO_KEY = "planetarium.infoOpen";
+function setInfoOpen(open, remember) {
   infoEl.classList.toggle("open", open);
   $("more").setAttribute("aria-expanded", String(open));
   $("more").textContent = open ? "Згорнути" : "Детальніше";
-});
+  if (remember) try { localStorage.setItem(INFO_KEY, open ? "1" : "0"); } catch (e) { /* not saved */ }
+}
+let infoStartOpen = innerWidth > 720;
+try { const v = localStorage.getItem(INFO_KEY); if (v !== null) infoStartOpen = v === "1"; } catch (e) { /* storage blocked */ }
+setInfoOpen(infoStartOpen, false);
+$("more").addEventListener("click", () => setInfoOpen(!infoEl.classList.contains("open"), true));
 addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON" && e.key === " ") return;
   if (e.key === "ArrowRight") stepMain(1);
