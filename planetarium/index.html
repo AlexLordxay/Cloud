@@ -316,7 +316,7 @@ const BODIES = [
     radius: 1.7, a: 37, period: 1, spin: 0.25, tilt: 23.4, d: 12742, atmo: [0.35, 0.6, 1.0],
     stats: [["Від Сонця", "149,6 млн км", "1 а. о."], ["Рік", "365,25 доби"], ["Оберт навколо осі", "23 год 56 хв"], ["Супутники", "1", "Місяць"], ["Середня температура", "≈ +15 °C"]],
     desc: "Єдина відома планета з життям і рідкою водою на поверхні. Океани вкривають близько 71 % її площі. День, ніч і пори року тут відповідають обраній даті, а рух хмар, блискавки й полярне сяйво — художня симуляція.",
-    voice: "Звук (кнопка «Звук»): «світанковий хор» і свисти блискавок у магнітосфері Землі, які ловлять радіоприймачі й супутники. Синтез за характером записів.",
+    voice: "Звук (кнопка «Звук»): тихий фоновий шум магнітосфери Землі, який ловлять радіоприймачі й супутники. Синтез за характером записів.",
     fact: "Місяць щороку віддаляється від Землі приблизно на 3,8 см.",
     actions: [["Затемнення 8 квітня 2024", "2024-04-08T17:20:00Z", 1], ["Затемнення 12 серпня 2026", "2026-08-12T16:50:00Z", 1], ["Затемнення 2 серпня 2027", "2027-08-02T09:10:00Z", 1]] },
   { id: "moon", name: "Місяць", kind: "Супутник Землі", parent: "earth", dot: "#c9c6c0",
@@ -345,7 +345,7 @@ const BODIES = [
     radius: 5.5, a: 72, period: 11.86, spin: 0.6, tilt: 3.1, d: 139820,
     stats: [["Від Сонця", "778,5 млн км", "5,2 а. о."], ["Рік", "11,86 року"], ["Оберт навколо осі", "9 год 56 хв"], ["Супутники", "понад 90", "4 великі — галілеєві"], ["Температура хмар", "≈ −110 °C"]],
     desc: "Найбільша планета системи. Юпітер масивніший за всі інші планети разом узяті. Його смуги — це струмені вітру, що дмуть у протилежних напрямках зі швидкістю до 500 км/год; Велика червона пляма обертається проти годинникової стрілки приблизно за 6 земних діб. Рух смуг і плями тут — симуляція.",
-    voice: "Звук (кнопка «Звук»): «хор» плазмових хвиль у магнітосфері Юпітера за записами апарата Juno. Синтез за характером записів.",
+    voice: "Звук (кнопка «Звук»): шум плазмових хвиль у магнітосфері Юпітера за записами апарата Juno. Синтез за характером записів.",
     fact: "Велика червона пляма — шторм, більший за Землю. Астрономи спостерігають його вже понад 150 років." },
   { id: "io", name: "Іо", kind: "Супутник Юпітера", parent: "jupiter", dot: "#d9c56a",
     radius: 0.48, a: 8.2, period: 1.769, d: 3643,
@@ -2069,9 +2069,9 @@ function renderInfo(b) {
 const SPEEDUP = 42000;
 // Voices of the planets that have real recordings behind them, synthesised after their character:
 //  Mars    — wind on Perseverance's microphones: muffled, because the thin CO2 air swallows high pitches;
-//  Jupiter — Juno's plasma-wave "chorus": clusters of short rising chirps over a soft hiss;
+//  Jupiter — the hiss of plasma waves around Jupiter recorded by Juno (without the chorus chirps);
 //  Saturn  — Cassini's kilometric radio emission: slow, wavering whoops sliding downwards;
-//  Earth   — the magnetosphere's dawn chorus (high chirps) and lightning whistlers falling in pitch.
+//  Earth   — the soft background noise of Earth's magnetosphere (without chorus chirps or whistlers).
 function createPlanetVoices(ctx, dest) {
   const white = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate), brown = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
   const wd = white.getChannelData(0), bd = brown.getChannelData(0);
@@ -2125,17 +2125,15 @@ function createPlanetVoices(ctx, dest) {
   });
 
   voice("jupiter", bus => {
-    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 900; bp.Q.value = 0.7;
-    const hiss = ctx.createGain(); hiss.gain.value = 0.05;
-    loop(white, bp); bp.connect(hiss).connect(bus);
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 420; bp.Q.value = 0.6;
+    const swell = ctx.createGain(); swell.gain.value = 0.14;
+    loop(white, bp); bp.connect(swell).connect(bus);
+    bus.swell = swell; bus.bp = bp;
   }, (v, t) => {
-    // Bursts of rising chirps.
-    const n = Math.floor(rnd(3, 9)), base = rnd(500, 900);
-    for (let i = 0; i < n; i++) {
-      const s = t + i * rnd(0.08, 0.2), f0 = base * rnd(0.85, 1.15);
-      glide(v.bus, s, f0, f0 * rnd(1.8, 2.6), rnd(0.18, 0.45), 0.09);
-    }
-    return rnd(0.6, 1.8);
+    // Only the plasma-wave hiss, breathing slowly (the chirps are left out).
+    v.bus.swell.gain.setTargetAtTime(rnd(0.08, 0.18), t, rnd(1, 2.5));
+    v.bus.bp.frequency.setTargetAtTime(rnd(340, 520), t, 2);
+    return rnd(2, 4.5);
   });
 
   voice("saturn", bus => {
@@ -2149,20 +2147,15 @@ function createPlanetVoices(ctx, dest) {
   });
 
   voice("earth", bus => {
-    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2500;
-    const hiss = ctx.createGain(); hiss.gain.value = 0.02;
-    loop(white, hp); hp.connect(hiss).connect(bus);
+    const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 600; bp.Q.value = 0.5;
+    const swell = ctx.createGain(); swell.gain.value = 0.15;
+    loop(white, bp); bp.connect(swell).connect(bus);
+    bus.swell = swell; bus.bp = bp;
   }, (v, t) => {
-    if (Math.random() < 0.18) {
-      glide(v.bus, t, rnd(5000, 7000), rnd(700, 1100), rnd(0.8, 1.4), 0.1);   // whistler
-      return rnd(1.2, 2.5);
-    }
-    const n = Math.floor(rnd(2, 6));
-    for (let i = 0; i < n; i++) {
-      const f0 = rnd(1400, 2200);
-      glide(v.bus, t + i * rnd(0.12, 0.3), f0, f0 * rnd(1.4, 1.9), rnd(0.1, 0.25), 0.085);   // chorus chirps
-    }
-    return rnd(0.5, 1.4);
+    // Soft magnetospheric background only (no chirps or whistlers).
+    v.bus.swell.gain.setTargetAtTime(rnd(0.09, 0.2), t, rnd(1.2, 2.5));
+    v.bus.bp.frequency.setTargetAtTime(rnd(480, 720), t, 2);
+    return rnd(2, 5);
   });
 
   return {
