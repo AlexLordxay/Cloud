@@ -291,12 +291,14 @@ const BODIES = [
     radius: 1.7, a: 37, period: 1, spin: 0.25, tilt: 23.4, d: 12742, atmo: [0.35, 0.6, 1.0],
     stats: [["Від Сонця", "149,6 млн км", "1 а. о."], ["Рік", "365,25 доби"], ["Оберт навколо осі", "23 год 56 хв"], ["Супутники", "1", "Місяць"], ["Середня температура", "≈ +15 °C"]],
     desc: "Єдина відома планета з життям і рідкою водою на поверхні. Океани вкривають близько 71 % її площі. День, ніч і пори року тут відповідають обраній даті, а рух хмар, блискавки й полярне сяйво — художня симуляція.",
-    fact: "Місяць щороку віддаляється від Землі приблизно на 3,8 см." },
+    fact: "Місяць щороку віддаляється від Землі приблизно на 3,8 см.",
+    actions: [["Затемнення 8 квітня 2024", "2024-04-08T17:20:00Z", 1], ["Затемнення 12 серпня 2026", "2026-08-12T16:50:00Z", 1], ["Затемнення 2 серпня 2027", "2027-08-02T09:10:00Z", 1]] },
   { id: "moon", name: "Місяць", kind: "Супутник Землі", parent: "earth", dot: "#c9c6c0",
     radius: 0.46, a: 3.6, period: 27.32, planeTilt: 0, d: 3474, bump: 0.006,
     stats: [["Від Землі", "384 400 км"], ["Оберт навколо Землі", "27,3 доби"], ["Сила тяжіння", "16 % земної"], ["Перші люди", "1969", "Аполлон-11"], ["Температура", "−173…+127 °C"]],
     desc: "Єдиний природний супутник Землі й п'ятий за розміром у Сонячній системі. Його притягання спричиняє припливи й відпливи.",
-    fact: "Місяць завжди повернутий до Землі одним боком: його доба дорівнює місяцю." },
+    fact: "Місяць завжди повернутий до Землі одним боком: його доба дорівнює місяцю.",
+    actions: [["Затемнення 7 вересня 2025", "2025-09-07T17:15:00Z", 1], ["Затемнення 3 березня 2026", "2026-03-03T10:35:00Z", 1], ["Затемнення 31 грудня 2028", "2028-12-31T15:55:00Z", 1]] },
   { id: "mars", name: "Марс", kind: "Планета земної групи", dot: "#d9744a",
     radius: 1.1, a: 46, period: 1.881, spin: 0.24, tilt: 25.2, d: 6779, atmo: [1.0, 0.6, 0.45], bump: 0.012,
     stats: [["Від Сонця", "227,9 млн км", "1,52 а. о."], ["Рік", "687 діб"], ["Оберт навколо осі", "24 год 37 хв"], ["Супутники", "2", "Фобос і Деймос"], ["Середня температура", "≈ −63 °C"]],
@@ -594,7 +596,7 @@ function earthMaterial(tex) {
       dayMap: { value: tex.earth }, nightMap: { value: tex.earthNight }, specMap: { value: tex.earthSpec }, cloudMap: { value: tex.earthClouds },
     }, earthU),
     vertexShader: EARTH_VERT,
-    fragmentShader: NOISE_GLSL + CLOUDS_GLSL + `
+    fragmentShader: NOISE_GLSL + CLOUDS_GLSL + SOLAR_GLSL + `
       uniform sampler2D dayMap; uniform sampler2D nightMap; uniform sampler2D specMap; uniform vec3 sunPos;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
       void main() {
@@ -607,7 +609,10 @@ function earthMaterial(tex) {
         vec3 night = pow(texture2D(nightMap, vUv).rgb, vec3(2.2));
         // Blurred mask (mip bias) so JPEG blocks and hard coastlines don't show under the glint.
         float ocean = smoothstep(0.35, 0.85, texture2D(specMap, vUv, 2.0).r);
-        float lit = smoothstep(-0.08, 0.25, ndl);
+        // Solar eclipse: the Moon's shadow dims the daylight.
+        // Perceptual curve: the screen is non-linear, so a linear dimming would barely show.
+        float eclipseLit = pow(1.0 - solarShadow(N), 2.2);
+        float lit = smoothstep(-0.08, 0.25, ndl) * eclipseLit;
 
         // Cloud shadows on the ground (sampled a little towards the Sun).
         vec2 sh = vec2(-dot(L, cross(vec3(0.0, 1.0, 0.0), N)) * 0.0015, 0.0);
@@ -615,7 +620,7 @@ function earthMaterial(tex) {
 
         // Warm light near the day–night line.
         vec3 sunTint = mix(vec3(1.0, 0.55, 0.32), vec3(1.0), smoothstep(0.0, 0.28, ndl));
-        vec3 col = day * (0.03 + 1.25 * max(ndl, 0.0)) * sunTint * (1.0 - shadow);
+        vec3 col = day * (0.03 + 1.25 * max(ndl, 0.0) * eclipseLit) * sunTint * (1.0 - shadow);
         col += night * vec3(1.0, 0.8, 0.55) * 2.2 * (1.0 - smoothstep(-0.2, 0.08, ndl)) * (1.0 - cloudAt(vUv) * 0.7);
 
         // Sun glint on the sea, shimmering as if on waves.
@@ -636,7 +641,7 @@ function earthCloudMaterial(tex) {
   return new THREE.ShaderMaterial({
     uniforms: Object.assign({ cloudMap: { value: tex.earthClouds } }, earthU),
     vertexShader: EARTH_VERT,
-    fragmentShader: CLOUDS_GLSL + `
+    fragmentShader: CLOUDS_GLSL + SOLAR_GLSL + `
       uniform vec3 sunPos; uniform float cloudOpacity;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
       float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -646,7 +651,7 @@ function earthCloudMaterial(tex) {
         float ndl = dot(N, L);
         float c = cloudAt(vUv);
         vec3 tint = mix(vec3(1.0, 0.5, 0.28), vec3(1.0), smoothstep(0.0, 0.3, ndl));
-        vec3 col = tint * (0.03 + 1.1 * max(ndl, 0.0));
+        vec3 col = tint * (0.03 + 1.1 * max(ndl, 0.0) * pow(1.0 - solarShadow(N), 2.2));
         float night = 1.0 - smoothstep(-0.15, 0.05, ndl);
 
         // Lightning: rare flickering flashes inside thick clouds on the night side, mostly in the tropics.
@@ -818,6 +823,171 @@ function marsAtmosphere(radius) {
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   }));
+}
+
+/* ---------- Eclipses and shadows ---------- */
+// Eclipses use the real geometry (km, then Earth radii), not the stylised scene: directions match the scene axes,
+// so shadows land where and when they really do. Moon shadow on Earth → earthU; Earth shadow on the Moon → lunarU.
+const KM_AU = 149597870.7, R_EARTH = 6371.0, R_MOON = 1737.4, R_SUN = 696000;
+earthU.eMoon = { value: new THREE.Vector3(1e6, 0, 0) };
+earthU.eAxis = { value: new THREE.Vector3(1, 0, 0) };
+earthU.eCone = { value: new THREE.Vector3(0, 0, 0) };
+const lunarU = {
+  lmCenter: { value: new THREE.Vector3(1e6, 0, 0) },
+  lAnti: { value: new THREE.Vector3(1, 0, 0) },
+  lCone: { value: new THREE.Vector3(0, 0, 0) },
+  sunPos: earthU.sunPos,
+};
+const SOLAR_GLSL = `
+  uniform vec3 eMoon; uniform vec3 eAxis; uniform vec3 eCone;
+  // Fraction of sunlight blocked by the Moon at surface point P (Earth radii from Earth's centre).
+  float solarShadow(vec3 P) {
+    vec3 v = P - eMoon;
+    float al = dot(v, eAxis);
+    if (al <= 0.0) return 0.0;
+    float perp = length(v - al * eAxis);
+    float rp = eCone.x + al * eCone.y, ru = abs(eCone.x - al * eCone.z);
+    float pen = 1.0 - smoothstep(ru, rp, perp);
+    float core = 1.0 - smoothstep(ru * 0.8, ru * 1.2 + 0.003, perp);
+    return clamp(pen * 0.92 + core * 0.08, 0.0, 1.0);
+  }
+`;
+function moonMaterial(tex) {
+  return new THREE.ShaderMaterial({
+    uniforms: Object.assign({ map: { value: tex.moon } }, lunarU),
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform sampler2D map; uniform vec3 sunPos; uniform vec3 lmCenter; uniform vec3 lAnti; uniform vec3 lCone;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW);
+        vec3 albedo = pow(texture2D(map, vUv).rgb, vec3(2.2));
+        vec3 col = albedo * (0.02 + 1.25 * max(dot(N, L), 0.0));
+        // Earth's shadow: penumbra dims, umbra turns the Moon copper-red (sunlight bent through Earth's atmosphere).
+        vec3 P = lmCenter + N * lCone.x;
+        float al = dot(P, lAnti);
+        if (al > 0.0) {
+          float perp = length(P - al * lAnti);
+          float ru = 1.02 - al * lCone.y, rp = 1.02 + al * lCone.z;
+          float umbra = 1.0 - smoothstep(ru - 0.015, ru + 0.015, perp);
+          float pen = 1.0 - smoothstep(ru, rp, perp);
+          col *= 1.0 - 0.6 * pen * (1.0 - umbra);
+          col = mix(col, albedo * vec3(0.55, 0.16, 0.07) * 0.5 * (0.35 + 0.65 * max(dot(N, L), 0.0)), umbra);
+        }
+        gl_FragColor = vec4(col, 1.0);
+        #include <encodings_fragment>
+      }`,
+  });
+}
+
+// Saturn and Jupiter: plain diffuse lighting plus shadows that the stylised scene itself casts —
+// the ring shadow on Saturn, and the Galilean moons' shadows on Jupiter's clouds.
+const shadowU = {
+  ringN: { value: new THREE.Vector3(0, 1, 0) },
+  satCenter: { value: new THREE.Vector3() },
+  satR: { value: 1 },
+  jupMoons: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+};
+function giantMaterial(b, tex) {
+  const saturn = b.id === "saturn";
+  return new THREE.ShaderMaterial({
+    uniforms: Object.assign({ map: { value: tex[b.id] }, ringMap: { value: tex.saturnRing }, sunPos: earthU.sunPos }, shadowU),
+    defines: saturn ? { SATURN: 1 } : { JUPITER: 1 },
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform sampler2D map; uniform sampler2D ringMap; uniform vec3 sunPos;
+      uniform vec3 ringN; uniform vec3 satCenter; uniform float satR; uniform vec4 jupMoons[4];
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW);
+        float light = 0.03 + 1.25 * max(dot(N, L), 0.0);
+        #ifdef SATURN
+          float dn = dot(L, ringN);
+          if (abs(dn) > 1e-4) {
+            float t = dot(satCenter - vW, ringN) / dn;
+            if (t > 0.0) {
+              float r = length(vW + L * t - satCenter) / satR;
+              if (r > 1.24 && r < 2.27) light *= pow(1.0 - 0.9 * texture2D(ringMap, vec2((r - 1.24) / 1.03, 0.5)).a, 2.2);
+            }
+          }
+        #endif
+        #ifdef JUPITER
+          for (int i = 0; i < 4; i++) {
+            vec3 m = jupMoons[i].xyz - vW;
+            float al = dot(m, L);
+            if (al > 0.0) {
+              float perp = length(m - al * L), rr = jupMoons[i].w;
+              light *= mix(1.0, 0.1, 1.0 - smoothstep(rr * 0.8, rr * 1.1, perp));
+            }
+          }
+        #endif
+        gl_FragColor = vec4(pow(texture2D(map, vUv).rgb, vec3(2.2)) * light, 1.0);
+        #include <encodings_fragment>
+      }`,
+  });
+}
+// Saturn's rings, now dark where the planet blocks the Sun.
+function saturnRingMaterial(tex) {
+  return new THREE.ShaderMaterial({
+    uniforms: Object.assign({ map: { value: tex.saturnRing }, sunPos: earthU.sunPos }, shadowU),
+    vertexShader: "varying vec2 vUv; varying vec3 vW; void main(){ vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
+    fragmentShader: `
+      uniform sampler2D map; uniform vec3 sunPos; uniform vec3 satCenter; uniform float satR;
+      varying vec2 vUv; varying vec3 vW;
+      void main() {
+        vec4 t = texture2D(map, vUv);
+        vec3 L = normalize(sunPos - vW), c = satCenter - vW;
+        float al = dot(c, L);
+        float sh = al > 0.0 ? 1.0 - smoothstep(satR * 0.97, satR * 1.03, length(c - al * L)) : 0.0;
+        gl_FragColor = vec4(pow(t.rgb, vec3(2.2)) * (1.0 - 0.92 * sh), t.a);
+        #include <encodings_fragment>
+      }`,
+    side: THREE.DoubleSide, transparent: true, depthWrite: false,
+  });
+}
+
+const tmpQ = new THREE.Quaternion();
+const eclipse = { solar: "", lunar: "" };
+// Update eclipse and shadow uniforms. moonKm: geocentric Moon vector in km (scene axes), or null when not on the real date.
+function updateShadows(moonKm) {
+  const E = byId.earth;
+  const S = tA.copy(E.auVec).multiplyScalar(-KM_AU / R_EARTH);        // Earth → Sun, Earth radii
+  eclipse.solar = eclipse.lunar = "";
+  if (moonKm) {
+    const M = tB.copy(moonKm).multiplyScalar(1 / R_EARTH);            // Earth → Moon, Earth radii
+    const rs = R_SUN / R_EARTH, rm = R_MOON / R_EARTH;
+    // Solar eclipse: shadow cone from the Sun through the Moon.
+    const axis = earthU.eAxis.value.copy(M).sub(S);
+    const dsm = axis.length();
+    axis.divideScalar(dsm);
+    earthU.eMoon.value.copy(M);
+    earthU.eCone.value.set(rm, (rs + rm) / dsm, (rs - rm) / dsm);
+    const v = tAU.copy(M).negate(), al = v.dot(axis), perp = v.addScaledVector(axis, -al).length();
+    const rp = rm + al * (rs + rm) / dsm, ru = rm - al * (rs - rm) / dsm;
+    if (al > 0 && perp < 1 + Math.abs(ru)) eclipse.solar = ru > 0 ? "повне сонячне затемнення" : "кільцеве сонячне затемнення";
+    else if (al > 0 && perp < 1 + rp) eclipse.solar = "часткове сонячне затемнення";
+    // Lunar eclipse: Earth's shadow cone pointing away from the Sun (umbra widened ~2% by the atmosphere).
+    const dse = S.length(), anti = lunarU.lAnti.value.copy(S).divideScalar(-dse);
+    lunarU.lmCenter.value.copy(M);
+    lunarU.lCone.value.set(rm, (rs - 1) / dse, (rs + 1) / dse);
+    const al2 = M.dot(anti), perp2 = tAU.copy(M).addScaledVector(anti, -al2).length();
+    const ru2 = 1.02 - al2 * (rs - 1) / dse, rp2 = 1.02 + al2 * (rs + 1) / dse;
+    if (al2 > 0 && perp2 < ru2 - rm) eclipse.lunar = "повне місячне затемнення";
+    else if (al2 > 0 && perp2 < ru2 + rm) eclipse.lunar = "часткове місячне затемнення";
+    else if (al2 > 0 && perp2 < rp2 + rm) eclipse.lunar = "півтіньове місячне затемнення";
+  } else {
+    earthU.eMoon.value.set(1e6, 0, 0);
+    lunarU.lmCenter.value.set(1e6, 0, 0);
+  }
+  // Scene-cast shadows on the giants.
+  const sat = byId.saturn;
+  shadowU.ringN.value.set(0, 1, 0).applyQuaternion(sat.tiltGroup.getWorldQuaternion(tmpQ));
+  shadowU.satCenter.value.copy(sat.world);
+  shadowU.satR.value = sat.radius;
+  ["io", "europa", "ganymede", "callisto"].forEach((id, i) => {
+    const m = byId[id];
+    shadowU.jupMoons.value[i].set(m.world.x, m.world.y, m.world.z, m.radius);
+  });
 }
 
 /* ---------- The living Sun: boiling photosphere, sunspots, flares, corona, prominences ---------- */
@@ -1185,15 +1355,22 @@ function toScene(vAU, out) {
 }
 // Greenwich mean sidereal time (rad): which meridian faces the vernal equinox.
 const gmst = jd => ((280.46061837 + 360.98564736629 * (jd - J2000)) % 360) * DEG;
-// Moon, low precision (Meeus): geocentric ecliptic longitude/latitude (rad) and distance (km).
+// Moon (Meeus, ch. 47, main periodic terms): geocentric ecliptic longitude/latitude (rad, J2000 frame) and distance (km).
+const MOON_LON = [[0,0,1,0,6.288774],[2,0,-1,0,1.274027],[2,0,0,0,0.658314],[0,0,2,0,0.213618],[0,1,0,0,-0.185116],[0,0,0,2,-0.114332],[2,0,-2,0,0.058793],[2,-1,-1,0,0.057066],[2,0,1,0,0.053322],[2,-1,0,0,0.045758],[0,1,-1,0,-0.040923],[1,0,0,0,-0.034720],[0,1,1,0,-0.030383],[2,0,0,-2,0.015327],[0,0,1,2,-0.012528],[0,0,1,-2,0.010980],[4,0,-1,0,0.010675],[0,0,3,0,0.010034],[4,0,-2,0,0.008548],[2,1,-1,0,-0.007888],[2,1,0,0,-0.006766],[1,0,-1,0,-0.005163],[1,1,0,0,0.004987],[2,-1,1,0,0.004036],[2,0,2,0,0.003994],[4,0,0,0,0.003861],[2,0,-3,0,0.003665],[0,1,-2,0,-0.002689],[2,0,-1,2,-0.002602],[2,-1,-2,0,0.002390],[1,0,1,0,-0.002348],[2,-2,0,0,0.002236],[0,1,2,0,-0.002120],[0,2,0,0,-0.002069]];
+const MOON_DIST = [[0,0,1,0,-20905.355],[2,0,-1,0,-3699.111],[2,0,0,0,-2955.968],[0,0,2,0,-569.925],[0,1,0,0,48.888],[0,0,0,2,-3.149],[2,0,-2,0,246.158],[2,-1,-1,0,-152.138],[2,0,1,0,-170.733],[2,-1,0,0,-204.586],[0,1,-1,0,-129.620],[1,0,0,0,108.743],[0,1,1,0,104.755],[2,0,0,-2,10.321],[0,0,1,-2,79.661],[4,0,-1,0,-34.782],[0,0,3,0,-23.210],[4,0,-2,0,-21.636],[2,1,-1,0,24.208],[2,1,0,0,30.824],[1,0,-1,0,-8.379],[1,1,0,0,-16.675],[2,-1,1,0,-12.831],[2,0,2,0,-10.445],[4,0,0,0,-11.650],[2,0,-3,0,14.403],[0,1,-2,0,-7.003],[2,-1,-2,0,10.056],[1,0,1,0,6.322],[2,-2,0,0,-9.884],[0,1,2,0,5.751]];
+const MOON_LAT = [[0,0,0,1,5.128122],[0,0,1,1,0.280602],[0,0,1,-1,0.277693],[2,0,0,-1,0.173237],[2,0,-1,1,0.055413],[2,0,-1,-1,0.046271],[2,0,0,1,0.032573],[0,0,2,1,0.017198],[2,0,1,-1,0.009266],[0,0,2,-1,0.008822],[2,-1,0,-1,0.008216],[2,0,-2,-1,0.004324],[2,0,1,1,0.004200]];
 function moonPos(jd) {
   const T = (jd - J2000) / 36525;
   const Lp = 218.3164477 + 481267.88123421 * T, D = 297.8501921 + 445267.1114034 * T, M = 357.5291092 + 35999.0502909 * T;
   const Mp = 134.9633964 + 477198.8675055 * T, F = 93.2720950 + 483202.0175233 * T;
-  const s = x => Math.sin(x * DEG), c = x => Math.cos(x * DEG);
-  const lon = Lp + 6.289 * s(Mp) + 1.274 * s(2 * D - Mp) + 0.658 * s(2 * D) + 0.214 * s(2 * Mp) - 0.186 * s(M) - 0.114 * s(2 * F);
-  const lat = 5.128 * s(F) + 0.281 * s(Mp + F) + 0.278 * s(Mp - F);
-  const dist = 385000.56 - 20905.36 * c(Mp) - 3699.11 * c(2 * D - Mp) - 2955.97 * c(2 * D);
+  const E = 1 - 0.002516 * T;
+  const arg = t => (t[0] * D + t[1] * M + t[2] * Mp + t[3] * F) * DEG, ecc = t => Math.pow(E, Math.abs(t[1]));
+  let lon = Lp, lat = 0, dist = 385000.56;
+  for (const t of MOON_LON) lon += t[4] * ecc(t) * Math.sin(arg(t));
+  for (const t of MOON_LAT) lat += t[4] * ecc(t) * Math.sin(arg(t));
+  for (const t of MOON_DIST) dist += t[4] * ecc(t) * Math.cos(arg(t));
+  // Meeus gives the equinox of date; planets use J2000, so remove general precession (≈1.397° per century).
+  lon -= 1.3969713 * T;
   return { lon: lon * DEG, lat: lat * DEG, dist };
 }
 // Galilean moons: mean longitudes (Meeus), good to a few degrees. Other moons use their real period with an arbitrary phase.
@@ -1339,6 +1516,8 @@ function buildBody(b, i, tex, jd) {
     b.mesh.material = sunFx.material;
   }
   if (b.comet) cometFx = createCometFx(b);
+  if (b.id === "moon") b.mesh.material = moonMaterial(tex);
+  if (b.id === "jupiter" || b.id === "saturn") b.mesh.material = giantMaterial(b, tex);
   pickables.push(b.mesh);
 
   if (b.id === "earth") b.tiltGroup.add(earthAtmosphere(b.radius * 1.045), earthAurora(b.radius * 1.025));
@@ -1351,7 +1530,11 @@ function buildBody(b, i, tex, jd) {
     earthClouds = new THREE.Mesh(new THREE.SphereGeometry(b.radius * 1.012, 96, 64), earthCloudMaterial(tex));
     b.mesh.add(earthClouds);
   }
-  if (b.rings === "saturn") b.tiltGroup.add(ringMesh(b.radius * 1.24, b.radius * 2.27, tex.saturnRing, 0xffffff));
+  if (b.rings === "saturn") {
+    const rings = ringMesh(b.radius * 1.24, b.radius * 2.27, tex.saturnRing, 0xffffff);
+    rings.material = saturnRingMaterial(tex);
+    b.tiltGroup.add(rings);
+  }
   if (b.rings === "uranus") b.tiltGroup.add(ringMesh(b.radius * 1.6, b.radius * 2.05, toTexture(ringTexture(uranusRing)), 0xffffff));
   if (b.ring) b.tiltGroup.add(ringMesh(b.radius * b.ring[0], b.radius * b.ring[1], toTexture(ringTexture(thinRing)), 0xffffff));
 
@@ -1433,10 +1616,10 @@ function renderInfo(b) {
   act.innerHTML = "";
   act.hidden = !(b && b.actions);
   if (b && b.actions) {
-    for (const [label, iso] of b.actions) {
+    for (const [label, iso, rate] of b.actions) {
       const btn = document.createElement("button");
       btn.type = "button"; btn.textContent = label;
-      btn.addEventListener("click", () => jumpTo(Date.parse(iso), 3, label));
+      btn.addEventListener("click", () => jumpTo(Date.parse(iso), rate != null ? rate : 3, label));
       act.appendChild(btn);
     }
   }
@@ -1535,7 +1718,7 @@ function createSunAudio() {
 let sunAudio = null;
 
 /* ---------- Camera state ---------- */
-const state = { mode: "overview", index: -1, paused: false, rate: 0, live: true, simMs: Date.now(), flight: null, orbits: true, moonKm: 384400 };
+const state = { mode: "overview", index: -1, paused: false, rate: 0, live: true, simMs: Date.now(), flight: null, orbits: true, moonKm: 384400, moonVec: new THREE.Vector3(), fine: true };
 const MIN_MS = Date.UTC(1800, 0, 1), MAX_MS = Date.UTC(2200, 11, 31);
 const fmtTime = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit" });
 const pad = n => String(n).padStart(2, "0");
@@ -1573,6 +1756,8 @@ function updateLive(force) {
     if (b.id === "sun") txt = `Зараз від Землі: ${fmtAU(E.au)}`;
     else if (b.id === "moon") txt = `Зараз від Землі: ${Math.round(state.moonKm).toLocaleString("uk-UA")} км`;
     else if (!b.parent) txt = `Зараз від Сонця: ${fmtAU(b.au)}` + (b.id === "earth" ? "" : `\nВід Землі: ${fmtAU(b.auVec.distanceTo(E.auVec))}`);
+    if ((b.id === "earth" || b.id === "sun") && eclipse.solar) txt += `\nЗараз ${eclipse.solar}`;
+    if ((b.id === "moon" || b.id === "earth") && eclipse.lunar) txt += `\nЗараз ${eclipse.lunar}`;
     if (b.id === "mars") {
       const ls = Math.round(marsLs(b.auVec)) % 360, q = ["весна", "літо", "осінь", "зима"][Math.floor(ls / 90)];
       txt += `\nСезон: ${q} у північній півкулі (Ls ${ls}°)`;
@@ -1745,6 +1930,7 @@ function placeAll(jd, dDays, fine) {
     if (b.id === "moon" && fine) {
       const m = moonPos(jd);
       state.moonKm = m.dist;
+      state.moonVec.set(Math.cos(m.lat) * Math.cos(m.lon), Math.sin(m.lat), -Math.cos(m.lat) * Math.sin(m.lon)).multiplyScalar(m.dist);
       b.theta = m.lon;
       b.group.position.set(Math.cos(m.lat) * Math.cos(m.lon) * b.a, Math.sin(m.lat) * b.a, -Math.cos(m.lat) * Math.sin(m.lon) * b.a);
     } else {
@@ -1768,6 +1954,7 @@ function tick() {
     if (!state.paused) $("pause").click();
   }
   const jd = jdOf(state.simMs), dDays = dt * rateS / 86400, fine = rateS <= 86400;
+  state.fine = fine;
   placeAll(jd, dDays, fine);
   if (state.jumped) {
     // After a date jump, glide to the body's new place instead of snapping the camera across the system.
@@ -1787,6 +1974,7 @@ function tick() {
   kuiperBelt.rotation.y += clampAbs(TAU * dDays / 90000, 0.01);
   scene.updateMatrixWorld();
   for (const b of BODIES) b.group.getWorldPosition(b.world);
+  updateShadows(fine ? state.moonVec : null);
 
   // The Sun boils in real time (not sped up with the orbit clock).
   if (sunFx) sunFx.update(state.paused ? 0 : dt * (reduceMotion ? 0.3 : 1), camera);
