@@ -281,7 +281,7 @@ const BODIES = [
   { id: "mercury", name: "Меркурій", kind: "Планета земної групи", dot: "#a9a39b",
     radius: 0.8, a: 20, period: 0.241, spin: 0.03, tilt: 0.03, d: 4879, bump: 0.012,
     stats: [["Від Сонця", "57,9 млн км", "0,39 а. о."], ["Рік", "88 діб"], ["Оберт навколо осі", "58,6 доби"], ["Супутники", "0"], ["Температура", "−173…+427 °C"]],
-    desc: "Найменша планета й найближча до Сонця. Атмосфери майже немає, тому вдень поверхня розжарюється, а вночі різко холоне.",
+    desc: "Найменша планета й найближча до Сонця. Атмосфери майже немає, тому вдень поверхня розжарюється, а вночі різко холоне. Без повітря світло не розсіюється: межа дня й ночі різка, а біля неї кратери кидають довгі чорні тіні.",
     fact: "Одна сонячна доба на Меркурії триває 176 земних діб, тобто два його роки." },
   { id: "venus", name: "Венера", kind: "Планета земної групи", dot: "#e8c589",
     radius: 1.6, a: 28, period: 0.615, spin: -0.02, tilt: 177.4, d: 12104, atmo: [1.0, 0.85, 0.55],
@@ -363,7 +363,7 @@ const BODIES = [
   { id: "uranus", name: "Уран", kind: "Крижаний гігант", dot: "#9fdde3",
     radius: 2.8, a: 132, period: 84.0, spin: -0.35, tilt: 97.8, d: 50724, atmo: [0.6, 0.9, 0.95], rings: "uranus",
     stats: [["Від Сонця", "2,87 млрд км", "19,2 а. о."], ["Рік", "84 роки"], ["Оберт навколо осі", "17 год 14 хв", "у зворотний бік"], ["Супутники", "29"], ["Температура хмар", "≈ −195 °C"]],
-    desc: "Крижаний гігант, що обертається «лежачи на боці»: його вісь нахилена майже на 98°.",
+    desc: "Крижаний гігант, що обертається «лежачи на боці»: його вісь нахилена майже на 98°. Це найспокійніша на вигляд планета: ледь помітні смуги, рідкісні світлі хмари й світла «шапка» над північним полюсом, яку спостерігають останні роки. Рух смуг і хмар — симуляція.",
     fact: "Через такий нахил на кожному полюсі близько 42 років триває день, а потім 42 роки ніч." },
   { id: "miranda", name: "Міранда", kind: "Супутник Урана", parent: "uranus", dot: "#b5b3b0",
     radius: 0.13, a: 6.6, period: 1.413, d: 472,
@@ -709,6 +709,32 @@ function earthAtmosphere(radius) {
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   }));
+}
+
+// Mercury: no atmosphere, so no scattered light — the night is black, the terminator sharp, and low sunlight
+// throws long crater shadows. Relief comes from the map's brightness via screen-space bump mapping.
+function mercuryMaterial(tex) {
+  return new THREE.ShaderMaterial({
+    uniforms: { map: { value: tex.mercury }, sunPos: earthU.sunPos, bump: { value: 0.02 } },
+    extensions: { derivatives: true },
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform sampler2D map; uniform vec3 sunPos; uniform float bump;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW);
+        vec3 albedo = pow(texture2D(map, vUv).rgb, vec3(2.2));
+        float h = dot(albedo, vec3(0.3, 0.59, 0.11));
+        vec3 dpdx = dFdx(vW), dpdy = dFdy(vW);
+        float hx = dFdx(h), hy = dFdy(h);
+        vec3 r1 = cross(dpdy, N), r2 = cross(N, dpdx);
+        float det = dot(dpdx, r1);
+        vec3 Nb = normalize(abs(det) * N - sign(det) * (hx * r1 + hy * r2) * bump);
+        float ndl = max(dot(Nb, L), 0.0) * smoothstep(-0.02, 0.02, dot(N, L));
+        gl_FragColor = vec4(albedo * (0.004 + 1.3 * ndl), 1.0);
+        #include <encodings_fragment>
+      }`,
+  });
 }
 
 // Sun-aware haze for thick atmospheres: dayCol on the lit limb, edgeCol towards the terminator, dark at night.
@@ -1118,11 +1144,34 @@ function giantMaterial(b, tex) {
     uniforms: Object.assign({ map: { value: tex[b.id] }, ringMap: { value: tex.saturnRing }, sunPos: earthU.sunPos }, shadowU),
     defines: { [b.id.toUpperCase()]: 1 },
     vertexShader: EARTH_VERT,
-    fragmentShader: (b.id === "neptune" ? NOISE_GLSL : "") + `
+    fragmentShader: (b.id === "neptune" || b.id === "uranus" ? NOISE_GLSL : "") + `
       uniform sampler2D map; uniform sampler2D ringMap; uniform vec3 sunPos;
       uniform vec3 ringN; uniform vec3 satCenter; uniform float satR; uniform vec4 jupMoons[4]; uniform float jFlow; uniform float sFlow;
       uniform float nFlow; uniform float nTime;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      #ifdef URANUS
+        // Uranus is nearly featureless: faint bands drifting on its wind profile (retrograde at the equator,
+        // prograde at mid-latitudes), the bright north polar cap seen in recent years, and rare pale clouds.
+        float uranusJet(float latDeg) {
+          return -0.45 * exp(-pow(latDeg / 22.0, 2.0)) + 0.6 * exp(-pow((abs(latDeg) - 58.0) / 16.0, 2.0));
+        }
+        vec3 uranusAlbedo(vec2 uv) {
+          float p1 = fract(nFlow * 0.6), p2 = fract(nFlow * 0.6 + 0.5);
+          float w1 = 1.0 - abs(2.0 * p1 - 1.0);
+          float latDeg = (uv.y - 0.5) * 180.0;
+          vec3 a = texture2D(map, vec2(uv.x - uranusJet(latDeg) * p1 * 0.01, uv.y)).rgb;
+          vec3 b = texture2D(map, vec2(uv.x - uranusJet(latDeg) * p2 * 0.01, uv.y)).rgb;
+          vec3 col = pow(a * w1 + b * (1.0 - w1), vec3(2.2));
+          col *= 1.0 + 0.04 * sin(radians(latDeg) * 14.0) + 0.025 * sin(radians(latDeg) * 31.0 + 1.0);
+          col = mix(col, vec3(0.78, 0.92, 0.95), smoothstep(52.0, 78.0, latDeg) * 0.35);
+          vec3 p = normalize(vObj);
+          float lat = asin(clamp(p.y, -1.0, 1.0)), lon = atan(p.z, p.x) + uranusJet(latDeg) * p1 * 0.3;
+          vec3 q = vec3(cos(lat) * cos(lon), sin(lat) * 7.0, cos(lat) * sin(lon));
+          float cl = smoothstep(0.62, 0.9, snoise(q * 3.0 + vec3(0.0, 0.0, nTime * 0.015)))
+                   * (exp(-pow((degrees(lat) - 32.0) / 7.0, 2.0)) + 0.7 * exp(-pow((degrees(lat) + 30.0) / 7.0, 2.0))) * 0.3;
+          return mix(col, vec3(0.9, 0.97, 1.0), cl);
+        }
+      #endif
       #ifdef NEPTUNE
         // Real wind profile: a retrograde equatorial jet (up to ~2000 km/h) and prograde jets near ±70°.
         float neptuneJet(float latDeg) {
@@ -1223,6 +1272,8 @@ function giantMaterial(b, tex) {
           vec3 albedo = saturnAlbedo(vUv);
         #elif defined(NEPTUNE)
           vec3 albedo = neptuneAlbedo(vUv);
+        #elif defined(URANUS)
+          vec3 albedo = uranusAlbedo(vUv);
         #else
           vec3 albedo = pow(texture2D(map, vUv).rgb, vec3(2.2));
         #endif
@@ -1842,12 +1893,14 @@ function buildBody(b, i, tex, jd) {
   if (b.id === "moon") b.mesh.material = moonMaterial(tex);
   if (b.id === "io") ioFx = createIoFx(b);
   if (b.id === "venus") b.mesh.material = venusMaterial(tex);
-  if (b.id === "jupiter" || b.id === "saturn" || b.id === "neptune") b.mesh.material = giantMaterial(b, tex);
+  if (b.id === "mercury") b.mesh.material = mercuryMaterial(tex);
+  if (["jupiter", "saturn", "neptune", "uranus"].includes(b.id)) b.mesh.material = giantMaterial(b, tex);
   pickables.push(b.mesh);
 
   if (b.id === "earth") b.tiltGroup.add(earthAtmosphere(b.radius * 1.045), earthAurora(b.radius * 1.025));
   else if (b.id === "venus") b.tiltGroup.add(venusAtmosphere(b.radius * 1.04));
   else if (b.id === "neptune") b.tiltGroup.add(hazeAtmosphere(b.radius * 1.04, [0.32, 0.55, 1.0], [0.3, 0.75, 0.9], 1.1));
+  else if (b.id === "uranus") b.tiltGroup.add(hazeAtmosphere(b.radius * 1.04, [0.55, 0.88, 0.95], [0.45, 0.8, 0.85], 0.9));
   else if (b.id === "mars") {
     const weather = marsWeather(b.radius * 1.006);
     if (eco) weather.material.defines.ECO = 1;
