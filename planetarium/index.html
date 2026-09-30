@@ -323,7 +323,7 @@ const BODIES = [
   { id: "io", name: "Іо", kind: "Супутник Юпітера", parent: "jupiter", dot: "#d9c56a",
     radius: 0.48, a: 8.2, period: 1.769, d: 3643,
     stats: [["Від Юпітера", "421 700 км"], ["Оберт навколо Юпітера", "1,77 доби"], ["Відкрито", "1610", "Галілео Галілей"]],
-    desc: "Найближчий із великих супутників Юпітера. Припливні сили постійно розігрівають його надра.",
+    desc: "Найближчий із великих супутників Юпітера. Припливні сили постійно розігрівають його надра. Шлейфи вулканів Пеле й Тваштар злітають на 300–400 км і падають «парасолькою», бо повітря тут майже немає; на нічному боці жевріє лава Локі, найпотужнішого вулкана Іо. Вулкани стоять на своїх справжніх місцях; їхня активність і швидкість викидів — симуляція.",
     fact: "Найвулканічніше тіло Сонячної системи: на Іо понад 400 активних вулканів." },
   { id: "europa", name: "Європа", kind: "Супутник Юпітера", parent: "jupiter", dot: "#d8cdb8",
     radius: 0.41, a: 9.8, period: 3.551, d: 3122,
@@ -956,6 +956,91 @@ function toggleVenusSurface(btn) {
   venusTarget = venusSurfaceOn ? 1 : 0;
   btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
 }
+
+/* ---------- Io: volcanic plumes and hot lava ---------- */
+// Real vents (lat, east longitude); plume heights relative to Io's radius (1821 km). Io has almost no air,
+// so the ejecta fly on ballistic arcs and fall back in an umbrella, as Voyager and Galileo saw.
+const IO_PLUMES = [
+  { lat: -18.7, lon: 104.7, h: 0.19, spread: 0.62, col: [0.55, 0.68, 1.0], n: 700 },   // Pele, ~350 km, faint and bluish
+  { lat: 62.8, lon: -123.0, h: 0.18, spread: 0.55, col: [0.6, 0.7, 1.0], n: 600 },     // Tvashtar, ~330 km
+  { lat: -1.5, lon: -153.1, h: 0.055, spread: 0.5, col: [0.95, 0.92, 0.82], n: 300 },  // Prometheus, ~100 km, dusty white
+  { lat: -45.3, lon: -55.5, h: 0.045, spread: 0.45, col: [0.9, 0.88, 0.8], n: 200 },   // Masubi
+];
+// Hot spots that glow on the night side: Loki (the brightest), Pele, Amirani, Marduk, Tvashtar.
+const IO_HOTSPOTS = [[12.6, 51.2, 1.0], [-18.7, 104.7, 0.7], [24.5, -114.7, 0.5], [-27.5, 150.3, 0.45], [62.8, -123.0, 0.55]];
+// Direction on Io's sphere for a map position (u = 0.5 + east longitude / 360), matching SphereGeometry's UVs.
+function ioDir(lat, lonE) {
+  const phi = (0.5 + lonE / 360) * TAU, c = Math.cos(lat * DEG);
+  return new THREE.Vector3(-Math.cos(phi) * c, Math.sin(lat * DEG), Math.sin(phi) * c);
+}
+function createIoFx(b) {
+  const R = b.radius, FLIGHT = 5;            // seconds from vent back to the ground (sped up from ~20 minutes)
+  const plumes = IO_PLUMES.map(pl => {
+    const up = ioDir(pl.lat, pl.lon);
+    const e1 = new THREE.Vector3().crossVectors(up, Math.abs(up.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
+    const e2 = new THREE.Vector3().crossVectors(up, e1);
+    const H = pl.h * R, v0 = 4 * H / FLIGHT, g = 8 * H / (FLIGHT * FLIGHT);
+    const parts = [];
+    for (let i = 0; i < pl.n; i++) {
+      // Most ejecta leave near the edge of the cone, which gives the umbrella shape.
+      const a = pl.spread * Math.sqrt(Math.random()), t = Math.random() * TAU;
+      const dir = up.clone().multiplyScalar(Math.cos(a)).addScaledVector(e1, Math.sin(a) * Math.cos(t)).addScaledVector(e2, Math.sin(a) * Math.sin(t));
+      parts.push({ v: dir.multiplyScalar(v0 * (0.85 + Math.random() * 0.15)), age: Math.random() * FLIGHT });
+    }
+    return { pl, up, vent: up.clone().multiplyScalar(R * 0.995), g, parts };
+  });
+  const total = plumes.reduce((s, p) => s + p.parts.length, 0);
+  const pos = new Float32Array(total * 3), col = new Float32Array(total * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const soft = glowSprite("255,255,255", 1, 1).material.map;
+  const points = new THREE.Points(geo, new THREE.PointsMaterial({ size: R * 0.028, sizeAttenuation: true, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, map: soft }));
+  points.frustumCulled = false;
+  b.mesh.add(points);
+
+  const hotPos = new Float32Array(IO_HOTSPOTS.length * 3), hotCol = new Float32Array(IO_HOTSPOTS.length * 3);
+  const hotDirs = IO_HOTSPOTS.map(([lat, lon]) => ioDir(lat, lon));
+  hotDirs.forEach((d, i) => { hotPos[i * 3] = d.x * R * 1.003; hotPos[i * 3 + 1] = d.y * R * 1.003; hotPos[i * 3 + 2] = d.z * R * 1.003; });
+  const hotGeo = new THREE.BufferGeometry();
+  hotGeo.setAttribute("position", new THREE.BufferAttribute(hotPos, 3));
+  hotGeo.setAttribute("color", new THREE.BufferAttribute(hotCol, 3));
+  const hot = new THREE.Points(hotGeo, new THREE.PointsMaterial({ size: R * 0.09, sizeAttenuation: true, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, map: soft }));
+  hot.frustumCulled = false;
+  b.mesh.add(hot);
+
+  const q = new THREE.Quaternion(), L = new THREE.Vector3(), n = new THREE.Vector3();
+  return {
+    update(dt) {
+      b.mesh.getWorldQuaternion(q);
+      L.copy(b.world).negate().normalize();                       // towards the Sun
+      let k = 0;
+      for (const p of plumes) {
+        // Plumes are lit by the Sun, so they fade out over the night side.
+        const lit = 0.15 + 0.85 * clamp01((n.copy(p.up).applyQuaternion(q).dot(L) + 0.25) / 0.5);
+        for (const part of p.parts) {
+          part.age = (part.age + dt) % FLIGHT;
+          const t = part.age, f = Math.pow(Math.sin(PI * t / FLIGHT), 0.6) * lit * 0.1;
+          pos[k * 3] = p.vent.x + part.v.x * t - p.up.x * 0.5 * p.g * t * t;
+          pos[k * 3 + 1] = p.vent.y + part.v.y * t - p.up.y * 0.5 * p.g * t * t;
+          pos[k * 3 + 2] = p.vent.z + part.v.z * t - p.up.z * 0.5 * p.g * t * t;
+          col[k * 3] = p.pl.col[0] * f; col[k * 3 + 1] = p.pl.col[1] * f; col[k * 3 + 2] = p.pl.col[2] * f;
+          k++;
+        }
+      }
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.color.needsUpdate = true;
+      // Lava glows only where it is night.
+      IO_HOTSPOTS.forEach(([, , s], i) => {
+        const night = clamp01((-n.copy(hotDirs[i]).applyQuaternion(q).dot(L) + 0.05) / 0.3);
+        const flick = 0.85 + 0.15 * Math.sin(performance.now() * 0.003 + i * 1.7);
+        hotCol[i * 3] = 1.0 * s * night * flick; hotCol[i * 3 + 1] = 0.35 * s * night * flick; hotCol[i * 3 + 2] = 0.08 * s * night * flick;
+      });
+      hotGeo.attributes.color.needsUpdate = true;
+    },
+  };
+}
+let ioFx = null;
 
 /* ---------- Eclipses and shadows ---------- */
 // Eclipses use the real geometry (km, then Earth radii), not the stylised scene: directions match the scene axes,
@@ -1755,6 +1840,7 @@ function buildBody(b, i, tex, jd) {
   }
   if (b.comet) cometFx = createCometFx(b);
   if (b.id === "moon") b.mesh.material = moonMaterial(tex);
+  if (b.id === "io") ioFx = createIoFx(b);
   if (b.id === "venus") b.mesh.material = venusMaterial(tex);
   if (b.id === "jupiter" || b.id === "saturn" || b.id === "neptune") b.mesh.material = giantMaterial(b, tex);
   pickables.push(b.mesh);
@@ -2295,6 +2381,7 @@ function tick() {
 
   // The Sun boils in real time (not sped up with the orbit clock).
   if (sunFx) sunFx.update(state.paused ? 0 : dt * (reduceMotion ? 0.3 : 1), camera);
+  if (ioFx) ioFx.update(state.paused ? 0 : dt);
   if (cometFx) {
     const c = byId.halley;
     helioAU("halley", jd + 1, tAU);
