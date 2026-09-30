@@ -300,8 +300,8 @@ const BODIES = [
   { id: "mars", name: "Марс", kind: "Планета земної групи", dot: "#d9744a",
     radius: 1.1, a: 46, period: 1.881, spin: 0.24, tilt: 25.2, d: 6779, atmo: [1.0, 0.6, 0.45], bump: 0.012,
     stats: [["Від Сонця", "227,9 млн км", "1,52 а. о."], ["Рік", "687 діб"], ["Оберт навколо осі", "24 год 37 хв"], ["Супутники", "2", "Фобос і Деймос"], ["Середня температура", "≈ −63 °C"]],
-    desc: "Холодна пустельна планета з тонкою атмосферою. Червоний колір їй дає оксид заліза в ґрунті.",
-    fact: "Тут розташована гора Олімп, найвищий відомий вулкан у Сонячній системі: близько 22 км заввишки." },
+    desc: "Холодна пустельна планета з тонкою атмосферою. Червоний колір їй дає оксид заліза в ґрунті. Пилові бурі тут бувають щосезону, а раз на кілька років охоплюють усю планету; над вулканами висять хмари з водяного льоду, а захід сонця блакитний. Сезон і глобальні бурі (1971, 1977, 2001, 2007, 2018) відповідають даті, форма бур і хмар — симуляція.",
+    fact: "Блискавок, як на Землі, на Марсі немає: у 2025 році мікрофон марсохода Perseverance записав лише крихітні електричні іскри в пилових вихорах." },
   { id: "phobos", name: "Фобос", kind: "Супутник Марса", parent: "mars", dot: "#9b9189", tex: "moon",
     radius: 0.13, a: 2.0, period: 0.319, d: 22.5, dText: "27 × 22 × 18 км", shape: [1, 0.67, 0.81], bump: 0.004, texNote: true,
     stats: [["Від Марса", "9 376 км"], ["Оберт навколо Марса", "7 год 39 хв"], ["Відкрито", "1877", "Асаф Голл"]],
@@ -707,6 +707,114 @@ function earthAurora(radius) {
         float edge = 0.4 + 1.6 * pow(1.0 - abs(dot(N, V)), 2.0);
         vec3 col = mix(vec3(0.15, 1.0, 0.45), vec3(0.65, 0.3, 1.0), smoothstep(0.0, 1.0, pow(1.0 - band, 3.0)));
         gl_FragColor = vec4(col, band * rays * pulse * night * edge * 0.9);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+}
+
+// Mars weather, kept deliberately subtle: dust storms, water-ice clouds, seasonal CO2 frost, a thin atmosphere and patchy aurora.
+// ls = areocentric solar longitude (Mars season, rad) from the real date; globalDust = 0..1 inside known planet-wide storms.
+const marsU = {
+  time: { value: 0 },
+  flow: { value: 0 },
+  ls: { value: 0 },
+  globalDust: { value: 0 },
+  sunPos: { value: new THREE.Vector3(0, 0, 0) },
+};
+// Planet-wide dust storms observed from orbit or the ground (approximate start/end, UTC).
+const GLOBAL_DUST = [["1971-09-22", "1972-01-10"], ["1977-02-15", "1977-04-10"], ["1977-05-25", "1977-08-01"], ["2001-06-20", "2001-10-15"], ["2007-06-20", "2007-09-15"], ["2018-05-30", "2018-09-15"]].map(([a, b]) => [Date.parse(a), Date.parse(b)]);
+function globalDustAt(ms) {
+  const ramp = 20 * 86400000;
+  let v = 0;
+  for (const [a, b] of GLOBAL_DUST) {
+    if (ms > a - ramp && ms < b + ramp) v = Math.max(v, Math.min(1, (ms - a + ramp) / ramp, (b + ramp - ms) / ramp));
+  }
+  return clamp01(v);
+}
+// Mars season from its heliocentric ecliptic longitude: Ls ≈ λ − 85.06°.
+function marsLs(auVec) {
+  const lambda = Math.atan2(-auVec.z, auVec.x) / DEG;
+  return (((lambda - 85.06) % 360) + 360) % 360;
+}
+
+function marsWeather(radius) {
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), new THREE.ShaderMaterial({
+    uniforms: marsU,
+    vertexShader: EARTH_VERT,
+    fragmentShader: NOISE_GLSL + `
+      uniform float time; uniform float flow; uniform float ls; uniform float globalDust; uniform vec3 sunPos;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      // Gaussian bump around a surface point given as (lat, east longitude) in degrees.
+      float spot(float lat, float lon, float cLat, float cLon, float sLat, float sLon) {
+        float dl = mod(lon - cLon + 540.0, 360.0) - 180.0;
+        return exp(-pow((lat - cLat) / sLat, 2.0) - pow(dl / sLon, 2.0));
+      }
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW);
+        float ndl = dot(N, L);
+        vec3 p = normalize(vObj);
+        float lat = degrees(asin(clamp(p.y, -1.0, 1.0)));
+        float lon = degrees(atan(-p.z, p.x));
+        float s = sin(ls);
+
+        // Dust: more storms in southern spring/summer (Ls ≈ 180–330), plus rare planet-wide events.
+        float season = exp(-pow((degrees(ls) - 255.0) / 55.0, 2.0));
+        vec3 q = p * 2.6 + vec3(flow, 0.0, flow * 0.6);
+        float n = fbm(q + fbm(q * 1.7 + 3.1) * 0.8) * 0.5 + 0.5;
+        float local = smoothstep(0.78 - season * 0.1, 0.95, n) * (0.28 + 0.2 * season);
+        float dust = max(local, globalDust * (0.55 + 0.2 * n));
+
+        // Water-ice clouds: the aphelion equatorial belt (Ls ≈ 40–140), clouds over the Tharsis volcanoes, winter polar hoods.
+        float wisps = fbm(p * 7.0 + vec3(0.0, flow * 1.3, 0.0)) * 0.5 + 0.5;
+        float belt = exp(-pow((degrees(ls) - 90.0) / 45.0, 2.0)) * exp(-pow((lat - 10.0) / 14.0, 2.0)) * smoothstep(0.5, 0.8, wisps) * 0.22;
+        float volcanoes = spot(lat, lon, 18.6, 226.2, 5.0, 9.0) + spot(lat, lon, -8.3, 239.9, 4.0, 8.0) + spot(lat, lon, 1.5, 247.0, 4.0, 7.0) + spot(lat, lon, 11.9, 255.5, 4.0, 7.0);
+        float oro = volcanoes * smoothstep(0.35, 0.75, wisps) * 0.35 * (0.5 + 0.5 * exp(-pow((degrees(ls) - 90.0) / 60.0, 2.0)));
+        float winterN = max(0.0, -s), winterS = max(0.0, s);
+        float hood = (smoothstep(48.0, 62.0, lat) * winterN + smoothstep(48.0, 62.0, -lat) * winterS) * smoothstep(0.45, 0.75, wisps) * 0.25;
+        float ice = max(max(belt, oro), hood);
+
+        // Seasonal CO2 frost reaching lower latitudes in the winter hemisphere.
+        float ragged = snoise(p * 9.0) * 3.0;
+        float frost = (smoothstep(88.0 - 30.0 * winterN, 92.0 - 30.0 * winterN, lat + ragged) * winterN
+                     + smoothstep(88.0 - 30.0 * winterS, 92.0 - 30.0 * winterS, -lat + ragged) * winterS) * 0.33;
+
+        float light = 0.04 + 1.05 * max(ndl, 0.0);
+        // Composite back to front (premultiplied): frost, dust, ice clouds.
+        vec3 pc = vec3(0.95, 0.95, 0.97) * frost; float a = frost;
+        pc = vec3(0.78, 0.52, 0.32) * dust + pc * (1.0 - dust); a = dust + a * (1.0 - dust);
+        pc = vec3(0.97, 0.97, 1.0) * ice + pc * (1.0 - ice); a = ice + a * (1.0 - ice);
+        pc *= light;
+
+        // Aurora: faint, patchy glow over the crustal magnetic fields of the southern highlands, on the night side, coming and going.
+        float night = 1.0 - smoothstep(-0.2, 0.02, ndl);
+        float crust = spot(lat, lon, -48.0, 180.0, 20.0, 45.0);
+        float flicker = smoothstep(0.1, 0.9, 0.5 + 0.5 * sin(time * 0.07)) * (0.6 + 0.4 * snoise(p * 12.0 + time * 0.1));
+        float aur = crust * night * flicker * smoothstep(0.2, 0.7, snoise(p * 6.0 - time * 0.03) * 0.5 + 0.5) * 0.35;
+        pc += vec3(0.25, 0.95, 0.5) * aur;
+        a = max(a, aur);
+
+        gl_FragColor = vec4(pc / max(a, 0.001), clamp(a, 0.0, 0.8));
+        #include <encodings_fragment>
+      }`,
+    transparent: true, depthWrite: false,
+  }));
+}
+
+// Thin atmosphere: pale butterscotch haze on the day limb, a blue tint along the terminator (Martian sunsets are blue).
+function marsAtmosphere(radius) {
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), new THREE.ShaderMaterial({
+    uniforms: { sunPos: marsU.sunPos, globalDust: marsU.globalDust },
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform vec3 sunPos; uniform float globalDust;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW), V = normalize(cameraPosition - vW);
+        float ndl = dot(N, L);
+        float rim = pow(1.0 - abs(dot(N, V)), 3.2);
+        float dayside = smoothstep(-0.25, 0.2, ndl);
+        vec3 col = mix(vec3(0.35, 0.55, 1.0), vec3(0.95, 0.68, 0.45), smoothstep(-0.05, 0.3, ndl));
+        gl_FragColor = vec4(col, rim * dayside * (0.55 + globalDust * 0.4));
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   }));
@@ -1234,6 +1342,7 @@ function buildBody(b, i, tex, jd) {
   pickables.push(b.mesh);
 
   if (b.id === "earth") b.tiltGroup.add(earthAtmosphere(b.radius * 1.045), earthAurora(b.radius * 1.025));
+  else if (b.id === "mars") { b.tiltGroup.add(marsAtmosphere(b.radius * 1.03)); b.mesh.add(marsWeather(b.radius * 1.006)); }
   else if (b.atmo) b.tiltGroup.add(atmosphere(b.radius * 1.045, b.atmo, b.id === "venus" ? 2.2 : 3.0, b.id === "venus" ? 0.9 : b.id === "titan" ? 1.4 : 1.2));
   if (b.id === "earth") {
     tex.earthClouds.wrapS = THREE.RepeatWrapping;
@@ -1464,6 +1573,12 @@ function updateLive(force) {
     if (b.id === "sun") txt = `Зараз від Землі: ${fmtAU(E.au)}`;
     else if (b.id === "moon") txt = `Зараз від Землі: ${Math.round(state.moonKm).toLocaleString("uk-UA")} км`;
     else if (!b.parent) txt = `Зараз від Сонця: ${fmtAU(b.au)}` + (b.id === "earth" ? "" : `\nВід Землі: ${fmtAU(b.auVec.distanceTo(E.auVec))}`);
+    if (b.id === "mars") {
+      const ls = Math.round(marsLs(b.auVec)) % 360, q = ["весна", "літо", "осінь", "зима"][Math.floor(ls / 90)];
+      txt += `\nСезон: ${q} у північній півкулі (Ls ${ls}°)`;
+      if (marsU.globalDust.value > 0.5) txt += "\nЗараз глобальна пилова буря";
+      else if (ls > 180 && ls < 330) txt += "\nСезон пилових бур";
+    }
   }
   el.textContent = txt;
   el.style.whiteSpace = "pre-line";
@@ -1688,6 +1803,12 @@ function tick() {
     const focusOther = state.index >= 0 && BODIES[state.index] !== sun;
     sunAudio.setLevel(state.paused ? 0 : near * (focusOther ? 0.08 : 1));
   }
+
+  // Mars weather: season and planet-wide storms follow the real date; dust drifts with simulated time.
+  marsU.time.value += state.paused ? 0 : dt;
+  marsU.flow.value += clampAbs(dDays * 0.04, 0.002) + (state.paused ? 0 : dt * 0.003);
+  marsU.ls.value = marsLs(byId.mars.auVec) * DEG;
+  marsU.globalDust.value = globalDustAt(state.simMs);
 
   if (earthClouds) {
     // Clouds drift with simulated time (capped at high speeds); shimmer, lightning and aurora run in real time.
