@@ -233,6 +233,7 @@ button { font: inherit; color: inherit; }
     <button class="btn" id="pause" type="button" aria-pressed="false">Пауза</button>
     <button class="btn" id="orbits" type="button" aria-pressed="true">Орбіти</button>
     <button class="btn" id="sound" type="button" aria-pressed="false" title="Звук Сонця">Звук</button>
+    <button class="btn" id="music" type="button" aria-pressed="false" title="Фонова музика">Музика</button>
     <button class="btn" id="quality" type="button">Якість: авто</button>
     <label class="speed" for="speed">Час <input id="speed" type="range" min="0" max="6" step="1" value="0"><output id="speedOut">реальний</output></label>
   </div>
@@ -2131,6 +2132,144 @@ function createSunAudio() {
 }
 let sunAudio = null;
 
+/* ---------- Background music ---------- */
+// An original ambient piece generated in the browser: a soft organ pad over a low pedal note, a slow bell arpeggio
+// with echoes, and a large reverb. Chords: A minor → F → C → G, each held for two bars. No samples, no quotations.
+function createAmbientMusic(ctx, dest) {
+  const midi = m => 440 * Math.pow(2, (m - 69) / 12);
+  const CHORDS = [[45, 48, 52, 57], [41, 45, 48, 52], [48, 52, 55, 60], [43, 47, 50, 55]];
+  const BEAT = 60 / 64 / 2;                     // an eighth note at 64 bpm
+  const BAR = BEAT * 8, CHORD_LEN = BAR * 2;
+
+  const out = ctx.createGain();
+  out.gain.value = 1;
+  out.connect(dest);
+
+  // Reverb from a generated impulse: 3.5 s of decaying stereo noise.
+  const len = Math.floor(ctx.sampleRate * 3.5), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  }
+  const verb = ctx.createConvolver();
+  verb.buffer = ir;
+  const wet = ctx.createGain(); wet.gain.value = 0.55;
+  verb.connect(wet).connect(out);
+
+  // Pad: organ-like tone (a few soft harmonics), low-passed with a slowly breathing cutoff.
+  const organ = ctx.createPeriodicWave(new Float32Array([0, 1, 0.5, 0.3, 0.22, 0.1, 0.07, 0.04]), new Float32Array(8));
+  const padBus = ctx.createGain(); padBus.gain.value = 0.05;
+  const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1400; lp.Q.value = 0.4;
+  const lfo = ctx.createOscillator(), lfoAmt = ctx.createGain();
+  lfo.frequency.value = 0.05; lfoAmt.gain.value = 500;
+  lfo.connect(lfoAmt).connect(lp.frequency);
+  lfo.start();
+  padBus.connect(lp);
+  lp.connect(out);
+  lp.connect(verb);
+
+  // Bells: sine with a soft overtone, echoed by a dotted-eighth delay into the reverb.
+  const bellBus = ctx.createGain(); bellBus.gain.value = 0.045;
+  const delay = ctx.createDelay(2); delay.delayTime.value = BEAT * 1.5;
+  const fb = ctx.createGain(); fb.gain.value = 0.33;
+  bellBus.connect(out);
+  bellBus.connect(delay); delay.connect(fb).connect(delay);
+  delay.connect(verb);
+  bellBus.connect(verb);
+
+  function padNote(m, t0, t1) {
+    for (const cents of [-4, 4]) {
+      const o = ctx.createOscillator();
+      o.setPeriodicWave(organ);
+      o.frequency.value = midi(m);
+      o.detune.value = cents;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(1, t0 + 3);
+      g.gain.setValueAtTime(1, t1);
+      g.gain.linearRampToValueAtTime(0, t1 + 3.5);
+      o.connect(g).connect(padBus);
+      o.start(t0); o.stop(t1 + 3.6);
+    }
+  }
+  function bell(m, t) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(1, t + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.8);
+    g.connect(bellBus);
+    for (const [mul, amp] of [[1, 1], [2.0, 0.18]]) {
+      const o = ctx.createOscillator(), a = ctx.createGain();
+      o.frequency.value = midi(m) * mul;
+      a.gain.value = amp;
+      o.connect(a).connect(g);
+      o.start(t); o.stop(t + 2.9);
+    }
+  }
+
+  const ARP = [0, 1, 2, 3, 2, 1, 3, 1];
+  let nextChordAt = 0, chordIndex = 0;
+  // Schedule everything that starts before `until` (seconds on the audio clock).
+  function scheduleUntil(until) {
+    while (nextChordAt < until) {
+      const chord = CHORDS[chordIndex % CHORDS.length], t0 = nextChordAt, t1 = t0 + CHORD_LEN;
+      for (const m of chord) padNote(m, t0, t1);
+      padNote(chord[0] - 12, t0, t1);                               // pedal
+      if (chordIndex > 0) {                                         // bells join after the first chord
+        for (let i = 0; i < 16; i++) {
+          if (Math.random() < 0.3) continue;                        // leave gaps so it breathes
+          bell(chord[ARP[i % 8]] + 24, t0 + i * BEAT);
+        }
+      }
+      chordIndex++;
+      nextChordAt += CHORD_LEN;
+    }
+  }
+  return {
+    output: out,
+    start(t) { nextChordAt = t; chordIndex = 0; scheduleUntil(t + 1); },
+    scheduleUntil,
+  };
+}
+
+// Page wiring: own audio context, gentle fade in/out, quieter while the Sun's hum is loud.
+let music = null;
+function createMusicPlayer() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  const ctx = new Ctx();
+  const master = ctx.createGain();
+  master.gain.value = 0;
+  master.connect(ctx.destination);
+  const piece = createAmbientMusic(ctx, master);
+  let on = false, timer = 0, duck = 1;
+  const level = () => 0.9 * duck;
+  return {
+    get on() { return on; },
+    async toggle() {
+      on = !on;
+      if (on) {
+        await ctx.resume();
+        piece.start(ctx.currentTime + 0.1);
+        timer = setInterval(() => piece.scheduleUntil(ctx.currentTime + 2), 400);
+        master.gain.cancelScheduledValues(ctx.currentTime);
+        master.gain.setTargetAtTime(level(), ctx.currentTime, 1.5);
+      } else {
+        clearInterval(timer);
+        master.gain.cancelScheduledValues(ctx.currentTime);
+        master.gain.setTargetAtTime(0, ctx.currentTime, 0.8);
+        setTimeout(() => { if (!on) ctx.suspend(); }, 4000);
+      }
+      return on;
+    },
+    setDuck(d) {
+      if (Math.abs(d - duck) < 0.02) return;
+      duck = d;
+      if (on) master.gain.setTargetAtTime(level(), ctx.currentTime, 0.5);
+    },
+  };
+}
+
 /* ---------- Camera state ---------- */
 const state = { mode: "overview", index: -1, paused: false, rate: 0, live: true, simMs: Date.now(), flight: null, orbits: true, moonKm: 384400, moonVec: new THREE.Vector3(), fine: true };
 const MIN_MS = Date.UTC(1800, 0, 1), MAX_MS = Date.UTC(2200, 11, 31);
@@ -2313,6 +2452,19 @@ function showToast(text, ms) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { t.hidden = true; }, ms);
 }
+let musicExplained = false;
+$("music").addEventListener("click", async () => {
+  if (!music) {
+    music = createMusicPlayer();
+    if (!music) { showToast("Цей браузер не підтримує звук на вебсторінках.", 5000); return; }
+  }
+  const on = await music.toggle();
+  $("music").setAttribute("aria-pressed", String(on));
+  if (on && !musicExplained) {
+    musicExplained = true;
+    showToast("Фонова музика — власна композиція в дусі космічних саундтреків, створена прямо в браузері.", 6000);
+  }
+});
 let soundExplained = false;
 $("sound").addEventListener("click", async () => {
   if (!sunAudio) {
@@ -2483,7 +2635,10 @@ function tick() {
     const sun = byId.sun, dR = camera.position.distanceTo(sun.world) / sun.radius;
     const k = clamp01((dR - 1.2) / 10.8), near = 1 - k * k * (3 - 2 * k);
     const focusOther = state.index >= 0 && BODIES[state.index] !== sun;
-    sunAudio.setLevel(state.paused ? 0 : near * (focusOther ? 0.08 : 1));
+    const sunLevel = state.paused ? 0 : near * (focusOther ? 0.08 : 1);
+    sunAudio.setLevel(sunLevel);
+    // Let the Sun's hum come through: the music steps back when the hum is loud.
+    if (music && music.on) music.setDuck(1 - 0.65 * sunLevel);
   }
 
   // Jupiter: flow phase for the sliding bands and the turning Great Red Spot (slow in real time, faster when time is sped up).
