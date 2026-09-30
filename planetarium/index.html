@@ -1002,25 +1002,28 @@ const shadowU = {
   jupMoons: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
   jFlow: { value: 0 },
   sFlow: { value: 0 },
-  sPolar: { value: 0 },
 };
 function giantMaterial(b, tex) {
   const saturn = b.id === "saturn";
+  // The flow shifts the map sideways, so it must wrap around instead of stretching the edge column into a seam.
+  tex[b.id].wrapS = THREE.RepeatWrapping;
+  tex[b.id].needsUpdate = true;
   return new THREE.ShaderMaterial({
     uniforms: Object.assign({ map: { value: tex[b.id] }, ringMap: { value: tex.saturnRing }, sunPos: earthU.sunPos }, shadowU),
     defines: saturn ? { SATURN: 1 } : { JUPITER: 1 },
     vertexShader: EARTH_VERT,
     fragmentShader: `
       uniform sampler2D map; uniform sampler2D ringMap; uniform vec3 sunPos;
-      uniform vec3 ringN; uniform vec3 satCenter; uniform float satR; uniform vec4 jupMoons[4]; uniform float jFlow; uniform float sFlow; uniform float sPolar;
+      uniform vec3 ringN; uniform vec3 satCenter; uniform float satR; uniform vec4 jupMoons[4]; uniform float jFlow; uniform float sFlow;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
       #ifdef SATURN
-        // Gentle band drift (strongest at the equatorial jet) plus a rigid spin of the vortex inside the polar hexagon (above ~79°N).
+        // Gentle band drift (strongest at the equatorial jet) plus a turn of the vortex inside the polar hexagon (above ~79°N);
+        // both run in two cross-faded phases, so nothing smears into rings over time.
         vec2 saturnFlow(vec2 uv, float ph) {
           float lat = (uv.y - 0.5) * 180.0;
           float jet = 0.9 * exp(-pow(lat / 18.0, 2.0)) + 0.2 * sin(radians(lat) * 9.0) * (1.0 - smoothstep(60.0, 76.0, abs(lat)));
           float polar = smoothstep(78.8, 80.0, lat);
-          return vec2(uv.x - jet * ph * 0.008 * (1.0 - polar) - polar * sPolar, uv.y);
+          return vec2(uv.x - jet * ph * 0.008 * (1.0 - polar) - polar * ph * 0.025, uv.y);
         }
         vec3 saturnAlbedo(vec2 uv) {
           float p1 = fract(sFlow), p2 = fract(sFlow + 0.5);
@@ -2259,7 +2262,6 @@ function tick() {
 
   // Saturn: slow band drift and the spinning vortex inside the polar hexagon.
   shadowU.sFlow.value += (state.paused ? 0 : dt * 0.03) + clampAbs(dDays * 0.2, 0.008);
-  shadowU.sPolar.value += (state.paused ? 0 : dt * 0.004) + clampAbs(dDays * 0.05, 0.003);
 
   // Venus: the cloud deck super-rotates (≈4 days) far faster than the planet (243 days), in the same retrograde sense.
   venusU.time.value += state.paused ? 0 : dt;
