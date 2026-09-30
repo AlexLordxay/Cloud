@@ -152,6 +152,27 @@ button { font: inherit; color: inherit; }
 .tag.moon { font-size: 10.5px; color: rgba(233,237,246,0.7); }
 [hidden] { display: none !important; }
 .sep { flex: none; width: 1px; height: 20px; margin: 0 4px; background: var(--line); align-self: center; }
+/* Catalogue: every body in three columns (planets with dwarfs, moons by planet, comets) */
+.all-btn { width: auto; padding: 0 12px; font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; }
+.all-btn svg { width: 14px; height: 14px; fill: currentColor; flex: none; }
+.all-btn b { font-weight: 500; }
+.all-btn[aria-expanded="true"] { color: var(--sun); background: rgba(243,185,100,0.14); }
+.catalog {
+  position: fixed; left: 16px; z-index: 4;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 76px);
+  width: max(480px, min(680px, calc(100% - 388px))); max-width: calc(100% - 32px); max-height: min(62vh, 560px); overflow-y: auto;
+  border-radius: var(--radius); padding: 16px 18px; background: var(--panel-solid);
+}
+.cat-tabs { display: none; }
+.cat-cols { display: grid; grid-template-columns: 1fr 1.5fr 1.5fr; gap: 18px; }
+.cat-col h2 { margin: 0 0 6px; font: 500 10.5px var(--font-body); text-transform: uppercase; letter-spacing: 0.14em; color: var(--sun); }
+.cat-col h3 { margin: 12px 0 2px; font: 500 10.5px var(--font-body); text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+.cat-moons h3 { margin: 0 0 2px; }
+.cat-list { display: flex; flex-direction: column; gap: 1px; }
+.cat-list .chip { justify-content: flex-start; padding: 4px 10px; text-align: left; white-space: nowrap; }
+.cat-list .chip small { font-size: 11px; opacity: 0.7; }
+.cat-moons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; align-items: start; }
+.cat-moons > div { min-width: 0; }
 .moons { display: grid; gap: 8px; }
 .moons .label { margin: 0; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
 .moon-list { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -207,6 +228,17 @@ button { font: inherit; color: inherit; }
   .controls .speed { padding: 10px 12px; justify-content: space-between; }
   .controls .speed input { width: 90px; }
   .toast { top: calc(env(safe-area-inset-top, 0px) + 120px); }
+  /* Phones: the catalogue shows one column at a time, picked with tabs. */
+  .catalog { left: 16px; right: 16px; width: auto; max-width: none; bottom: calc(env(safe-area-inset-bottom, 0px) + 74px); max-height: 58vh; padding: 12px; }
+  .cat-tabs { display: flex; gap: 4px; margin-bottom: 10px; position: sticky; top: -12px; background: var(--panel-solid); padding: 4px 0; z-index: 1; }
+  .cat-tabs button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 8px 6px; border-radius: 999px; font-size: 13px; cursor: pointer; }
+  .cat-tabs button[aria-selected="true"] { background: rgba(243,185,100,0.16); color: var(--sun); }
+  .cat-cols { display: block; }
+  .cat-col h2 { display: none; }
+  .catalog[data-tab="planets"] .cat-col:not([data-col="planets"]),
+  .catalog[data-tab="moons"] .cat-col:not([data-col="moons"]),
+  .catalog[data-tab="comets"] .cat-col:not([data-col="comets"]) { display: none; }
+  .all-btn b { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
@@ -263,7 +295,21 @@ button { font: inherit; color: inherit; }
   <p class="credits collapsible">Карти поверхонь: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; супутники, Церера й Плутон — мозаїки NASA/JPL/USGS (Galileo, Cassini, Voyager, Dawn, New Horizons), частина з приблизним кольором; нічна Земля, океани й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>. Фобос і Деймос показано з умовною текстурою. Положення планет — за елементами орбіт JPL (найточніші для 1800–2050 рр.); супутники, крім Місяця й галілеєвих, розставлено умовно.</p>
 </aside>
 
-<nav class="dock glass" aria-label="Планети та карликові планети">
+<div class="catalog glass" id="catalog" data-tab="planets" hidden>
+  <div class="cat-tabs" role="tablist" aria-label="Групи тіл">
+    <button type="button" role="tab" data-tab="planets" aria-selected="true">Планети</button>
+    <button type="button" role="tab" data-tab="moons" aria-selected="false">Супутники</button>
+    <button type="button" role="tab" data-tab="comets" aria-selected="false">Комети</button>
+  </div>
+  <div class="cat-cols">
+    <section class="cat-col" data-col="planets"><h2>Планети</h2><div class="cat-list" id="catPlanets"></div><h3>Карликові</h3><div class="cat-list" id="catDwarfs"></div></section>
+    <section class="cat-col" data-col="moons"><h2>Супутники</h2><div class="cat-moons" id="catMoons"></div></section>
+    <section class="cat-col" data-col="comets"><h2>Комети</h2><div class="cat-list" id="catComets"></div></section>
+  </div>
+</div>
+
+<nav class="dock glass" aria-label="Планети, карликові планети й комети">
+  <button class="nav all-btn" id="allBtn" type="button" aria-expanded="false" aria-controls="catalog" aria-label="Усі тіла"><svg viewBox="0 0 14 14" aria-hidden="true"><rect x="0" y="0" width="6" height="6" rx="1.5"/><rect x="8" y="0" width="6" height="6" rx="1.5"/><rect x="0" y="8" width="6" height="6" rx="1.5"/><rect x="8" y="8" width="6" height="6" rx="1.5"/></svg><b>Усі</b></button>
   <button class="nav" id="prev" type="button" aria-label="Попереднє тіло">‹</button>
   <div class="chips" id="chips"></div>
   <button class="nav" id="next" type="button" aria-label="Наступне тіло">›</button>
@@ -2082,6 +2128,46 @@ BODIES.forEach((b, i) => {
   b.tag = tag;
 });
 
+// Catalogue: planets (dwarfs below), moons grouped by their planet, comets.
+const catalogEl = $("catalog");
+function catItem(b, list) {
+  const label = b.comet ? b.name.replace(/^Комета /, "") : b.name;
+  const chip = document.createElement("button");
+  chip.className = "chip"; chip.type = "button";
+  chip.innerHTML = `<i style="background:${b.dot};color:${b.dot}"></i>${label}${b.short && b.short !== label ? ` <small>${b.short}</small>` : ""}`;
+  chip.addEventListener("click", () => { setCatalog(false); focusBody(b.index); });
+  list.appendChild(chip);
+  b.catChip = chip;
+}
+for (const b of BODIES) {
+  if (b.comet) catItem(b, $("catComets"));
+  else if (b.dwarf) catItem(b, $("catDwarfs"));
+  else if (!b.parent) catItem(b, $("catPlanets"));
+}
+for (const p of MAIN) {
+  if (!p.moons) continue;
+  const group = document.createElement("div"), h = document.createElement("h3"), list = document.createElement("div");
+  h.textContent = p.name; list.className = "cat-list";
+  group.append(h, list);
+  $("catMoons").appendChild(group);
+  for (const m of p.moons) catItem(m, list);
+}
+function setCatTab(tab) {
+  catalogEl.dataset.tab = tab;
+  for (const t of catalogEl.querySelectorAll(".cat-tabs button")) t.setAttribute("aria-selected", String(t.dataset.tab === tab));
+}
+function setCatalog(open) {
+  if (open) {
+    // Open on the group of whatever is in focus.
+    const b = state.index >= 0 ? BODIES[state.index] : null;
+    setCatTab(b && b.parent ? "moons" : b && b.comet ? "comets" : "planets");
+    setMenu(false);
+  }
+  catalogEl.hidden = !open;
+  $("allBtn").setAttribute("aria-expanded", String(open));
+}
+for (const t of catalogEl.querySelectorAll(".cat-tabs button")) t.addEventListener("click", () => setCatTab(t.dataset.tab));
+
 function fmtRatio(d, ref, refName) {
   const r = d / ref;
   const s = r >= 10 ? Math.round(r).toString() : r.toFixed(r < 1 ? 2 : 1).replace(".", ",");
@@ -2541,6 +2627,7 @@ function startFlight(getTarget, offset, dur, relBody) {
 function setActive(b) {
   const main = b ? (b.parent || b) : null;
   for (const m of MAIN) m.chip.setAttribute("aria-current", m === main ? "true" : "false");
+  for (const x of BODIES) if (x.catChip) x.catChip.setAttribute("aria-current", x === b ? "true" : "false");
   for (const x of BODIES) if (x.orbitLine) x.orbitLine.material.opacity = x === b ? 0.55 : x.baseOpacity;
   if (main) main.chip.scrollIntoView({ block: "nearest", inline: "center" });
   $("overview").setAttribute("aria-pressed", b ? "false" : "true");
@@ -2684,7 +2771,12 @@ function setMenu(open) {
   $("menuBtn").textContent = open ? "✕" : "☰";
 }
 $("menuBtn").addEventListener("click", e => { e.stopPropagation(); setMenu(!$("menuWrap").classList.contains("open")); });
-addEventListener("pointerdown", e => { if (!$("menuWrap").contains(e.target)) setMenu(false); });
+addEventListener("pointerdown", e => {
+  if (!$("menuWrap").contains(e.target)) setMenu(false);
+  if (!catalogEl.contains(e.target) && !$("allBtn").contains(e.target)) setCatalog(false);
+});
+$("allBtn").addEventListener("click", () => setCatalog(catalogEl.hidden));
+$("menuBtn").addEventListener("click", () => setCatalog(false));
 $("overview").addEventListener("click", () => setMenu(false));
 
 // The info panel folds down to its name row; the choice is remembered (open by default on wide screens only).
@@ -2703,7 +2795,7 @@ addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON" && e.key === " ") return;
   if (e.key === "ArrowRight") stepMain(1);
   else if (e.key === "ArrowLeft") stepMain(-1);
-  else if (e.key === "Escape") showOverview();
+  else if (e.key === "Escape") { if (!catalogEl.hidden) setCatalog(false); else showOverview(); }
   else if (e.key === " " && e.target === document.body) { e.preventDefault(); $("pause").click(); }
 });
 
