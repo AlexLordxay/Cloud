@@ -461,6 +461,12 @@ const BODIES = [
     desc: "Комету відкрили 1969 року в Києві українські астрономи Клим Чурюмов і Світлана Герасименко. У 2014 році апарат Європейського космічного агентства Rosetta вийшов на орбіту навколо неї, а модуль Philae вперше в історії сів на ядро комети. Ядро схоже на гумову качечку: дві брили льоду й пилу, що колись злиплися. Комета невелика й неяскрава, тож хвіст у неї скромний.",
     fact: "Rosetta «почула» комету: коливання магнітного поля навколо неї, перетворені на звук, нагадують цвірінькання — її прозвали співочою кометою.",
     actions: [["Посадка Philae, 2014", "2014-11-12T08:00:00Z", 3], ["Найближче до Сонця, 2015", "2015-07-20T00:00:00Z", 3], ["Наступний прохід, 2028", "2028-03-01T00:00:00Z", 3]] },
+  { id: "halebopp", name: "Комета Гейла–Боппа", short: "Гейла–Боппа", kind: "Комета · C/1995 O1 (Гейла–Боппа)", dot: "#f2ecdc", comet: true, tex: "moon",
+    radius: 0.28, d: 60, dText: "≈ 60 км", shape: [1, 0.85, 0.8], tilt: 35, tail: 1.7, dust: 1.4, reach: 2,
+    stats: [["Період", "≈ 2400 років"], ["Найближче до Сонця", "0,91 а. о.", "трохи ближче за орбіту Землі"], ["Найдалі від Сонця", "≈ 360 а. о.", "далеко за поясом Койпера"], ["Відкрито", "1995", "Алан Гейл і Томас Бопп"], ["Наступний прохід", "≈ 4380 рік"]],
+    desc: "Велика комета 1997 року. Її відкрили 23 липня 1995 року незалежно двоє американців, Алан Гейл і Томас Бопп, коли вона була ще за орбітою Юпітера. Ядро величезне, близько 60 км, тому навесні 1997 року на небі сяяли два хвости: прямий блакитний іонний і широкий вигнутий білувато-жовтий пиловий. Орбіта майже перпендикулярна до площини планет, тож комета пролітає крізь Сонячну систему «згори вниз».",
+    fact: "Її було видно неозброєним оком рекордні 18 місяців, удвічі довше за попередню рекордсменку — Велику комету 1811 року.",
+    actions: [["Відкриття, 1995", "1995-07-23T00:00:00Z", 4], ["Найкраще видно, березень 1997", "1997-03-22T00:00:00Z", 3], ["Найближче до Сонця, 1997", "1997-04-01T00:00:00Z", 3]] },
 ];
 const byId = Object.fromEntries(BODIES.map(b => [b.id, b]));
 BODIES.forEach(b => { if (b.parent) { b.parent = byId[b.parent]; (b.parent.moons ||= []).push(b); } });
@@ -469,7 +475,7 @@ const MAIN = BODIES.filter(b => !b.parent);
 const OVERVIEW = {
   name: "Сонячна система", kind: "Огляд",
   stats: [["Вік", "≈ 4,6 млрд років"], ["Планети", "8"], ["Карликові планети", "5 визнаних"], ["Супутники в моделі", "16"]],
-  desc: "Планети, карликові планети й комета стоять там, де вони є насправді на дату вгорі ліворуч. «Зараз» повертає до поточного моменту, повзунок «Час» прискорює рух. Розміри й відстані не в масштабі: у справжніх пропорціях більшість планет були б меншими за піксель.",
+  desc: "Планети, карликові планети й комети стоять там, де вони є насправді на дату вгорі ліворуч. «Зараз» повертає до поточного моменту, повзунок «Час» прискорює рух. Розміри й відстані не в масштабі: у справжніх пропорціях більшість планет були б меншими за піксель.",
   fact: "1 астрономічна одиниця (а. о.) — це середня відстань від Землі до Сонця, приблизно 149,6 млн км.",
 };
 
@@ -1708,6 +1714,8 @@ const KEP = {
   // 67P/Churyumov–Gerasimenko: timed on its real perihelia (13 Aug 2015, 2 Nov 2021),
   // so both passages land on their true dates despite Jupiter's small nudges to the orbit.
   cg67p: { a: 3.4630, e: 0.6405, i: 7.0405, node: 50.147, peri: 12.780, M: 0, epoch: 2459520.55, perihelia: [2457247.59, 2459520.55] },
+  // C/1995 O1 Hale–Bopp: perihelion 1 Apr 1997 at q = 0.914 AU; a set for the ~2400-year period after its 1996 pass by Jupiter.
+  halebopp: { a: 179, e: 0.994893, i: 89.429, node: 282.471, peri: 130.589, M: 0, epoch: 2450539.64 },
 };
 function elementsAt(id, jd) {
   const j = JPL[id];
@@ -1756,14 +1764,27 @@ function helioAU(id, jd, out) {
   return posFromE(el, solveKepler(M, el.e), out);
 }
 // Stylised distance scale: real AU → scene units. Monotonic, interpolated in log(AU), so order and eccentricity stay true.
-const DIST = [[0.05, 11], [0.2, 15], [0.387, 20], [0.723, 28], [1, 37], [1.524, 46], [2.2, 51], [2.77, 54], [3.3, 57], [5.2, 72], [9.54, 104], [19.19, 132], [30.07, 150], [39.5, 170], [43.1, 182], [45.4, 190], [67.8, 205], [100, 218], [300, 240]];
+const DIST = [[0.05, 11], [0.2, 15], [0.387, 20], [0.723, 28], [1, 37], [1.524, 46], [2.2, 51], [2.77, 54], [3.3, 57], [5.2, 72], [9.54, 104], [19.19, 132], [30.07, 150], [39.5, 170], [43.1, 182], [45.4, 190], [67.8, 205], [100, 218], [300, 240], [400, 246]];
+// Monotone cubic (Fritsch–Carlson) through the table in log(AU): smooth, so eccentric orbits don't bend at the knots.
+const DIST_X = DIST.map(d => Math.log(d[0])), DIST_M = (() => {
+  const n = DIST.length, h = [], dl = [], m = new Array(n);
+  for (let k = 0; k < n - 1; k++) { h[k] = DIST_X[k + 1] - DIST_X[k]; dl[k] = (DIST[k + 1][1] - DIST[k][1]) / h[k]; }
+  m[0] = dl[0]; m[n - 1] = dl[n - 2];
+  for (let k = 1; k < n - 1; k++) {
+    if (dl[k - 1] * dl[k] <= 0) { m[k] = 0; continue; }
+    const w1 = 2 * h[k] + h[k - 1], w2 = h[k] + 2 * h[k - 1];
+    m[k] = (w1 + w2) / (w1 / dl[k - 1] + w2 / dl[k]);
+  }
+  return m;
+})();
 function sceneDist(au) {
   if (au <= DIST[0][0]) return DIST[0][1];
+  const x = Math.log(au);
   for (let k = 1; k < DIST.length; k++) {
     if (au <= DIST[k][0]) {
-      const a0 = DIST[k - 1], a1 = DIST[k];
-      const t = (Math.log(au) - Math.log(a0[0])) / (Math.log(a1[0]) - Math.log(a0[0]));
-      return a0[1] + (a1[1] - a0[1]) * t;
+      const h = DIST_X[k] - DIST_X[k - 1], t = (x - DIST_X[k - 1]) / h, t2 = t * t, t3 = t2 * t;
+      return (2 * t3 - 3 * t2 + 1) * DIST[k - 1][1] + (t3 - 2 * t2 + t) * h * DIST_M[k - 1]
+        + (-2 * t3 + 3 * t2) * DIST[k][1] + (t3 - t2) * h * DIST_M[k];
     }
   }
   return DIST[DIST.length - 1][1];
@@ -1795,7 +1816,7 @@ function moonPos(jd) {
 // Galilean moons: mean longitudes (Meeus), good to a few degrees. Other moons use their real period with an arbitrary phase.
 const GALILEAN = { io: [106.07719, 203.48895579], europa: [175.73161, 101.374724735], ganymede: [120.55883, 50.317609207], callisto: [84.44459, 21.571071177] };
 // Sidereal rotation periods (days); negative = retrograde.
-const ROT = { sun: 25.38, mercury: 58.646, venus: -243.02, earth: 0.99727, mars: 1.02596, jupiter: 0.41354, saturn: 0.44401, uranus: -0.71833, neptune: 0.67125, ceres: 0.3781, pluto: -6.3872, haumea: 0.1631, makemake: 0.9511, eris: 15.786, halley: 2.2, cg67p: 0.517 };
+const ROT = { sun: 25.38, mercury: 58.646, venus: -243.02, earth: 0.99727, mars: 1.02596, jupiter: 0.41354, saturn: 0.44401, uranus: -0.71833, neptune: 0.67125, ceres: 0.3781, pluto: -6.3872, haumea: 0.1631, makemake: 0.9511, eris: 15.786, halley: 2.2, cg67p: 0.517, halebopp: 0.47 };
 const clampAbs = (x, m) => x > m ? m : x < -m ? -m : x;
 
 /* ---------- Comet: coma and two tails ---------- */
@@ -1803,6 +1824,8 @@ function createCometFx(b) {
   const comaOuter = glowSprite("170,215,255", 1, 0.8), comaInner = glowSprite("255,248,230", 1, 0.9);
   b.group.add(comaOuter, comaInner);
   const pointScale = { value: 1 };
+  // tail: length (and particle budget) relative to Halley; dust: how strong the dust tail is.
+  const T = b.tail || 1, D = b.dust || 1;
   const makeTail = (n, color) => {
     const pos = new Float32Array(n * 3), alpha = new Float32Array(n), size = new Float32Array(n);
     const g = new THREE.BufferGeometry();
@@ -1820,7 +1843,7 @@ function createCometFx(b) {
     scene.add(pts);
     return { n, pos, alpha, size, g, vel: new Float32Array(n * 3), age: new Float32Array(n).fill(99), life: new Float32Array(n).fill(1), head: 0, acc: 0 };
   };
-  const ion = makeTail(1500, 0x6fa8ff), dust = makeTail(1900, 0xffe2a8);
+  const ion = makeTail(Math.round(1500 * T), 0x6fa8ff), dust = makeTail(Math.round(1900 * T * D), 0xffe2a8);
   const v = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3();
 
   function emit(t, count, fn) {
@@ -1850,28 +1873,28 @@ function createCometFx(b) {
     // act: 0..1 activity (grows near the Sun); anti: unit vector away from the Sun; motion: unit direction of travel.
     update(dt, act, anti, motion) {
       pointScale.value = innerHeight * renderer.getPixelRatio() / (2 * Math.tan(camera.fov * DEG / 2));
-      comaOuter.scale.setScalar(0.4 + act * 5);
+      comaOuter.scale.setScalar((0.4 + act * 5) * Math.sqrt(T));
       comaOuter.material.opacity = 0.06 + act * 0.55;
-      comaInner.scale.setScalar(0.3 + act * 1.4);
+      comaInner.scale.setScalar((0.3 + act * 1.4) * Math.sqrt(T));
       comaInner.material.opacity = 0.2 + act * 0.7;
       side.crossVectors(anti, motion).normalize();
       up.crossVectors(side, anti).normalize();
       const p = b.world;
       // Ion tail: fast, straight, always pointing away from the Sun.
       const amount = eco ? 0.5 : 1;
-      emit(ion, dt * 800 * act * amount, i => {
-        const k = i * 3, sp = 14 + Math.random() * 8, j = 0.35;
+      emit(ion, dt * 800 * T * act * amount, i => {
+        const k = i * 3, sp = (14 + Math.random() * 8) * T, j = 0.35 * T;
         ion.pos[k] = p.x + (Math.random() - 0.5) * 0.15; ion.pos[k + 1] = p.y + (Math.random() - 0.5) * 0.15; ion.pos[k + 2] = p.z + (Math.random() - 0.5) * 0.15;
         v.copy(anti).multiplyScalar(sp).addScaledVector(side, (Math.random() - 0.5) * j).addScaledVector(up, (Math.random() - 0.5) * j);
         ion.vel[k] = v.x; ion.vel[k + 1] = v.y; ion.vel[k + 2] = v.z;
         ion.age[i] = 0; ion.life[i] = 1.2 + Math.random() * 0.7;
       });
       // Dust tail: slower, broader, lagging behind the orbit so it curves.
-      emit(dust, dt * 420 * act * amount, i => {
+      emit(dust, dt * 420 * T * D * act * amount, i => {
         const k = i * 3, sp = 2.5 + Math.random() * 4;
         dust.pos[k] = p.x; dust.pos[k + 1] = p.y; dust.pos[k + 2] = p.z;
         v.copy(anti).multiplyScalar(sp).addScaledVector(motion, -1.2 - Math.random() * 2.2)
-          .addScaledVector(side, (Math.random() - 0.5) * 1.1).addScaledVector(up, (Math.random() - 0.5) * 0.5);
+          .addScaledVector(side, (Math.random() - 0.5) * 1.1).addScaledVector(up, (Math.random() - 0.5) * 0.5).multiplyScalar(T);
         dust.vel[k] = v.x; dust.vel[k + 1] = v.y; dust.vel[k + 2] = v.z;
         dust.age[i] = 0; dust.life[i] = 3 + Math.random() * 1.8;
       });
@@ -1982,7 +2005,7 @@ function buildBody(b, i, tex, jd) {
     for (let k = 0; k <= 360; k++) pts.push(orbitPoint(b, k / 360 * TAU, v).clone());
     b.baseOpacity = 0.14;
   } else if (b.id !== "sun") {
-    const el = elementsAt(b.id, jd), N = b.comet ? 3000 : 720;
+    const el = elementsAt(b.id, jd), N = b.comet ? Math.max(3000, Math.round(el.a * 60)) : 720;   // long orbits need more points to stay smooth up close
     for (let k = 0; k <= N; k++) pts.push(toScene(posFromE(el, k / N * TAU, v), new THREE.Vector3()));
     b.baseOpacity = b.comet ? 0.18 : b.dwarf ? 0.11 : 0.16;
   }
@@ -2777,7 +2800,7 @@ function tick() {
   for (const { b: c, fx } of cometFxs) {
     helioAU(c.id, jd + 1, tAU);
     toScene(tAU, tA).sub(c.group.position).normalize();
-    fx.update(state.paused ? 0 : dt, clamp01(1.6 / c.au - 0.4) * (c.activity || 1), tB.copy(c.world).normalize(), tA);
+    fx.update(state.paused ? 0 : dt, clamp01(1.6 * (c.reach || 1) / c.au - 0.4) * (c.activity || 1), tB.copy(c.world).normalize(), tA);
   }
 
   if (sunAudio && sunAudio.on) {
