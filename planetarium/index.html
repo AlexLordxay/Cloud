@@ -285,7 +285,7 @@ const BODIES = [
   { id: "venus", name: "Венера", kind: "Планета земної групи", dot: "#e8c589",
     radius: 1.6, a: 28, period: 0.615, spin: -0.02, tilt: 177.4, d: 12104, atmo: [1.0, 0.85, 0.55],
     stats: [["Від Сонця", "108,2 млн км", "0,72 а. о."], ["Рік", "224,7 доби"], ["Оберт навколо осі", "243 доби", "у зворотний бік"], ["Супутники", "0"], ["Температура", "≈ +464 °C"]],
-    desc: "Найгарячіша планета системи. Щільна атмосфера з вуглекислого газу утримує тепло, а хмари сірчаної кислоти повністю приховують поверхню.",
+    desc: "Найгарячіша планета системи. Щільна атмосфера з вуглекислого газу утримує тепло, а хмари сірчаної кислоти повністю приховують поверхню. Хмари облітають планету за 4 доби, хоча сама вона обертається 243 доби. Поверхню побачив лише радар апарата Magellan — кнопка нижче показує його карту. Світіння нічного боку — так Венеру бачать інфрачервоні камери; рух хмар — симуляція.",
     fact: "Венера обертається у зворотний бік, тому Сонце там сходить на заході." },
   { id: "earth", name: "Земля", kind: "Планета земної групи", dot: "#5d9ee8",
     radius: 1.7, a: 37, period: 1, spin: 0.25, tilt: 23.4, d: 12742, atmo: [0.35, 0.6, 1.0],
@@ -823,6 +823,96 @@ function marsAtmosphere(radius) {
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   }));
+}
+
+// Venus: super-rotating cloud deck, light wrapping past the terminator through the thick atmosphere,
+// a faint infrared glow of the hot surface on the night side, and an optional Magellan radar view of the surface.
+const venusU = {
+  time: { value: 0 },
+  drift: { value: new THREE.Vector2(0, 0.41) },
+  surface: { value: 0 },
+  surfMap: { value: null },
+  sunPos: { value: new THREE.Vector3(0, 0, 0) },
+};
+function venusMaterial(tex) {
+  tex.venus.wrapS = THREE.RepeatWrapping;
+  tex.venus.needsUpdate = true;
+  return new THREE.ShaderMaterial({
+    uniforms: Object.assign({ cloudMap: { value: tex.venus } }, venusU),
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform sampler2D cloudMap; uniform sampler2D surfMap; uniform vec2 drift; uniform float time; uniform float surface; uniform vec3 sunPos;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW), V = normalize(cameraPosition - vW);
+        float ndl = dot(N, L);
+
+        // Clouds: two copies drifting at slightly different rates, blended with a slowly moving weight.
+        vec3 a = pow(texture2D(cloudMap, vec2(vUv.x + drift.x, vUv.y)).rgb, vec3(2.2));
+        vec3 b = pow(texture2D(cloudMap, vec2(vUv.x + drift.y, vUv.y)).rgb, vec3(2.2));
+        float w = 0.5 + 0.5 * sin(time * 0.04 + vUv.x * 12.566 + vUv.y * 6.0);
+        vec3 clouds = mix(a, b, w);
+
+        // Thick atmosphere scatters light well past the terminator; it warms towards the edge of the day.
+        float wrap = clamp((ndl + 0.12) / 1.12, 0.0, 1.0);
+        vec3 tint = mix(vec3(1.0, 0.72, 0.42), vec3(1.0), smoothstep(0.0, 0.5, ndl));
+        vec3 col = clouds * (0.008 + 1.2 * pow(wrap, 1.6)) * tint;
+
+        // Night side: the ~464 °C surface glows in the near infrared; thick clouds show as dark silhouettes.
+        float night = 1.0 - smoothstep(-0.25, 0.05, ndl);
+        float thick = smoothstep(0.25, 0.75, dot(clouds, vec3(0.3, 0.55, 0.15)) * 1.6);
+        col += vec3(0.5, 0.1, 0.025) * (1.0 - thick) * night * 0.06;
+
+        // Radar view (Magellan): the surface under the clouds, lit plainly.
+        if (surface > 0.001) {
+          vec3 ground = pow(texture2D(surfMap, vUv).rgb, vec3(2.2)) * (0.04 + 1.15 * max(ndl, 0.0));
+          col = mix(col, ground, surface);
+        }
+        gl_FragColor = vec4(col, 1.0);
+        #include <encodings_fragment>
+      }`,
+  });
+}
+// Yellowish haze on the day limb that fades slowly into the night.
+function venusAtmosphere(radius) {
+  return new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), new THREE.ShaderMaterial({
+    uniforms: { sunPos: venusU.sunPos, surface: venusU.surface },
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform vec3 sunPos; uniform float surface;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW), V = normalize(cameraPosition - vW);
+        float ndl = dot(N, L);
+        float rim = pow(1.0 - abs(dot(N, V)), 2.4);
+        float dayside = smoothstep(-0.45, 0.2, ndl);
+        vec3 col = mix(vec3(1.0, 0.55, 0.25), vec3(1.0, 0.86, 0.6), smoothstep(-0.1, 0.4, ndl));
+        gl_FragColor = vec4(col, rim * dayside * 0.9 * (1.0 - 0.6 * surface));
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+}
+// Toggle the radar surface view: the map loads only on first use, then the clouds fade out.
+let venusSurfaceOn = false, venusSurfaceLoading = false, venusTarget = 0;
+function toggleVenusSurface(btn) {
+  venusSurfaceOn = !venusSurfaceOn;
+  if (venusSurfaceOn && !venusU.surfMap.value) {
+    if (venusSurfaceLoading) return;
+    venusSurfaceLoading = true;
+    btn.textContent = "Завантажуємо радарну карту…";
+    loadTexture("venus_surface.jpg", "venusSurface").then(t => {
+      venusU.surfMap.value = t;
+      venusSurfaceLoading = false;
+      venusTarget = venusSurfaceOn ? 1 : 0;
+      btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
+    }).catch(() => {
+      venusSurfaceLoading = false; venusSurfaceOn = false;
+      btn.textContent = "Не вдалося завантажити карту. Спробувати ще раз";
+    });
+    return;
+  }
+  venusTarget = venusSurfaceOn ? 1 : 0;
+  btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
 }
 
 /* ---------- Eclipses and shadows ---------- */
@@ -1517,10 +1607,12 @@ function buildBody(b, i, tex, jd) {
   }
   if (b.comet) cometFx = createCometFx(b);
   if (b.id === "moon") b.mesh.material = moonMaterial(tex);
+  if (b.id === "venus") b.mesh.material = venusMaterial(tex);
   if (b.id === "jupiter" || b.id === "saturn") b.mesh.material = giantMaterial(b, tex);
   pickables.push(b.mesh);
 
   if (b.id === "earth") b.tiltGroup.add(earthAtmosphere(b.radius * 1.045), earthAurora(b.radius * 1.025));
+  else if (b.id === "venus") b.tiltGroup.add(venusAtmosphere(b.radius * 1.04));
   else if (b.id === "mars") { b.tiltGroup.add(marsAtmosphere(b.radius * 1.03)); b.mesh.add(marsWeather(b.radius * 1.006)); }
   else if (b.atmo) b.tiltGroup.add(atmosphere(b.radius * 1.045, b.atmo, b.id === "venus" ? 2.2 : 3.0, b.id === "venus" ? 0.9 : b.id === "titan" ? 1.4 : 1.2));
   if (b.id === "earth") {
@@ -1614,7 +1706,14 @@ function renderInfo(b) {
   $("fact").textContent = data.fact;
   const act = $("actions");
   act.innerHTML = "";
-  act.hidden = !(b && b.actions);
+  act.hidden = !(b && (b.actions || b.id === "venus"));
+  if (b && b.id === "venus") {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
+    btn.addEventListener("click", () => toggleVenusSurface(btn));
+    act.appendChild(btn);
+  }
   if (b && b.actions) {
     for (const [label, iso, rate] of b.actions) {
       const btn = document.createElement("button");
@@ -1991,6 +2090,12 @@ function tick() {
     const focusOther = state.index >= 0 && BODIES[state.index] !== sun;
     sunAudio.setLevel(state.paused ? 0 : near * (focusOther ? 0.08 : 1));
   }
+
+  // Venus: the cloud deck super-rotates (≈4 days) far faster than the planet (243 days), in the same retrograde sense.
+  venusU.time.value += state.paused ? 0 : dt;
+  venusU.drift.value.x += clampAbs(dDays * (1 / 4 - 1 / 243), 0.0015);
+  venusU.drift.value.y += clampAbs(dDays * (1 / 3.7 - 1 / 243), 0.0017);
+  venusU.surface.value += (venusTarget - venusU.surface.value) * Math.min(1, dt * 2.5);
 
   // Mars weather: season and planet-wide storms follow the real date; dust drifts with simulated time.
   marsU.time.value += state.paused ? 0 : dt;
