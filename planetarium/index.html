@@ -1765,29 +1765,40 @@ function helioAU(id, jd, out) {
 }
 // Stylised distance scale: real AU → scene units. Monotonic, interpolated in log(AU), so order and eccentricity stay true.
 const DIST = [[0.05, 11], [0.2, 15], [0.387, 20], [0.723, 28], [1, 37], [1.524, 46], [2.2, 51], [2.77, 54], [3.3, 57], [5.2, 72], [9.54, 104], [19.19, 132], [30.07, 150], [39.5, 170], [43.1, 182], [45.4, 190], [67.8, 205], [100, 218], [300, 240], [400, 246]];
-// Monotone cubic (Fritsch–Carlson) through the table in log(AU): smooth, so eccentric orbits don't bend at the knots.
-const DIST_X = DIST.map(d => Math.log(d[0])), DIST_M = (() => {
-  const n = DIST.length, h = [], dl = [], m = new Array(n);
-  for (let k = 0; k < n - 1; k++) { h[k] = DIST_X[k + 1] - DIST_X[k]; dl[k] = (DIST[k + 1][1] - DIST[k][1]) / h[k]; }
-  m[0] = dl[0]; m[n - 1] = dl[n - 2];
-  for (let k = 1; k < n - 1; k++) {
-    if (dl[k - 1] * dl[k] <= 0) { m[k] = 0; continue; }
-    const w1 = 2 * h[k] + h[k - 1], w2 = h[k] + 2 * h[k - 1];
-    m[k] = (w1 + w2) / (w1 / dl[k - 1] + w2 / dl[k]);
+// The table is only a guide: its slope (scene units per ln AU) jumps from knot to knot, and a comet crossing a jump
+// would visibly bend. So the slope is smoothed with a Gaussian (σ = 0.12 in ln AU) and integrated once at start-up;
+// the bodies move by at most ~2 % of their distance, and every orbit stays smooth.
+const DIST_X0 = Math.log(DIST[0][0]), DIST_H = (Math.log(DIST[DIST.length - 1][0]) - DIST_X0) / 4000;
+const DIST_F = (() => {
+  const n = 4000, h = DIST_H, raw = new Float64Array(n + 1), f = new Float64Array(n + 1);
+  const linear = x => {
+    for (let k = 1; k < DIST.length; k++) {
+      const x1 = Math.log(DIST[k][0]);
+      if (x <= x1 || k === DIST.length - 1) {
+        const x0 = Math.log(DIST[k - 1][0]);
+        return (DIST[k][1] - DIST[k - 1][1]) / (x1 - x0);
+      }
+    }
+  };
+  for (let i = 0; i <= n; i++) raw[i] = linear(DIST_X0 + i * h);
+  const sigma = 0.12, R = Math.ceil(3 * sigma / h), g = [];
+  for (let j = -R; j <= R; j++) g.push(Math.exp(-0.5 * (j * h / sigma) ** 2));
+  let prev = 0;
+  for (let i = 0; i <= n; i++) {
+    let sum = 0, w = 0;
+    for (let j = -R; j <= R; j++) { const k = Math.min(n, Math.max(0, i + j)); sum += g[j + R] * raw[k]; w += g[j + R]; }
+    const slope = sum / w;
+    f[i] = i === 0 ? DIST[0][1] : f[i - 1] + (prev + slope) / 2 * h;
+    prev = slope;
   }
-  return m;
+  return f;
 })();
 function sceneDist(au) {
-  if (au <= DIST[0][0]) return DIST[0][1];
-  const x = Math.log(au);
-  for (let k = 1; k < DIST.length; k++) {
-    if (au <= DIST[k][0]) {
-      const h = DIST_X[k] - DIST_X[k - 1], t = (x - DIST_X[k - 1]) / h, t2 = t * t, t3 = t2 * t;
-      return (2 * t3 - 3 * t2 + 1) * DIST[k - 1][1] + (t3 - 2 * t2 + t) * h * DIST_M[k - 1]
-        + (-2 * t3 + 3 * t2) * DIST[k][1] + (t3 - t2) * h * DIST_M[k];
-    }
-  }
-  return DIST[DIST.length - 1][1];
+  const u = (Math.log(Math.max(au, 1e-9)) - DIST_X0) / DIST_H;
+  if (u <= 0) return DIST_F[0];
+  if (u >= DIST_F.length - 1) return DIST_F[DIST_F.length - 1];
+  const i = Math.floor(u), t = u - i;
+  return DIST_F[i] + (DIST_F[i + 1] - DIST_F[i]) * t;
 }
 function toScene(vAU, out) {
   const r = vAU.length();
@@ -1908,6 +1919,21 @@ const cometFxs = [];
 const pickables = [];
 let earthClouds = null, sunFx = null;
 
+// Eccentric anomalies for drawing an orbit. Comets are seen up close, so they get many points: even steps in E
+// (smooth far out) merged with even steps in true anomaly (smooth through the sharp turn at perihelion).
+function orbitSamples(el, comet) {
+  const N = comet ? Math.max(8000, Math.round(el.a * 60)) : 720, out = [];
+  for (let k = 0; k <= N; k++) out.push(k / N * TAU);
+  if (comet) {
+    const q = Math.sqrt((1 - el.e) / (1 + el.e));
+    for (let k = 1; k < 4000; k++) {
+      const nu = -PI + k / 4000 * TAU, E = 2 * Math.atan(q * Math.tan(nu / 2));
+      out.push(E < 0 ? E + TAU : E);
+    }
+    out.sort((x, y) => x - y);
+  }
+  return out;
+}
 // Position on an orbit: eccentric ellipse with the focus at the parent, in the plane's local XZ.
 function orbitPoint(b, theta, out) {
   const e = b.e || 0, r = b.a * (1 - e * e) / (1 + e * Math.cos(theta));
@@ -2005,8 +2031,8 @@ function buildBody(b, i, tex, jd) {
     for (let k = 0; k <= 360; k++) pts.push(orbitPoint(b, k / 360 * TAU, v).clone());
     b.baseOpacity = 0.14;
   } else if (b.id !== "sun") {
-    const el = elementsAt(b.id, jd), N = b.comet ? Math.max(3000, Math.round(el.a * 60)) : 720;   // long orbits need more points to stay smooth up close
-    for (let k = 0; k <= N; k++) pts.push(toScene(posFromE(el, k / N * TAU, v), new THREE.Vector3()));
+    const el = elementsAt(b.id, jd);
+    for (const E of orbitSamples(el, b.comet)) pts.push(toScene(posFromE(el, E, v), new THREE.Vector3()));
     b.baseOpacity = b.comet ? 0.18 : b.dwarf ? 0.11 : 0.16;
   }
   if (pts.length) {
