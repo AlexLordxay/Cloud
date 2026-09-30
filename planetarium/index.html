@@ -317,7 +317,7 @@ const BODIES = [
   { id: "jupiter", name: "Юпітер", kind: "Газовий гігант", dot: "#d8b48c",
     radius: 5.5, a: 72, period: 11.86, spin: 0.6, tilt: 3.1, d: 139820,
     stats: [["Від Сонця", "778,5 млн км", "5,2 а. о."], ["Рік", "11,86 року"], ["Оберт навколо осі", "9 год 56 хв"], ["Супутники", "понад 90", "4 великі — галілеєві"], ["Температура хмар", "≈ −110 °C"]],
-    desc: "Найбільша планета системи. Юпітер масивніший за всі інші планети разом узяті.",
+    desc: "Найбільша планета системи. Юпітер масивніший за всі інші планети разом узяті. Його смуги — це струмені вітру, що дмуть у протилежних напрямках зі швидкістю до 500 км/год; Велика червона пляма обертається проти годинникової стрілки приблизно за 6 земних діб. Рух смуг і плями тут — симуляція.",
     fact: "Велика червона пляма — шторм, більший за Землю. Астрономи спостерігають його вже понад 150 років." },
   { id: "io", name: "Іо", kind: "Супутник Юпітера", parent: "jupiter", dot: "#d9c56a",
     radius: 0.48, a: 8.2, period: 1.769, d: 3643,
@@ -977,6 +977,7 @@ const shadowU = {
   satCenter: { value: new THREE.Vector3() },
   satR: { value: 1 },
   jupMoons: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
+  jFlow: { value: 0 },
 };
 function giantMaterial(b, tex) {
   const saturn = b.id === "saturn";
@@ -986,8 +987,32 @@ function giantMaterial(b, tex) {
     vertexShader: EARTH_VERT,
     fragmentShader: `
       uniform sampler2D map; uniform sampler2D ringMap; uniform vec3 sunPos;
-      uniform vec3 ringN; uniform vec3 satCenter; uniform float satR; uniform vec4 jupMoons[4];
+      uniform vec3 ringN; uniform vec3 satCenter; uniform float satR; uniform vec4 jupMoons[4]; uniform float jFlow;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      #ifdef JUPITER
+        // Where one flow phase samples the map: bands slide at latitude-dependent jet speeds,
+        // and the Great Red Spot (texture centre u 0.365, v 0.3875) turns anticlockwise as a whole.
+        vec2 jupiterFlow(vec2 uv, float ph) {
+          float lat = (uv.y - 0.5) * 3.14159;
+          float jet = 0.55 * sin(lat * 7.0) + 0.3 * sin(lat * 13.0 + 1.3) + 0.15 * cos(lat * 3.0);
+          vec2 c = vec2(0.365, 0.3875), d = uv - c;
+          d.x = mod(d.x + 0.5, 1.0) - 0.5;
+          vec2 e = d / vec2(0.034, 0.036);
+          float r = length(e);
+          float inside = 1.0 - smoothstep(0.7, 1.3, r);
+          float a = -ph * 1.1 * (1.0 - smoothstep(0.0, 1.3, r));
+          vec2 re = vec2(cos(a) * e.x - sin(a) * e.y, sin(a) * e.x + cos(a) * e.y) * vec2(0.034, 0.036);
+          vec2 banded = vec2(uv.x - jet * ph * 0.012, uv.y);
+          return mix(banded, c + re, inside);
+        }
+        vec3 jupiterAlbedo(vec2 uv) {
+          float p1 = fract(jFlow), p2 = fract(jFlow + 0.5);
+          float w1 = 1.0 - abs(2.0 * p1 - 1.0);
+          vec3 a = texture2D(map, jupiterFlow(uv, p1)).rgb;
+          vec3 b = texture2D(map, jupiterFlow(uv, p2)).rgb;
+          return pow(a * w1 + b * (1.0 - w1), vec3(2.2));
+        }
+      #endif
       void main() {
         vec3 N = normalize(vN), L = normalize(sunPos - vW);
         float light = 0.03 + 1.25 * max(dot(N, L), 0.0);
@@ -1011,7 +1036,12 @@ function giantMaterial(b, tex) {
             }
           }
         #endif
-        gl_FragColor = vec4(pow(texture2D(map, vUv).rgb, vec3(2.2)) * light, 1.0);
+        #ifdef JUPITER
+          vec3 albedo = jupiterAlbedo(vUv);
+        #else
+          vec3 albedo = pow(texture2D(map, vUv).rgb, vec3(2.2));
+        #endif
+        gl_FragColor = vec4(albedo * light, 1.0);
         #include <encodings_fragment>
       }`,
   });
@@ -2090,6 +2120,9 @@ function tick() {
     const focusOther = state.index >= 0 && BODIES[state.index] !== sun;
     sunAudio.setLevel(state.paused ? 0 : near * (focusOther ? 0.08 : 1));
   }
+
+  // Jupiter: flow phase for the sliding bands and the turning Great Red Spot (slow in real time, faster when time is sped up).
+  shadowU.jFlow.value += (state.paused ? 0 : dt * 0.04) + clampAbs(dDays * 0.25, 0.01);
 
   // Venus: the cloud deck super-rotates (≈4 days) far faster than the planet (243 days), in the same retrograde sense.
   venusU.time.value += state.paused ? 0 : dt;
