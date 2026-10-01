@@ -35,7 +35,11 @@
     philae.visible = false;
     head.add(philae);
     // The real nucleus is darker than coal (albedo ~6 %): dim the shared material for the close-ups.
-    c.mesh.material.color.multiplyScalar(0.62);
+    // Its own copy of the material, sampling the Moon map's far side (no dark maria) stretched into rough, featureless ground.
+    const mat = c.mesh.material.clone(), map = mat.map.clone();
+    map.wrapS = map.wrapT = T.RepeatWrapping; map.repeat.set(0.3, 0.55); map.offset.set(0.85, 0.22); map.needsUpdate = true;
+    mat.map = map; mat.color.multiplyScalar(0.62);
+    c.mesh.material = mat; head.material = mat;
     // A thin ring marking the comet in the wide shots, where it is only a few pixels.
     const mc = document.createElement('canvas'); mc.width = mc.height = 128;
     const mg = mc.getContext('2d'); mg.strokeStyle = 'rgba(170,205,255,0.9)'; mg.lineWidth = 5; mg.beginPath(); mg.arc(64, 64, 52, 0, Math.PI * 2); mg.stroke();
@@ -50,6 +54,7 @@
   }
 
   window.__recCam = () => {
+    if (!marker) return;   // the site is still loading; the scene isn't set up yet
     const r = window.__rec, T = r.THREE, V = T.Vector3, t = window.__vt() - (window.__t0 || 0);
     const c = r.byId.cg67p, P = c.world.clone(), sunDir = P.clone().negate().normalize();
     r.state.simMs = simDate(t + 1 / 30);   // the date for the next frame
@@ -124,11 +129,11 @@
     } else {                                     // 2015: the comet wakes up near the Sun; pull back to see the tail
       const e = ease((t - 52) / 20);
       const target = P;
-      const back = P.clone().addScaledVector(side, lerp(0.5, 15, e)).addScaledVector(up, lerp(0.3, 6, e)).addScaledVector(sunDir, lerp(0.4, 7, e));
+      const back = P.clone().addScaledVector(side, lerp(0.5, 22, e)).addScaledVector(up, lerp(0.3, 9, e)).addScaledVector(sunDir, lerp(0.4, 10, e));
       pos = back; look = target.clone().addScaledVector(sunDir, -lerp(0, 5, e));
     }
     // The marker ring: only on the wide shots.
-    const mOn = (1 - smooth((t - 12) / 2)) + smooth((t - 20.5) / 1) * (1 - smooth((t - 33.5) / 1.2));
+    const mOn = (1 - smooth((t - 12) / 2)) + smooth((t - 20.5) / 1) * (1 - smooth((t - 38) / 1.2));
     marker.position.copy(P);
     const md = pos.distanceTo(P);
     marker.scale.set(md * 0.05, md * 0.05, 1);
