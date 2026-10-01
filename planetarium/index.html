@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Планетарій</title>
+<title>Небозвід — Сонячна система в 3D</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600&family=Commissioner:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@1,600;1,700&family=Unbounded:wght@400;600&family=Commissioner:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <style>
 /* Layout: full-bleed 3D scene; floating glass controls — top bar, info panel on the right (bottom sheet on phones), planet dock at the bottom. Single dark look by design. */
 :root {
@@ -64,8 +64,22 @@ button { font: inherit; color: inherit; }
 .actions button { border: 1px solid var(--line); background: rgba(255,255,255,0.04); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
 .actions button:hover { background: rgba(255,255,255,0.09); }
 .tag.comet { color: rgba(190,225,255,0.9); }
-.brand b { font: 600 18px/1.1 var(--font-display); letter-spacing: 0.02em; }
-.brand span { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+/* Logo: calligraphic italic with a dawn-to-night gradient; a small twinkling star stands in for the dot of "і". */
+.logo {
+  font: italic 700 32px/1 "Cormorant", "Cormorant Garamond", Georgia, serif; letter-spacing: 0.01em;
+  background: linear-gradient(100deg, #f7c66b 0%, #f39a8b 52%, #9cc2ff 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
+  padding: 0.08em 0.06em 0.12em 0; display: inline-block;
+}
+.logo-star { position: relative; display: inline-block; width: 0; }
+.logo-star::after {
+  content: "✦"; position: absolute; left: -0.17em; top: -2.2em; transform: translateX(-50%);   /* em of the small star: ≈ over the "ı" */
+  font: normal 400 0.36em/1 system-ui, sans-serif; color: #fff; -webkit-text-fill-color: #fff;
+  text-shadow: 0 0 6px rgba(190, 215, 255, 0.95), 0 0 14px rgba(156, 194, 255, 0.6);
+  animation: twinkle 4.5s ease-in-out infinite;
+}
+@keyframes twinkle { 0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); } 50% { opacity: 0.55; transform: translateX(-50%) scale(0.78); } }
+.brand > span:not(.logo) { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
 .controls {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
   padding: 6px; border-radius: 999px;
@@ -185,8 +199,8 @@ button { font: inherit; color: inherit; }
   background: var(--void); transition: opacity .8s; z-index: 5;
 }
 .loader.done { opacity: 0; pointer-events: none; }
-.loader b { font: 600 22px/1.2 var(--font-display); }
-.loader span { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.loader .logo { font-size: 52px; }
+.loader > span:not(.logo) { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 .bar { width: 220px; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; margin: 0 auto; }
 .bar i { display: block; height: 100%; width: 0; background: var(--sun); transition: width .2s; }
 
@@ -198,7 +212,8 @@ button { font: inherit; color: inherit; }
 }
 
 @media (max-width: 720px) {
-  .brand span { display: none; }
+  .brand > span:not(.logo) { display: none; }
+  .logo { font-size: 28px; }
   .speed input { width: 64px; }
   .clock input { font-size: 12px; }
   .clock { padding-left: 8px; }
@@ -242,6 +257,7 @@ button { font: inherit; color: inherit; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+  .logo-star::after { animation: none; }
   .chips { scroll-behavior: auto; }
 }
 </style>
@@ -252,7 +268,7 @@ button { font: inherit; color: inherit; }
 
 <header class="topbar">
   <div class="brand-col">
-    <div class="brand"><b>Планетарій</b><span>Сонячна система в 3D</span></div>
+    <div class="brand"><span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span><span>Сонячна система в 3D</span></div>
     <div class="clock glass">
       <input type="date" id="date" aria-label="Дата" min="1800-01-01" max="2200-12-31">
       <span id="clockTime">--:--</span>
@@ -318,7 +334,7 @@ button { font: inherit; color: inherit; }
 <p class="toast glass" id="toast" role="status" hidden></p>
 
 <div class="loader" id="loader">
-  <b>Планетарій</b>
+  <span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span>
   <div class="bar"><i id="barFill"></i></div>
   <span id="loadText">Завантажуємо карти поверхонь…</span>
 </div>
@@ -331,7 +347,7 @@ button { font: inherit; color: inherit; }
 
 const loaderEl = document.getElementById("loader");
 if (!window.THREE || !THREE.OrbitControls) {
-  loaderEl.innerHTML = '<b>Планетарій</b><p class="error">Не вдалося завантажити 3D-бібліотеку. Перевірте з\'єднання з інтернетом і оновіть сторінку.</p>';
+  loaderEl.innerHTML = '<span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span><p class="error">Не вдалося завантажити 3D-бібліотеку. Перевірте з\'єднання з інтернетом і оновіть сторінку.</p>';
   return;
 }
 
@@ -3073,7 +3089,7 @@ async function build() {
   try {
     tex = await loadTextures();
   } catch (err) {
-    loaderEl.innerHTML = `<b>Планетарій</b><p class="error">Не вдалося завантажити карту поверхні (${err.message}). Оновіть сторінку. Якщо відкриваєте файл локально, запустіть його через вебсервер, наприклад: python3 -m http.server</p>`;
+    loaderEl.innerHTML = `<span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span><p class="error">Не вдалося завантажити карту поверхні (${err.message}). Оновіть сторінку. Якщо відкриваєте файл локально, запустіть його через вебсервер, наприклад: python3 -m http.server</p>`;
     return;
   }
   const jd0 = jdOf(state.simMs);
