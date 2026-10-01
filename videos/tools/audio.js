@@ -43,6 +43,27 @@ function fnSource(src, fname) {
       vg.gain.setValueAtTime(a.voiceLevel, a.voiceOut[0]); vg.gain.linearRampToValueAtTime(0, a.voiceOut[1]);
       pv.schedule(a.voiceOut[1] + 1.5);
     }
+    if (a && a.song) {
+      // The comet's "song": Rosetta's magnetometer heard 40–50 mHz oscillations around 67P; sped up, they sound like
+      // soft clicks and whistles. Synthesised in that spirit: short gliding chirps through a band-pass, with an echo.
+      const sg = ctx.createGain(); sg.connect(ctx.destination);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 520; bp.Q.value = 0.9;
+      const dl = ctx.createDelay(1); dl.delayTime.value = 0.23; const fb = ctx.createGain(); fb.gain.value = 0.35;
+      bp.connect(sg); bp.connect(dl); dl.connect(fb).connect(dl); dl.connect(sg);
+      const [s0, s1] = a.song, lvl = a.songLevel || 0.5;
+      sg.gain.setValueAtTime(0, 0); sg.gain.setValueAtTime(0, s0); sg.gain.linearRampToValueAtTime(lvl, s0 + 1.5);
+      sg.gain.setValueAtTime(lvl, s1 - 1.5); sg.gain.linearRampToValueAtTime(0, s1);
+      let x = s0;
+      while (x < s1) {
+        const o = ctx.createOscillator(), g2 = ctx.createGain();
+        const f0 = 260 + Math.random() * 520, f1 = f0 * (0.6 + Math.random() * 0.9), d = 0.07 + Math.random() * 0.22;
+        o.type = Math.random() < 0.3 ? 'triangle' : 'sine';
+        o.frequency.setValueAtTime(f0, x); o.frequency.exponentialRampToValueAtTime(f1, x + d);
+        g2.gain.setValueAtTime(0, x); g2.gain.linearRampToValueAtTime(0.35 + Math.random() * 0.4, x + 0.012); g2.gain.exponentialRampToValueAtTime(0.001, x + d);
+        o.connect(g2).connect(bp); o.start(x); o.stop(x + d + 0.02);
+        x += 0.05 + Math.random() * Math.random() * 0.35;
+      }
+    }
     const buf = await ctx.startRendering();
     const L = buf.getChannelData(0), R = buf.getChannelData(1), n = L.length;
     const ab = new ArrayBuffer(44 + n * 4), dv = new DataView(ab);

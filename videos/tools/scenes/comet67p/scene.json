@@ -1,0 +1,11 @@
+{
+  "title": "Комета 67P",
+  "date": "1969-08-20T00:00:00Z",
+  "rate": 0,
+  "duration": 72,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "patches": [],
+  "audio": { "song": [58.0, 65.0], "songLevel": 0.55 }
+}

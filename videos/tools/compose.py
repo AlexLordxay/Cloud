@@ -30,6 +30,11 @@ f_cap = font('Commissioner.ttf', 46, 600)
 f_end1 = font('Unbounded.ttf', 70, 600)
 f_end2 = font('Commissioner.ttf', 44, 500)
 f_end3 = font('Commissioner.ttf', 34, 500)
+f_tick = font('Unbounded.ttf', 96, 600)
+
+def ease(x):
+    x = min(1.0, max(0.0, x))
+    return 4 * x ** 3 if x < 0.5 else 1 - (-2 * x + 2) ** 3 / 2
 
 def fade(t, a, b, d=0.35):
     return max(0.0, min(1.0, (t - a) / d, (b - t) / d))
@@ -100,6 +105,13 @@ def frame(sc, i, src):
     if k < 1: im = Image.eval(im, lambda v: int(v * k))
     img = im.convert('RGBA')
     draw_logo(img, 64, 170, min(1.0, t) * (1 if t < sc.END_CARD else max(0, 1 - (t - sc.END_CARD) / 0.5)) * 0.92, t)
+    tick = getattr(sc, 'TICKER', None)
+    if tick:
+        # a year counter (e.g. a ten-year flight), eased like the scene's date
+        t0, t1, y0, y1 = tick
+        if t0 - 0.4 < t < t1 + 0.8:
+            year = int(y0 + (y1 - y0) * ease((t - t0) / (t1 - t0)))
+            draw_block(img, str(year), f_tick, 330, fade(t, t0 - 0.4, t1 + 0.8, 0.4), fill=SUN)
     for a, b, kind, text in sc.CAPTIONS:
         al = fade(t, a, b)
         if al <= 0: continue
