@@ -20,7 +20,7 @@
     return DATES[DATES.length - 1][1];
   }
 
-  let philae = null, head = null, site = null;
+  let philae = null, head = null, site = null, marker = null;
   window.__sceneSetup = async (r) => {
     const s = r.state, T = r.THREE, c = r.byId.cg67p;
     s.index = r.BODIES.indexOf(c); s.mode = 'focus'; s.flight = null;
@@ -34,6 +34,13 @@
     philae = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(cv), transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
     philae.visible = false;
     head.add(philae);
+    // The real nucleus is darker than coal (albedo ~6 %): dim the shared material for the close-ups.
+    c.mesh.material.color.multiplyScalar(0.62);
+    // A thin ring marking the comet in the wide shots, where it is only a few pixels.
+    const mc = document.createElement('canvas'); mc.width = mc.height = 128;
+    const mg = mc.getContext('2d'); mg.strokeStyle = 'rgba(170,205,255,0.9)'; mg.lineWidth = 5; mg.beginPath(); mg.arc(64, 64, 52, 0, Math.PI * 2); mg.stroke();
+    marker = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(mc), transparent: true, depthWrite: false, depthTest: false }));
+    r.scene.add(marker);
   };
 
   // Points on the head lobe: a direction in its local frame, at height h (in head radii) above the surface.
@@ -76,7 +83,7 @@
       else { dir = site.d3; glow = Math.max(0.25, 1 - (t - 48.6) / 2); }
       glow *= (t > 40 ? smooth((t - 40) / 1) : 0) * (1 - smooth((t - 52) / 1.5));
       philae.position.copy(onHead(r, dir, h + 0.03));
-      const sz = c.radius * 0.11 * (0.85 + 0.15 * Math.sin(t * 6));
+      const sz = c.radius * 0.06 * (0.85 + 0.15 * Math.sin(t * 6));
       philae.scale.set(sz / 0.85, sz / 0.85, 1);   // undo most of the head lobe's squash
       philae.material.opacity = glow;
       philae.visible = glow > 0.01;
@@ -92,13 +99,13 @@
       pos = wideA.clone().multiplyScalar(lerp(1.15, 0.95, e)); look = new V(0, 0, 0).lerp(P, 0.35);
     } else if (t < 19) {                         // 1969: fly to the comet
       const e = ease((t - 7.2) / 11.8);
-      const near = P.clone().addScaledVector(side, 5).addScaledVector(up, 3).addScaledVector(sunDir, 3);
+      const near = P.clone().addScaledVector(side, 12).addScaledVector(up, 7).addScaledVector(sunDir, 6);
       pos = wideA.clone().multiplyScalar(0.95).lerp(near, Math.pow(e, 1.6)); look = new V(0, 0, 0).lerp(P, 0.35 + 0.65 * e);
     } else if (t < 34) {                         // 2004 → 2014: ten years of chase, seen from far above
       const e = ease((t - 19) / 15);
       pos = wideB.clone().applyAxisAngle(up, e * 0.5); look = new V(0, 0, 0).lerp(P, 0.25);
       if (t < 20.5) {                            // glide out of the 1969 close view
-        const from = P.clone().addScaledVector(side, 5).addScaledVector(up, 3).addScaledVector(sunDir, 3);
+        const from = P.clone().addScaledVector(side, 12).addScaledVector(up, 7).addScaledVector(sunDir, 6);
         const w = smooth((t - 19) / 1.5);
         pos = from.lerp(pos, w); look = P.clone().lerp(look, w);
       }
@@ -106,20 +113,27 @@
       const e = ease((t - 34) / 7);
       const from = wideB.clone().applyAxisAngle(up, 0.5);
       const near = P.clone().addScaledVector(sunDir, 0.42).addScaledVector(side, 0.32).addScaledVector(up, 0.22);
-      pos = from.lerp(near, Math.pow(e, 0.35)); look = new V(0, 0, 0).lerp(P, Math.min(1, 0.25 + e * 1.4));
+      pos = from.lerp(near, Math.pow(e, 0.35)); look = new V(0, 0, 0).lerp(P, 0.25 + 0.75 * smooth((t - 34) / 2.2));
     } else if (t < 52) {                         // Philae's landing, the camera watching the site
       const target = pPos || P;
       const n = target.clone().sub(P).normalize();
       const e = smooth((t - 41) / 4);
       const base = P.clone().addScaledVector(sunDir, 0.42).addScaledVector(side, 0.32).addScaledVector(up, 0.22);
-      const watch = P.clone().addScaledVector(n.clone().add(sunDir).normalize(), 0.36).addScaledVector(side, 0.08);
+      const watch = P.clone().addScaledVector(n.clone().add(sunDir).normalize(), 0.46).addScaledVector(side, 0.1);
       pos = base.lerp(watch, e); look = P.clone().lerp(target, 0.35 * e);
     } else {                                     // 2015: the comet wakes up near the Sun; pull back to see the tail
       const e = ease((t - 52) / 20);
       const target = P;
-      const back = P.clone().addScaledVector(side, lerp(0.5, 7, e)).addScaledVector(up, lerp(0.3, 3.5, e)).addScaledVector(sunDir, lerp(0.4, 4, e));
-      pos = back; look = target.clone().addScaledVector(sunDir, -lerp(0, 2.5, e));
+      const back = P.clone().addScaledVector(side, lerp(0.5, 15, e)).addScaledVector(up, lerp(0.3, 6, e)).addScaledVector(sunDir, lerp(0.4, 7, e));
+      pos = back; look = target.clone().addScaledVector(sunDir, -lerp(0, 5, e));
     }
+    // The marker ring: only on the wide shots.
+    const mOn = (1 - smooth((t - 12) / 2)) + smooth((t - 20.5) / 1) * (1 - smooth((t - 33.5) / 1.2));
+    marker.position.copy(P);
+    const md = pos.distanceTo(P);
+    marker.scale.set(md * 0.05, md * 0.05, 1);
+    marker.material.opacity = Math.min(1, Math.max(0, mOn)) * 0.85;
+    marker.visible = marker.material.opacity > 0.01;
     const cam = r.camera;
     cam.position.copy(pos); cam.up.set(0, 1, 0); cam.lookAt(look);
     r.controls.target.copy(look);
