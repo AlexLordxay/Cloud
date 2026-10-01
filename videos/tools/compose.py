@@ -99,7 +99,10 @@ def frame(sc, i, src):
     im = Image.open(src).convert('RGB').resize((W, H), Image.LANCZOS)
     # dips to black at cuts, at the start and at the end; the scene dims under the end card
     k = min(1.0, t / 0.6)
-    for c in sc.CUTS: k = min(k, abs(t - c) / 0.28)
+    for c in sc.CUTS:
+        # a cut is a time, or (time, half-width) for a longer fade through black
+        c, half = c if isinstance(c, tuple) else (c, 0.28)
+        k = min(k, abs(t - c) / half)
     if t > sc.END_CARD: k = min(k, 1 - 0.72 * min(1.0, (t - sc.END_CARD) / 0.8))
     k = min(k, max(0.0, (sc.DURATION - t) / 0.5))
     if k < 1: im = Image.eval(im, lambda v: int(v * k))

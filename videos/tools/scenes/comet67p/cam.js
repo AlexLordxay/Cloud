@@ -7,8 +7,8 @@
 
   // Simulated date along the video: [t, date]; eased between keys.
   const DATES = [
-    [0, ms('1969-08-20T00:00:00Z')], [19, ms('1969-11-01T00:00:00Z')],
-    [20.5, ms('2004-03-02T00:00:00Z')], [34, ms('2014-08-06T00:00:00Z')],
+    [0, ms('1969-08-20T00:00:00Z')], [19.74, ms('1969-11-01T00:00:00Z')],
+    [19.76, ms('2004-03-02T00:00:00Z')], [34, ms('2014-08-06T00:00:00Z')],
     [41, ms('2014-11-12T13:00:00Z')], [52, ms('2014-11-12T19:00:00Z')],
     [56.5, ms('2015-08-13T00:00:00Z')], [72, ms('2015-09-20T00:00:00Z')],
   ];
@@ -102,35 +102,39 @@
     if (t < 7.2) {                               // hook: the inner Solar System from above, 67P's orbit highlighted
       const e = ease(t / 7.2);
       pos = wideA.clone().multiplyScalar(lerp(1.15, 0.95, e)); look = new V(0, 0, 0).lerp(P, 0.35);
-    } else if (t < 19) {                         // 1969: fly to the comet
-      const e = ease((t - 7.2) / 11.8);
+    } else if (t < 19.75) {                      // 1969: fly to the comet
+      const e = ease((t - 7.2) / 12.55);
       const near = P.clone().addScaledVector(side, 12).addScaledVector(up, 7).addScaledVector(sunDir, 6);
       pos = wideA.clone().multiplyScalar(0.95).lerp(near, Math.pow(e, 1.6)); look = new V(0, 0, 0).lerp(P, 0.35 + 0.65 * e);
-    } else if (t < 34) {                         // 2004 → 2014: ten years of chase, seen from far above
+    } else if (t < 34) {                         // 2004 → 2014: ten years of chase, seen from far above (starts under the fade)
       const e = ease((t - 19) / 15);
       pos = wideB.clone().applyAxisAngle(up, e * 0.5); look = new V(0, 0, 0).lerp(P, 0.25);
-      if (t < 20.5) {                            // glide out of the 1969 close view
-        const from = P.clone().addScaledVector(side, 12).addScaledVector(up, 7).addScaledVector(sunDir, 6);
-        const w = smooth((t - 19) / 1.5);
-        pos = from.lerp(pos, w); look = P.clone().lerp(look, w);
-      }
     } else if (t < 41) {                         // arrival: down to the rubber-duck nucleus
       const e = ease((t - 34) / 7);
       const from = wideB.clone().applyAxisAngle(up, 0.5);
       const near = P.clone().addScaledVector(sunDir, 0.42).addScaledVector(side, 0.32).addScaledVector(up, 0.22);
       pos = from.lerp(near, Math.pow(e, 0.35)); look = new V(0, 0, 0).lerp(P, 0.25 + 0.75 * smooth((t - 34) / 2.2));
-    } else if (t < 52) {                         // Philae's landing, the camera watching the site
-      const target = pPos || P;
-      const n = target.clone().sub(P).normalize();
-      const e = smooth((t - 41) / 4);
-      const base = P.clone().addScaledVector(sunDir, 0.42).addScaledVector(side, 0.32).addScaledVector(up, 0.22);
-      const watch = P.clone().addScaledVector(n.clone().add(sunDir).normalize(), 0.46).addScaledVector(side, 0.1);
-      pos = base.lerp(watch, e); look = P.clone().lerp(target, 0.35 * e);
-    } else {                                     // 2015: the comet wakes up near the Sun; pull back to see the tail
-      const e = ease((t - 52) / 20);
-      const target = P;
-      const back = P.clone().addScaledVector(side, lerp(0.5, 22, e)).addScaledVector(up, lerp(0.3, 9, e)).addScaledVector(sunDir, lerp(0.4, 10, e));
-      pos = back; look = target.clone().addScaledVector(sunDir, -lerp(0, 5, e));
+    } else {
+      // Philae's landing, the camera watching the site…
+      const landing = tt => {
+        const target = pPos || P, n = target.clone().sub(P).normalize(), e = smooth((tt - 41) / 4);
+        const base = P.clone().addScaledVector(sunDir, 0.42).addScaledVector(side, 0.32).addScaledVector(up, 0.22);
+        const watch = P.clone().addScaledVector(n.clone().add(sunDir).normalize(), 0.46).addScaledVector(side, 0.1);
+        return { pos: base.lerp(watch, e), look: P.clone().lerp(target, 0.35 * e) };
+      };
+      // …then 2015: the comet wakes up near the Sun; pull back to see the tail, gliding out of the landing view.
+      const pull = tt => {
+        const e = ease((tt - 52) / 20);
+        return {
+          pos: P.clone().addScaledVector(side, lerp(0.5, 22, e)).addScaledVector(up, lerp(0.3, 9, e)).addScaledVector(sunDir, lerp(0.4, 10, e)),
+          look: P.clone().addScaledVector(sunDir, -lerp(0, 5, e)),
+        };
+      };
+      if (t < 52) ({ pos, look } = landing(t));
+      else {
+        const a = landing(52), b = pull(t), w = smooth((t - 52) / 3);
+        pos = a.pos.lerp(b.pos, w); look = a.look.lerp(b.look, w);
+      }
     }
     // The marker ring: only on the wide shots.
     const mOn = (1 - smooth((t - 12) / 2)) + smooth((t - 20.5) / 1) * (1 - smooth((t - 38) / 1.2));
