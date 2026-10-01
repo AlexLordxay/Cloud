@@ -310,7 +310,7 @@ button { font: inherit; color: inherit; }
   <p class="voice collapsible" id="voice" hidden></p>
   <p class="fact collapsible"><span>Цікавий факт</span><span id="fact"></span></p>
   <p class="hint collapsible">Тягніть, щоб обертати. Колесо миші або два пальці наближають. Стрілки ← → перемикають тіла, Esc повертає до огляду. Дату можна змінити вгорі ліворуч.</p>
-  <p class="credits collapsible">Карти поверхонь: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; супутники, Церера й Плутон — мозаїки NASA/JPL/USGS (Galileo, Cassini, Voyager, Dawn, New Horizons), частина з приблизним кольором; нічна Земля, океани й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>. Фобос і Деймос показано з умовною текстурою. Положення планет — за елементами орбіт JPL (найточніші для 1800–2050 рр.); супутники, крім Місяця й галілеєвих, розставлено умовно.</p>
+  <p class="credits collapsible">Карти поверхонь: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; Титан — інфрачервона карта Cassini VIMS/ISS (Seignovert et al. 2019, через pyvims, BSD-3); інші супутники, Церера й Плутон — мозаїки NASA/JPL/USGS (Galileo, Cassini, Voyager, Dawn, New Horizons), частина з приблизним кольором; нічна Земля, океани й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>. Фобос і Деймос показано з умовною текстурою. Положення планет — за елементами орбіт JPL (найточніші для 1800–2050 рр.); супутники, крім Місяця й галілеєвих, розставлено умовно.</p>
 </aside>
 
 <div class="catalog glass" id="catalog" data-tab="planets" hidden>
@@ -447,10 +447,10 @@ const BODIES = [
     stats: [["Від Сатурна", "527 000 км"], ["Оберт навколо Сатурна", "4,52 доби"], ["Відкрито", "1672", "Джованні Кассіні"]],
     desc: "Другий за розміром супутник Сатурна, майже повністю з водяного льоду.",
     fact: "Температура на поверхні Реї опускається нижче за −200 °C." },
-  { id: "titan", name: "Титан", kind: "Супутник Сатурна", parent: "saturn", dot: "#d9a24e", atmo: [1.0, 0.7, 0.3],
+  { id: "titan", name: "Титан", kind: "Супутник Сатурна", parent: "saturn", dot: "#d9a24e",
     radius: 0.68, a: 15.5, period: 15.95, d: 5150,
     stats: [["Від Сатурна", "1 221 870 км"], ["Оберт навколо Сатурна", "15,9 доби"], ["Відкрито", "1655", "Християн Гюйгенс"]],
-    desc: "Найбільший супутник Сатурна й єдиний у Сонячній системі зі щільною атмосферою. Карта поверхні зроблена в інфрачервоному світлі крізь серпанок.",
+    desc: "Найбільший супутник Сатурна й єдиний у Сонячній системі зі щільною атмосферою. Ззовні це гладка помаранчева куля: поверхню ховає густий смог, а по краю диска світиться тонкий блакитний шар верхньої димки. Кнопка нижче показує, що під серпанком: інфрачервону карту Cassini з дюнами, горами й метановими морями біля північного полюса.",
     fact: "На Титані є озера й моря, але вони з рідкого метану та етану, а не з води." },
   { id: "uranus", name: "Уран", kind: "Крижаний гігант", dot: "#9fdde3",
     radius: 2.8, a: 132, period: 84.0, spin: -0.35, tilt: 97.8, d: 50724, atmo: [0.6, 0.9, 0.95], rings: "uranus",
@@ -574,8 +574,8 @@ const TEXTURES = {
   moon: "moon.jpg", mars: "mars.jpg", jupiter: "jupiter.jpg", saturn: "saturn.jpg", saturnRing: "saturn_ring.png",
   uranus: "uranus.jpg", neptune: "neptune.jpg",
 };
-const LATE_TEXTURES = ["io", "europa", "ganymede", "callisto", "enceladus", "rhea", "titan", "miranda", "titania", "oberon", "triton", "ceres", "pluto", "charon", "haumea", "makemake", "eris"];
-const DATA_MAPS = new Set(["earthSpec", "earthClouds"]);
+const LATE_TEXTURES = ["io", "europa", "ganymede", "callisto", "enceladus", "rhea", "miranda", "titania", "oberon", "triton", "ceres", "pluto", "charon", "haumea", "makemake", "eris"];
+const DATA_MAPS = new Set(["earthSpec", "earthClouds", "titanLakes"]);
 
 /* ---------- Three.js scene ---------- */
 const canvas = document.getElementById("scene");
@@ -1085,6 +1085,104 @@ function toggleVenusSurface(btn) {
   }
   venusTarget = venusSurfaceOn ? 1 : 0;
   btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
+}
+
+/* ---------- Titan: the orange smog and what lies under it ---------- */
+// In visible light Titan is a smooth orange ball: the haze hides the ground. A detached haze layer shows as a thin blue band
+// on the limb, and when the Sun is behind Titan the whole atmosphere lights up in a ring. "Look under the haze" fades in the
+// Cassini VIMS/ISS infrared map (Seignovert et al. 2019), with the northern methane seas glinting in the Sun.
+const titanU = {
+  surface: { value: 0 },
+  surfMap: { value: null },
+  lakeMap: { value: null },
+  sunPos: { value: new THREE.Vector3(0, 0, 0) },
+};
+function titanMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: titanU,
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform sampler2D surfMap; uniform sampler2D lakeMap; uniform float surface; uniform vec3 sunPos;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW), V = normalize(cameraPosition - vW);
+        float ndl = dot(N, L), ndv = max(dot(N, V), 0.0);
+        float lat = vObj.y;
+
+        // Haze: warm orange, a touch darker and browner towards the north (the seasonal hemispheric contrast),
+        // faint broad banding, light wrapping well past the terminator, mild darkening towards the limb.
+        vec3 haze = vec3(0.78, 0.43, 0.13);
+        haze *= 1.0 - 0.1 * smoothstep(0.1, 0.9, lat) + 0.03 * sin(lat * 9.0);
+        haze = mix(haze, vec3(0.62, 0.36, 0.14), 0.35 * smoothstep(0.75, 0.95, lat));
+        float wrap = clamp((ndl + 0.18) / 1.18, 0.0, 1.0);
+        vec3 col = haze * (0.004 + 1.15 * pow(wrap, 1.5)) * (0.72 + 0.28 * pow(ndv, 0.35));
+
+        // Under the haze: the infrared map lit plainly, seas dark and glassy with the Sun's glint on them.
+        if (surface > 0.001) {
+          vec3 ground = pow(texture2D(surfMap, vUv).rgb, vec3(1.7));   // the published map is pale; deepen it
+          float lake = texture2D(lakeMap, vUv).r;
+          ground = mix(ground, vec3(0.03, 0.035, 0.05), lake * 0.85);
+          vec3 lit = ground * (0.03 + 1.1 * max(ndl, 0.0));
+          vec3 H = normalize(L + V);
+          float nh = max(dot(N, H), 0.0);
+          float glint = (pow(nh, 900.0) * 6.0 + pow(nh, 60.0) * 0.25) * lake * step(0.0, ndl);
+          lit += vec3(1.0, 0.86, 0.62) * glint;
+          col = mix(col, lit, surface * 0.9);
+        }
+        gl_FragColor = vec4(col, 1.0);
+        #include <encodings_fragment>
+      }`,
+  });
+}
+// Titan's tall atmosphere, drawn on a shell 1.18× Titan's radius. For each pixel the shader finds how high above the surface
+// the line of sight passes: the orange haze fades with height, a thin blue detached-haze layer sits ~350 km up (0.13 R),
+// and when the Sun is behind Titan the whole ring lights up (forward scattering), as Cassini saw it backlit.
+const TITAN_SHELL = 1.18;
+function titanAtmosphere(radius) {
+  return new THREE.Mesh(new THREE.SphereGeometry(radius * TITAN_SHELL, 128, 96), new THREE.ShaderMaterial({
+    uniforms: titanU,
+    vertexShader: EARTH_VERT,
+    fragmentShader: `
+      uniform vec3 sunPos; uniform float surface;
+      varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      void main() {
+        vec3 N = normalize(vN), L = normalize(sunPos - vW), V = normalize(cameraPosition - vW);
+        float ndv = abs(dot(N, V));
+        float x = ${TITAN_SHELL.toFixed(2)} * sqrt(max(0.0, 1.0 - ndv * ndv));   // impact parameter in Titan radii
+        float h = x - 1.0;
+        float orange = h > 0.0 ? exp(-h / 0.035) : 0.55 * exp(h / 0.018);
+        float blue = exp(-pow((h - 0.13) / 0.009, 2.0));
+        float day = smoothstep(-0.35, 0.3, dot(N, L)), dayHigh = smoothstep(-0.1, 0.35, dot(N, L));
+        float back = pow(max(-dot(L, V), 0.0), 3.0);
+        vec3 col = vec3(1.0, 0.6, 0.26) * orange * (day * 0.9 + back * 2.2)
+                 + vec3(0.5, 0.72, 1.0) * blue * (dayHigh * 0.3 + back * 1.6);
+        gl_FragColor = vec4(col * (1.0 - 0.5 * surface), 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  }));
+}
+let titanSurfaceOn = false, titanSurfaceLoading = false, titanTarget = 0;
+const TITAN_BTN = ["Зазирнути під серпанок (інфрачервоний Cassini)", "Повернути серпанок"];
+function toggleTitanSurface(btn) {
+  titanSurfaceOn = !titanSurfaceOn;
+  if (titanSurfaceOn && !titanU.surfMap.value) {
+    if (titanSurfaceLoading) return;
+    titanSurfaceLoading = true;
+    btn.textContent = "Завантажуємо карту Cassini…";
+    Promise.all([loadTexture("titan_surface.jpg", "titanSurface"), loadTexture("titan_lakes.png", "titanLakes")]).then(([t, l]) => {
+      t.wrapS = l.wrapS = THREE.RepeatWrapping;
+      titanU.surfMap.value = t; titanU.lakeMap.value = l;
+      titanSurfaceLoading = false;
+      titanTarget = titanSurfaceOn ? 1 : 0;
+      btn.textContent = TITAN_BTN[titanSurfaceOn ? 1 : 0];
+    }).catch(() => {
+      titanSurfaceLoading = false; titanSurfaceOn = false;
+      btn.textContent = "Не вдалося завантажити карту. Спробувати ще раз";
+    });
+    return;
+  }
+  titanTarget = titanSurfaceOn ? 1 : 0;
+  btn.textContent = TITAN_BTN[titanSurfaceOn ? 1 : 0];
 }
 
 /* ---------- Io: volcanic plumes and hot lava ---------- */
@@ -2059,6 +2157,7 @@ function buildBody(b, i, tex, jd) {
   if (b.id === "moon") b.mesh.material = moonMaterial(tex);
   if (b.id === "io") ioFx = createIoFx(b);
   if (b.id === "venus") b.mesh.material = venusMaterial(tex);
+  if (b.id === "titan") { b.mesh.material = titanMaterial(); b.tiltGroup.add(titanAtmosphere(b.radius)); }
   if (b.id === "mercury") b.mesh.material = mercuryMaterial(tex);
   if (["jupiter", "saturn", "neptune", "uranus"].includes(b.id)) b.mesh.material = giantMaterial(b, tex);
   pickables.push(b.mesh);
@@ -2208,12 +2307,19 @@ function renderInfo(b) {
   $("fact").textContent = data.fact;
   const act = $("actions");
   act.innerHTML = "";
-  act.hidden = !(b && (b.actions || b.id === "venus"));
+  act.hidden = !(b && (b.actions || b.id === "venus" || b.id === "titan"));
   if (b && b.id === "venus") {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
     btn.addEventListener("click", () => toggleVenusSurface(btn));
+    act.appendChild(btn);
+  }
+  if (b && b.id === "titan") {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = TITAN_BTN[titanSurfaceOn ? 1 : 0];
+    btn.addEventListener("click", () => toggleTitanSurface(btn));
     act.appendChild(btn);
   }
   if (b && b.actions) {
@@ -2973,6 +3079,7 @@ function tick() {
   venusU.drift.value.x += clampAbs(dDays * (1 / 4 - 1 / 243), 0.0015);
   venusU.drift.value.y += clampAbs(dDays * (1 / 3.7 - 1 / 243), 0.0017);
   venusU.surface.value += (venusTarget - venusU.surface.value) * Math.min(1, dt * 2.5);
+  titanU.surface.value += (titanTarget - titanU.surface.value) * Math.min(1, dt * 2.5);
 
   // Mars weather: season and planet-wide storms follow the real date; dust drifts with simulated time.
   marsU.time.value += state.paused ? 0 : dt;
