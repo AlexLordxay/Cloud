@@ -1,0 +1,27 @@
+{
+  "title": "Сатурн",
+  "date": "2018-06-01T00:00:00Z",
+  "rate": 2,
+  "duration": 72,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "patches": [
+    [
+      "gl_FragColor = vec4(col, t.a);",
+      "gl_FragColor = vec4(col * 1.7, t.a);"
+    ]
+  ],
+  "audio": {
+    "voice": "saturn",
+    "voiceLevel": 0.75,
+    "voiceIn": [
+      22.8,
+      28.8
+    ],
+    "voiceOut": [
+      34.8,
+      39.6
+    ]
+  }
+}

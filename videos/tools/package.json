@@ -1,0 +1,8 @@
+{
+  "name": "nebozvid-video-tools",
+  "private": true,
+  "description": "Records short vertical videos from the Небозвід planetarium, frame by frame.",
+  "dependencies": {
+    "three": "0.147.0"
+  }
+}
