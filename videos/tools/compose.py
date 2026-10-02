@@ -1,7 +1,7 @@
 # Upscales the recorded frames to 1080x1920 and adds the logo, captions, fades and the end card.
 #
 #   python3 compose.py <scene>      reads work/<scene>/frames, writes work/<scene>/out
-import importlib.util, math, os, sys
+import importlib.util, json, math, os, sys
 from multiprocessing import Pool
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
@@ -15,6 +15,7 @@ F_STAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 def load_scene(name):
     spec = importlib.util.spec_from_file_location('captions', os.path.join(TOOLS, 'scenes', name, 'captions.py'))
     m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    m.SCENE = json.load(open(os.path.join(TOOLS, 'scenes', name, 'scene.json')))
     return m
 
 def font(file, size, wght):
@@ -115,6 +116,19 @@ def frame(sc, i, src):
         if t0 - 0.4 < t < t1 + 0.8:
             year = int(y0 + (y1 - y0) * ease((t - t0) / (t1 - t0)))
             draw_block(img, str(year), f_tick, 330, fade(t, t0 - 0.4, t1 + 0.8, 0.4), fill=SUN)
+    clock = getattr(sc, 'CLOCK_SHOW', None)
+    if clock:
+        # time of day on the scene clock (scene.json "clock": [[video s, minutes after 00:00 UTC], ...]), linear between keys
+        keys = sc.SCENE['clock']
+        m = keys[-1][1]
+        for (t0, m0), (t1, m1) in zip(keys, keys[1:]):
+            if t <= t1: m = m0 + (m1 - m0) * max(0.0, (t - t0) / (t1 - t0)); break
+        m = int(m + sc.CLOCK_UTC_OFFSET * 60) % 1440
+        for a, b in clock:
+            al = fade(t, a, b, 0.4)
+            if al > 0:
+                draw_block(img, f'{m // 60:02d}:{m % 60:02d}', f_tick, 330, al, fill=SUN)
+                draw_block(img, sc.CLOCK_LABEL, f_end3, 420, al, fill=(200, 208, 224))
     for a, b, kind, text in sc.CAPTIONS:
         al = fade(t, a, b)
         if al <= 0: continue
