@@ -9,7 +9,7 @@
   "patches": [
     [
       "window.__rec = { state, byId,",
-      "window.__rec = { earthU, lunarU, eclipse, state, byId,"
+      "window.__rec = { earthU, lunarU, eclipse, asteroidBelt, kuiperBelt, state, byId,"
     ]
   ],
   "clock": [

@@ -2980,7 +2980,7 @@ function placeAll(jd, dDays, fine) {
       else b.theta += clampAbs(TAU * dDays / b.period, 0.08);
       orbitPoint(b, b.theta, b.group.position);
     }
-    b.tiltGroup.rotation.y = b.theta + PI / 2;   // tidally locked
+    b.tiltGroup.rotation.y = b.theta + PI;   // tidally locked: longitude 0 of the map faces the planet
   }
 }
 

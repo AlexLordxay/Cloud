@@ -89,8 +89,9 @@
     for (const sh of SHOTS) if (t < sh[1]) { shot = sh; break; }
     const k = (t - shot[0]) / (shot[1] - shot[0]);
     const { pos, look, up, fov } = shot[2](Math.min(1, Math.max(0, k)), ctx);
-    // Orbit lines would only clutter the close shots.
+    // Orbit lines and the asteroid/Kuiper belts (a dotted band when seen edge-on) would only clutter the shots.
     for (const x of r.BODIES) if (x.orbitLine) x.orbitLine.visible = false;
+    r.asteroidBelt.visible = r.kuiperBelt.visible = false;
     const cam = r.camera;
     // A wide lens only for the eclipse seen from the ground, so the whole corona fits around the Moon.
     if (window.__fov0 == null) window.__fov0 = cam.fov;
