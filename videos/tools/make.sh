@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Builds a whole video:  ./make.sh <scene>   ->   videos/<scene>.mp4
-#   ./make.sh <scene> sound   only redoes the soundtrack (music, voiceover) over the picture of the existing videos/<scene>.mp4
+#   ./make.sh <scene> sound   puts the soundtrack (music, voiceover) over the picture of the existing videos/<scene>.mp4
+#                             -> videos/<scene>_voice.mp4 (the original stays as is)
 # Steps can be run on their own too: rec.js (frames), audio.js (sound), voice.py (voiceover), compose.py (captions
 # and logo), then this encode.
 set -euo pipefail
@@ -34,8 +35,8 @@ audio=(-filter_complex "$mix,loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=out:st=$fade:
 
 if [ "$mode" = sound ]; then
   "$ffmpeg" -y -loglevel error -i "$work/audio.wav" "${extra[@]}" -i "../$scene.mp4" "${audio[@]}" \
-    -map "$(( ${#extra[@]} / 2 + 1 )):v" -c:v copy -movflags +faststart -t "$duration" "$work/redub.mp4"
-  mv "$work/redub.mp4" "../$scene.mp4"
+    -map "$(( ${#extra[@]} / 2 + 1 )):v" -c:v copy -movflags +faststart -t "$duration" "../${scene}_voice.mp4"
+  echo "done: videos/${scene}_voice.mp4"; exit 0
 else
   "$ffmpeg" -y -loglevel error -i "$work/audio.wav" "${extra[@]}" -framerate 30 -i "$work/out/f_%05d.jpg" "${audio[@]}" \
     -map "$(( ${#extra[@]} / 2 + 1 )):v" -c:v libx264 -preset slow -crf 22 -pix_fmt yuv420p -profile:v high \
