@@ -1064,29 +1064,6 @@ function venusAtmosphere(radius) {
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   }));
 }
-// Toggle the radar surface view: the map loads only on first use, then the clouds fade out.
-let venusSurfaceOn = false, venusSurfaceLoading = false, venusTarget = 0;
-function toggleVenusSurface(btn) {
-  venusSurfaceOn = !venusSurfaceOn;
-  if (venusSurfaceOn && !venusU.surfMap.value) {
-    if (venusSurfaceLoading) return;
-    venusSurfaceLoading = true;
-    btn.textContent = "Завантажуємо радарну карту…";
-    loadTexture("venus_surface.jpg", "venusSurface").then(t => {
-      venusU.surfMap.value = t;
-      venusSurfaceLoading = false;
-      venusTarget = venusSurfaceOn ? 1 : 0;
-      btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
-    }).catch(() => {
-      venusSurfaceLoading = false; venusSurfaceOn = false;
-      btn.textContent = "Не вдалося завантажити карту. Спробувати ще раз";
-    });
-    return;
-  }
-  venusTarget = venusSurfaceOn ? 1 : 0;
-  btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
-}
-
 /* ---------- Titan: the orange smog and what lies under it ---------- */
 // In visible light Titan is a smooth orange ball: the haze hides the ground. A detached haze layer shows as a thin blue band
 // on the limb, and when the Sun is behind Titan the whole atmosphere lights up in a ring. "Look under the haze" fades in the
@@ -1161,28 +1138,61 @@ function titanAtmosphere(radius) {
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   }));
 }
-let titanSurfaceOn = false, titanSurfaceLoading = false, titanTarget = 0;
-const TITAN_BTN = ["Зазирнути під серпанок (інфрачервоний Cassini)", "Повернути серпанок"];
-function toggleTitanSurface(btn) {
-  titanSurfaceOn = !titanSurfaceOn;
-  if (titanSurfaceOn && !titanU.surfMap.value) {
-    if (titanSurfaceLoading) return;
-    titanSurfaceLoading = true;
-    btn.textContent = "Завантажуємо карту Cassini…";
-    Promise.all([loadTexture("titan_surface.jpg", "titanSurface"), loadTexture("titan_lakes.png", "titanLakes")]).then(([t, l]) => {
-      t.wrapS = l.wrapS = THREE.RepeatWrapping;
-      titanU.surfMap.value = t; titanU.lakeMap.value = l;
-      titanSurfaceLoading = false;
-      titanTarget = titanSurfaceOn ? 1 : 0;
-      btn.textContent = TITAN_BTN[titanSurfaceOn ? 1 : 0];
-    }).catch(() => {
-      titanSurfaceLoading = false; titanSurfaceOn = false;
-      btn.textContent = "Не вдалося завантажити карту. Спробувати ще раз";
+/* ---------- Surface views under the clouds (Venus radar, Titan infrared) ---------- */
+// Their maps load on demand, and quietly in the background a few seconds after start so the button responds at once.
+// A request that hangs is given up after 12 s and retried (up to three tries); clicks while loading are ignored.
+const lazyMaps = {};
+function lazyMap(file, key) {
+  if (!lazyMaps[key]) {
+    const attempt = n => new Promise((resolve, reject) => {
+      let settled = false;
+      const timer = setTimeout(() => { if (!settled) { settled = true; reject(new Error("timeout: " + file)); } }, 12000);
+      loader.load("textures/" + file + (n ? "?retry=" + n : ""), t => {
+        if (settled) return;
+        settled = true; clearTimeout(timer);
+        if (!DATA_MAPS.has(key)) t.encoding = THREE.sRGBEncoding;
+        t.anisotropy = maxAniso; t.wrapS = THREE.RepeatWrapping;
+        resolve(t);
+      }, undefined, () => { if (!settled) { settled = true; clearTimeout(timer); reject(new Error(file)); } });
     });
+    lazyMaps[key] = attempt(0).catch(() => attempt(1)).catch(() => attempt(2));
+    lazyMaps[key].catch(() => { delete lazyMaps[key]; });   // after a failure, the next click starts afresh
+  }
+  return lazyMaps[key];
+}
+const SURFACES = {
+  venus: {
+    u: venusU, labels: ["Показати поверхню (радар Magellan)", "Сховати поверхню"], wait: "Завантажуємо радарну карту…",
+    load: () => lazyMap("venus_surface.jpg", "venusSurface").then(t => { venusU.surfMap.value = t; }),
+  },
+  titan: {
+    u: titanU, labels: ["Зазирнути під серпанок (інфрачервоний Cassini)", "Повернути серпанок"], wait: "Завантажуємо карту Cassini…",
+    load: () => Promise.all([lazyMap("titan_surface.jpg", "titanSurface"), lazyMap("titan_lakes.png", "titanLakes")])
+      .then(([t, l]) => { titanU.surfMap.value = t; titanU.lakeMap.value = l; }),
+  },
+};
+for (const k in SURFACES) Object.assign(SURFACES[k], { on: false, loading: false, failed: false, target: 0 });
+function surfaceLabel(sv) { return sv.loading ? sv.wait : sv.failed ? "Не вдалося завантажити карту. Спробувати ще раз" : sv.labels[sv.on ? 1 : 0]; }
+// The button may be rebuilt while a map loads (switching bodies), so it is looked up by id when the text changes.
+function refreshSurfaceButton(id) { const btn = document.getElementById("surface-" + id); if (btn) btn.textContent = surfaceLabel(SURFACES[id]); }
+function toggleSurface(id) {
+  const sv = SURFACES[id];
+  if (sv.loading) return;
+  sv.on = !sv.on; sv.failed = false;
+  if (sv.on && !sv.ready) {
+    sv.loading = true; refreshSurfaceButton(id);
+    sv.load().then(() => { sv.ready = true; sv.loading = false; sv.target = sv.on ? 1 : 0; refreshSurfaceButton(id); })
+      .catch(() => { sv.loading = false; sv.on = false; sv.failed = true; refreshSurfaceButton(id); });
     return;
   }
-  titanTarget = titanSurfaceOn ? 1 : 0;
-  btn.textContent = TITAN_BTN[titanSurfaceOn ? 1 : 0];
+  sv.target = sv.on ? 1 : 0;
+  refreshSurfaceButton(id);
+}
+// Background preload, unless the visitor asked the browser to save data.
+function preloadSurfaces() {
+  const c = navigator.connection;
+  if (c && (c.saveData || /2g/.test(c.effectiveType || ""))) return;
+  for (const k in SURFACES) SURFACES[k].load().then(() => { SURFACES[k].ready = true; }).catch(() => {});
 }
 
 /* ---------- Io: volcanic plumes and hot lava ---------- */
@@ -2307,19 +2317,12 @@ function renderInfo(b) {
   $("fact").textContent = data.fact;
   const act = $("actions");
   act.innerHTML = "";
-  act.hidden = !(b && (b.actions || b.id === "venus" || b.id === "titan"));
-  if (b && b.id === "venus") {
+  act.hidden = !(b && (b.actions || SURFACES[b.id]));
+  if (b && SURFACES[b.id]) {
     const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = venusSurfaceOn ? "Сховати поверхню" : "Показати поверхню (радар Magellan)";
-    btn.addEventListener("click", () => toggleVenusSurface(btn));
-    act.appendChild(btn);
-  }
-  if (b && b.id === "titan") {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = TITAN_BTN[titanSurfaceOn ? 1 : 0];
-    btn.addEventListener("click", () => toggleTitanSurface(btn));
+    btn.type = "button"; btn.id = "surface-" + b.id;
+    btn.textContent = surfaceLabel(SURFACES[b.id]);
+    btn.addEventListener("click", () => toggleSurface(b.id));
     act.appendChild(btn);
   }
   if (b && b.actions) {
@@ -3078,8 +3081,7 @@ function tick() {
   venusU.time.value += state.paused ? 0 : dt;
   venusU.drift.value.x += clampAbs(dDays * (1 / 4 - 1 / 243), 0.0015);
   venusU.drift.value.y += clampAbs(dDays * (1 / 3.7 - 1 / 243), 0.0017);
-  venusU.surface.value += (venusTarget - venusU.surface.value) * Math.min(1, dt * 2.5);
-  titanU.surface.value += (titanTarget - titanU.surface.value) * Math.min(1, dt * 2.5);
+  for (const k in SURFACES) { const sv = SURFACES[k]; sv.u.surface.value += (sv.target - sv.u.surface.value) * Math.min(1, dt * 2.5); }
 
   // Mars weather: season and planet-wide storms follow the real date; dust drifts with simulated time.
   marsU.time.value += state.paused ? 0 : dt;
@@ -3218,6 +3220,7 @@ async function build() {
   renderer.compile(scene, camera);
   await new Promise(r => requestAnimationFrame(r));
   loaderEl.classList.add("done");
+  setTimeout(preloadSurfaces, 5000);
   startFlight(() => ORIGIN, end, 3200, null);
   updateQualityButton();
   tick();
