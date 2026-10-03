@@ -98,7 +98,17 @@
     let shot = SHOTS[SHOTS.length - 1];
     for (const sh of SHOTS) if (t < sh[1]) { shot = sh; break; }
     const k = (t - shot[0]) / (shot[1] - shot[0]);
-    const { pos, look, up, fov } = shot[2](Math.min(1, Math.max(0, k)), ctx);
+    let { pos, look, up, fov } = shot[2](Math.min(1, Math.max(0, k)), ctx);
+    // No cut between the line-up and the sweep: the camera flies from the side view down to the shadow, the Earth
+    // growing gradually (a cut straight to the full, bright globe read as a white flash).
+    if (t > 14.5 && t < 20) {
+      const at = (sh, tt) => sh[2](Math.min(1, Math.max(0, (tt - sh[0]) / (sh[1] - sh[0]))), ctx);
+      const A = at(SHOTS[1], t), B = at(SHOTS[2], t), w = smooth((t - 14.5) / 5.5);
+      const dA = A.pos.distanceTo(C), dB = B.pos.distanceTo(C);
+      const dir = A.pos.clone().sub(C).normalize().lerp(B.pos.clone().sub(C).normalize(), w).normalize();
+      pos = C.clone().addScaledVector(dir, Math.exp(lerp(Math.log(dA), Math.log(dB), w)));
+      look = A.look.clone().lerp(B.look, w); up = n; fov = undefined;
+    }
     // Orbit lines and the asteroid/Kuiper belts (a dotted band when seen edge-on) would only clutter the shots.
     for (const x of r.BODIES) if (x.orbitLine) x.orbitLine.visible = false;
     r.asteroidBelt.visible = r.kuiperBelt.visible = false;

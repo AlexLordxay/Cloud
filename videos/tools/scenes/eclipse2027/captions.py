@@ -11,7 +11,7 @@ CAPTIONS = [
     (56.8, 63.6, 'cap', 'А в Україні Місяць закриє\nвід третини до половини Сонця'),
     (64.0, 66.8, 'cap', 'Дивись лише крізь\nспеціальні окуляри!'),
 ]
-CUTS = [8.0, 16.0, 41.0, 49.0, 56.0]
+CUTS = [8.0, 41.0, 49.0, 56.0]   # 16 s: no cut, the camera flies from the line-up down to the shadow
 END_CARD = 67.2
 END_TITLE = 'Подивись затемнення\nсам'
 # A clock (Kyiv time) over the shots where the shadow runs: windows on the video, the time comes from scene.json "clock".
