@@ -110,12 +110,13 @@ def frame(sc, i, src):
     img = im.convert('RGBA')
     draw_logo(img, 64, 170, min(1.0, t) * (1 if t < sc.END_CARD else max(0, 1 - (t - sc.END_CARD) / 0.5)) * 0.92, t)
     tick = getattr(sc, 'TICKER', None)
-    if tick:
-        # a year counter (e.g. a ten-year flight), eased like the scene's date
-        t0, t1, y0, y1 = tick
-        if t0 - 0.4 < t < t1 + 0.8:
+    # a year counter (e.g. a ten-year flight), eased like the scene's date; TICKER is one (t0, t1, y0, y1)
+    # or a list of (t0, t1, y0, y1, show from, show to)
+    for tk in ([tick + (tick[0] - 0.4, tick[1] + 0.8)] if isinstance(tick, tuple) else tick or []):
+        t0, t1, y0, y1, a, b = tk
+        if a < t < b:
             year = int(y0 + (y1 - y0) * ease((t - t0) / (t1 - t0)))
-            draw_block(img, str(year), f_tick, 330, fade(t, t0 - 0.4, t1 + 0.8, 0.4), fill=SUN)
+            draw_block(img, str(year), f_tick, 330, fade(t, a, b, 0.4), fill=SUN)
     clock = getattr(sc, 'CLOCK_SHOW', None)
     if clock:
         # time of day on the scene clock (scene.json "clock": [[video s, minutes after 00:00 UTC], ...]), linear between keys

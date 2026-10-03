@@ -1,0 +1,19 @@
+{
+  "title": "Оріоніди і Галлей",
+  "date": "1985-12-01T00:00:00Z",
+  "rate": 0,
+  "duration": 72,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "patches": [
+    [
+      "window.__rec = { state, byId,",
+      "window.__rec = { earthU, asteroidBelt, kuiperBelt, helioAU, toScene, state, byId,"
+    ],
+    [
+      "float flash = step(0.965, beat)",
+      "float flash = 0.0 * step(0.965, beat)"
+    ]
+  ]
+}
