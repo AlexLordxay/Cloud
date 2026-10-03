@@ -30,7 +30,7 @@
   // For the year counters in captions.py.
   window.__years = () => ({ twain: [year(DATES[2][1]), year(DATES[3][1])], back: [year(DATES[6][1]), year(DATES[7][1])] });
 
-  let marker = null, dust = null, meteors = null, orbit = null;
+  let marker = null, dust = null, meteors = null, orbit = null, tails = [];
 
   // The orbit, from the site's own orbit line: world points, cumulative length, and the point nearest the Earth crossing.
   function readOrbit(r) {
@@ -207,6 +207,10 @@
     const mg = mc.getContext('2d'); mg.strokeStyle = 'rgba(170,205,255,0.9)'; mg.lineWidth = 5; mg.beginPath(); mg.arc(64, 64, 52, 0, Math.PI * 2); mg.stroke();
     marker = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(mc), transparent: true, depthWrite: false, depthTest: false }));
     r.scene.add(marker);
+    // Halley's two tails (the first comet the site builds): hidden while years fly by, when the comet jumps so far
+    // between frames that the tails break up into flickering dashes.
+    tails = r.scene.children.filter(o => o.isPoints && o.material.uniforms && o.material.uniforms.color && o.geometry.attributes.alpha).slice(0, 2)
+      .map(o => ({ o, c: o.material.uniforms.color.value.clone() }));
     // No aurora: over night-time Ukraine it would compete with the meteors.
     const Ea = r.byId.earth;
     for (const m of Ea.tiltGroup.children) if (m.geometry && m.geometry.parameters && Math.abs(m.geometry.parameters.radius - Ea.radius * 1.025) < 1e-6) m.visible = false;
@@ -289,6 +293,9 @@
       x.orbitLine.visible = o > 0.003; x.orbitLine.material.opacity = o;
     }
     r.asteroidBelt.visible = r.kuiperBelt.visible = false;
+
+    const tailOn = t < 15 ? 1 : t < 61 ? 0 : smooth((t - 65.2) / 1.6);
+    for (const { o, c } of tails) { o.visible = tailOn > 0.002; o.material.uniforms.color.value.copy(c).multiplyScalar(tailOn); }
 
     // Dust and meteors.
     dust.u.fade.value = t < 25 ? 0 : t < 61 ? smooth((t - 25.6) / 3) * (1 - smooth((t - 40) / 3)) : 0.55 * smooth((t - 61.6) / 2);
