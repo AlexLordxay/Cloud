@@ -722,7 +722,14 @@ function earthMaterial(tex) {
     fragmentShader: NOISE_GLSL + CLOUDS_GLSL + SOLAR_GLSL + `
       uniform sampler2D dayMap; uniform sampler2D nightMap; uniform sampler2D specMap; uniform vec3 sunPos;
       uniform sampler2D detailMap; uniform vec4 detailBox; uniform float detailMix;
+      uniform sampler2D nightDetailMap; uniform vec4 nightBox; uniform float nightMix;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
+      // Weight of a streamed patch at this point: 0 outside its box, fading out towards the box edges.
+      float patchWeight(vec4 box, float mixv, out vec2 d) {
+        d = vec2(fract(vUv.x - box.x) / box.z, (vUv.y - box.y) / box.w);
+        vec2 edge = min(d, 1.0 - d);
+        return mixv * smoothstep(0.0, 0.06, min(edge.x, edge.y));
+      }
       void main() {
         vec3 N = normalize(vN);
         vec3 L = normalize(sunPos - vW);
@@ -730,16 +737,20 @@ function earthMaterial(tex) {
         float ndl = dot(N, L);
         float mu = clamp(dot(N, V), 0.0, 1.0);
         vec3 day = pow(texture2D(dayMap, vUv).rgb, vec3(2.2));
-        // Detailed patch around the point under the camera (streamed in), faded out towards its edges.
-        if (detailMix > 0.0) {
-          vec2 d = vec2(fract(vUv.x - detailBox.x) / detailBox.z, (vUv.y - detailBox.y) / detailBox.w);
-          vec2 edge = min(d, 1.0 - d);
-          float w = detailMix * smoothstep(0.0, 0.06, min(edge.x, edge.y));
-          if (w > 0.0) day = mix(day, pow(texture2D(detailMap, d).rgb, vec3(2.2)), w);
-        }
         vec3 night = pow(texture2D(nightMap, vUv).rgb, vec3(2.2));
         // Blurred mask (mip bias) so JPEG blocks and hard coastlines don't show under the glint.
         float ocean = smoothstep(0.35, 0.85, texture2D(specMap, vUv, 2.0).r);
+        // Detailed patches around the point under the camera (streamed in). Water on the day patch is one flat ocean
+        // tone, so it doubles as a sharp water mask for the Sun's glint.
+        vec2 d;
+        float w = detailMix > 0.0 ? patchWeight(detailBox, detailMix, d) : 0.0;
+        if (w > 0.0) {
+          vec3 t = texture2D(detailMap, d).rgb;
+          day = mix(day, pow(t, vec3(2.2)), w);
+          ocean = mix(ocean, smoothstep(0.05, 0.1, t.b - max(t.r, t.g)), w);
+        }
+        float wn = nightMix > 0.0 ? patchWeight(nightBox, nightMix, d) : 0.0;
+        if (wn > 0.0) night = mix(night, pow(texture2D(nightDetailMap, d).rgb, vec3(2.2)), wn);
         // Solar eclipse: the Moon's shadow dims the daylight.
         // Perceptual curve: the screen is non-linear, so a linear dimming would barely show.
         float eclipseLit = pow(1.0 - solarShadow(N), 2.2);
@@ -757,8 +768,8 @@ function earthMaterial(tex) {
         // Sun glint on the sea, shimmering as if on waves.
         vec3 H = normalize(L + V);
         float waves = 0.82 + 0.18 * snoise(vObj * 70.0 + vec3(0.0, time * 0.25, time * 0.18));
-        float glint = pow(max(dot(N, H), 0.0), 120.0) * 0.6 + pow(max(dot(N, H), 0.0), 900.0) * 0.4;
-        col += vec3(1.0, 0.92, 0.78) * glint * ocean * 0.22 * waves * lit * (1.0 - shadow);
+        float glint = pow(max(dot(N, H), 0.0), 260.0) * 0.45 + pow(max(dot(N, H), 0.0), 1400.0) * 0.35;
+        col += vec3(1.0, 0.92, 0.78) * glint * ocean * 0.16 * waves * lit * (1.0 - shadow);
 
         // Blue haze of the atmosphere towards the edge of the day side.
         col += vec3(0.18, 0.38, 0.85) * pow(1.0 - mu, 2.5) * lit * 0.55;
@@ -770,72 +781,86 @@ function earthMaterial(tex) {
 
 /* ---------- Detailed Earth ---------- */
 // NASA Blue Marble cut into a pyramid of 2048 px chunks (planetarium/tools/earth_detail.py): level 1 ≈ 4.9 km per pixel,
-// level 2 ≈ 2.4 km, level 3 ≈ 1.2 km. As the camera nears the Earth, the 2 × 2 chunks around the point below it are
-// drawn into one canvas texture that the surface shader blends over the base map. In economy mode (phones) the patch is
-// a single chunk, so the texture stays at 2048 px.
-const detailU = { detailMap: { value: null }, detailBox: { value: new THREE.Vector4(0, 0, 1, 1) }, detailMix: { value: 0 } };
-const DETAIL_GRID = { 1: [4, 2], 2: [8, 4], 3: [16, 8] };
-const earthDetail = { canvas: null, ctx: null, tex: null, key: "", want: "", images: new Map(), target: 0 };
-function detailImage(level, x, y) {
-  const k = `${level}/${x}_${y}`;
-  let e = earthDetail.images.get(k);
+// level 2 ≈ 2.4 km, level 3 ≈ 1.2 km, level 4 ≈ 600 m (land only), plus Black Marble city lights on the level-3 grid.
+// As the camera nears the Earth, the chunks around the point below it are drawn into a canvas texture (one for the day,
+// one for the night) that the surface shader blends over the base maps. Each patch is centred under the camera and
+// follows it in quarter-chunk steps; it spans 2 × 2 chunks, or one in economy mode (phones), to stay at 2048 px there.
+const detailU = {
+  detailMap: { value: null }, detailBox: { value: new THREE.Vector4(0, 0, 1, 1) }, detailMix: { value: 0 },
+  nightDetailMap: { value: null }, nightBox: { value: new THREE.Vector4(0, 0, 1, 1) }, nightMix: { value: 0 },
+};
+const DETAIL_GRID = { 1: [4, 2], 2: [8, 4], 3: [16, 8], 4: [32, 16], n3: [16, 8] };
+const detailImages = new Map();
+function detailImage(dir, x, y) {
+  const k = `${dir}/${x}_${y}`;
+  let e = detailImages.get(k);
   if (!e) {
     e = { img: new Image(), ready: false, failed: false };
     e.img.onload = () => { e.ready = true; };
-    e.img.onerror = () => { e.failed = true; };
+    e.img.onerror = () => { e.failed = true; };          // e.g. open ocean on level 4: the level below is used
     e.img.src = `textures/earth/${k}.jpg`;
-    earthDetail.images.set(k, e);
-    if (earthDetail.images.size > 16) earthDetail.images.delete(earthDetail.images.keys().next().value);   // keep a few recent
-  }
+    detailImages.set(k, e);
+  } else { detailImages.delete(k); detailImages.set(k, e); }   // most recently used last
+  if (detailImages.size > 24) for (const [kk, ee] of detailImages) { if (ee.ready) { detailImages.delete(kk); break; } }   // missing chunks stay remembered
   return e;
+}
+const patches = {
+  day: { key: "", dir: "", canvas: null, ctx: null, tex: null, map: detailU.detailMap, box: detailU.detailBox },
+  night: { key: "", dir: "", canvas: null, ctx: null, tex: null, map: detailU.nightDetailMap, box: detailU.nightBox },
+};
+// Bring patch P to the chunks of `dir` around map point (u, v). Returns "same", "new", "loading" or "failed".
+function drawPatch(P, dir, u, v, span) {
+  const [nx, ny] = DETAIL_GRID[dir], q = 0.25;
+  const ox = Math.round((u * nx - span / 2) / q) * q;
+  const oy = Math.max(0, Math.min(ny - span, Math.round((v * ny - span / 2) / q) * q));
+  const key = `${dir}:${ox}:${oy}:${span}`;
+  if (key === P.key) return "same";
+  const parts = [];
+  for (let cy = Math.floor(oy); cy < oy + span; cy++)
+    for (let cx = Math.floor(ox); cx < ox + span; cx++) parts.push({ cx, cy, e: detailImage(dir, ((cx % nx) + nx) % nx, cy) });
+  if (parts.some(p => p.e.failed)) return "failed";
+  if (!parts.every(p => p.e.ready)) return "loading";
+  const size = Math.min(2048 * span, renderer.capabilities.maxTextureSize);
+  if (!P.canvas || P.canvas.width !== size) {
+    if (P.tex) P.tex.dispose();
+    P.canvas = document.createElement("canvas");
+    P.canvas.width = P.canvas.height = size;
+    P.ctx = P.canvas.getContext("2d");
+    P.tex = new THREE.CanvasTexture(P.canvas);
+    P.tex.encoding = THREE.sRGBEncoding;
+    P.tex.anisotropy = maxAniso;
+    P.map.value = P.tex;
+  }
+  const h = size / span;
+  for (const p of parts) P.ctx.drawImage(p.e.img, (p.cx - ox) * h, (p.cy - oy) * h, h, h);
+  P.tex.needsUpdate = true;
+  P.key = key; P.dir = dir;
+  P.box.value.set((((ox % nx) + nx) % nx) / nx, 1 - (oy + span) / ny, span / nx, span / ny);
+  return "new";
 }
 function updateEarthDetail() {
   const E = byId.earth;
-  if (!E.mesh) { earthDetail.target = 0; }
-  else {
+  let dayOn = false, nightOn = false;
+  if (E.mesh) {
     // Height above the surface (Earth radii) → the level whose pixels match the screen.
     const alt = camera.position.distanceTo(E.world) / E.radius - 1;
     const need = innerHeight * renderer.getPixelRatio() / (2 * Math.tan(camera.fov * DEG / 2) * Math.max(alt, 0.01));
-    const level = need > 3100 ? 3 : need > 1550 ? 2 : need > 780 ? 1 : 0;
-    if (!level) earthDetail.target = 0;
-    else {
-      // Map position of the point under the camera.
+    const level = need > 6200 ? 4 : need > 3100 ? 3 : need > 1550 ? 2 : need > 780 ? 1 : 0;
+    if (level) {
+      // Map position of the point under the camera (v counted from the north pole).
       const l = tmp.copy(camera.position).sub(E.world).applyQuaternion(tmpQ.copy(E.mesh.getWorldQuaternion(tmpQ)).invert()).normalize();
-      const u = (Math.atan2(-l.z, l.x) / TAU + 1.5) % 1, v = 0.5 - Math.asin(Math.max(-1, Math.min(1, l.y))) / PI;   // v from the north
-      // The patch is span × span chunks centred on that point (in quarter-chunk steps), cut from the chunks it overlaps.
-      const [nx, ny] = DETAIL_GRID[level], span = eco ? 1 : 2, q = 0.25;
-      const ox = Math.round((u * nx - span / 2) / q) * q;
-      const oy = Math.max(0, Math.min(ny - span, Math.round((v * ny - span / 2) / q) * q));
-      const key = `${level}:${ox}:${oy}:${span}`;
-      const parts = [];
-      for (let cy = Math.floor(oy); cy < oy + span; cy++)
-        for (let cx = Math.floor(ox); cx < ox + span; cx++) parts.push({ cx, cy, e: detailImage(level, ((cx % nx) + nx) % nx, cy) });
-      if (key !== earthDetail.key && parts.every(p => p.e.ready || p.e.failed)) {
-        const size = Math.min(2048 * span, renderer.capabilities.maxTextureSize);
-        if (!earthDetail.canvas || earthDetail.canvas.width !== size) {
-          if (earthDetail.tex) earthDetail.tex.dispose();
-          earthDetail.canvas = document.createElement("canvas");
-          earthDetail.canvas.width = earthDetail.canvas.height = size;
-          earthDetail.ctx = earthDetail.canvas.getContext("2d");
-          earthDetail.tex = new THREE.CanvasTexture(earthDetail.canvas);
-          earthDetail.tex.encoding = THREE.sRGBEncoding;
-          earthDetail.tex.anisotropy = maxAniso;
-          detailU.detailMap.value = earthDetail.tex;
-        }
-        const h = size / span;
-        for (const p of parts) if (p.e.ready) earthDetail.ctx.drawImage(p.e.img, (p.cx - ox) * h, (p.cy - oy) * h, h, h);
-        earthDetail.tex.needsUpdate = true;
-        // A new level fades in; moving the patch within a level is seamless (same imagery, same place).
-        if (earthDetail.key.split(":")[0] !== String(level)) detailU.detailMix.value = 0;
-        earthDetail.key = key;
-        detailU.detailBox.value.set((((ox % nx) + nx) % nx) / nx, 1 - (oy + span) / ny, span / nx, span / ny);
-      }
-      earthDetail.target = earthDetail.key.startsWith(level + ":") ? 1 : 0;   // keep the current patch while the next one loads
+      const u = (Math.atan2(-l.z, l.x) / TAU + 1.5) % 1, v = 0.5 - Math.asin(Math.max(-1, Math.min(1, l.y))) / PI;
+      const span = eco ? 1 : 2;
+      // Finest level first; where its chunks don't exist (open ocean on level 4), the next one down.
+      for (let lv = level; lv >= 1; lv--) if (drawPatch(patches.day, String(lv), u, v, span) !== "failed") break;
+      dayOn = !!patches.day.key;                           // keep the current patch while the next one loads
+      if (level >= 2 && drawPatch(patches.night, "n3", u, v, span) !== "failed") nightOn = !!patches.night.key;
     }
   }
-  const m = detailU.detailMix;
-  m.value += (earthDetail.target - m.value) * 0.08;
-  if (m.value < 0.002) m.value = 0;
+  for (const [m, on] of [[detailU.detailMix, dayOn], [detailU.nightMix, nightOn]]) {
+    m.value += ((on ? 1 : 0) - m.value) * 0.08;
+    if (m.value < 0.002) m.value = 0;
+  }
 }
 
 function earthCloudMaterial(tex) {
