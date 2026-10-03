@@ -21,6 +21,8 @@
     CLOCK = cfg.clock || CLOCK;
     s.index = r.BODIES.indexOf(E); s.mode = 'focus'; s.flight = null;
     s.rate = 1;                                    // 1 min/s: Earth turns by the real sidereal time
+    // No aurora here: on the limb in daylight shots it reads as a stray flash.
+    for (const m of E.tiltGroup.children) if (m.geometry && m.geometry.parameters && Math.abs(m.geometry.parameters.radius - E.radius * 1.025) < 1e-6) m.visible = false;
     s.simMs = DAY + minutesAt(0) * 60000;
   };
 
@@ -29,19 +31,19 @@
     const l = new c.V(Math.cos(lat * D) * Math.cos(lon * D), Math.sin(lat * D), -Math.cos(lat * D) * Math.sin(lon * D));
     return l.applyQuaternion(c.q).multiplyScalar(c.R * h).add(c.C);
   }
-  // Where the shadow axis meets the Earth (or the nearest point of the limb when it misses), as [lat, lon];
-  // eased towards the previous value so the camera glides rather than jitters.
-  let spot = null;
-  function shadowSpot(r, qInv) {
-    const U = r.earthU, M = U.eMoon.value, A = U.eAxis.value, al0 = -M.dot(A);
-    const P = M.clone().addScaledVector(A, al0), miss = P.length();
-    const pt = miss < 1 ? M.clone().addScaledVector(A, al0 - Math.sqrt(1 - miss * miss)) : P.normalize();
-    const l = pt.normalize().applyQuaternion(qInv);
-    const now = [Math.asin(l.y) / D, Math.atan2(-l.z, l.x) / D];
-    if (!spot || Math.abs(now[1] - spot[1]) > 20) spot = now;
-    else spot = [lerp(spot[0], now[0], 0.08), lerp(spot[1], now[1], 0.08)];
-    return spot;
+  // The centre line of the shadow, as the site computes it (minutes after 00:00 UTC, lat, lon), every 15 minutes.
+  // The camera follows this fixed track through a smooth spline, rather than chasing the live shadow point (which
+  // crawls along the limb before the shadow touches the Earth and then jumps, swinging the camera).
+  const TRACK = [[510, 32.5, -31.7], [525, 36.0, -10.6], [540, 36.2, 1.5], [555, 35.0, 10.7], [570, 33.2, 18.1],
+    [585, 30.8, 24.3], [600, 28.0, 29.8], [615, 24.8, 34.7], [630, 21.3, 39.3], [645, 17.4, 43.9], [660, 13.2, 48.8],
+    [675, 8.4, 54.3], [690, 2.7, 61.6]];
+  function trackAt(m) {
+    const i = Math.max(0, Math.min(TRACK.length - 2, Math.floor((m - TRACK[0][0]) / 15)));
+    const f = (m - TRACK[i][0]) / 15, P = j => TRACK[Math.max(0, Math.min(TRACK.length - 1, j))];
+    const cr = (a, b, c2, d, t) => 0.5 * (2 * b + (c2 - a) * t + (2 * a - 5 * b + 4 * c2 - d) * t * t + (3 * b - a - 3 * c2 + d) * t * t * t);
+    return [1, 2].map(k => cr(P(i - 1)[k], P(i)[k], P(i + 1)[k], P(i + 2)[k], f));
   }
+
 
   // Shots: [start, end, fn(k, ctx) -> { pos, look, up? }].
   const SHOTS = [
@@ -55,10 +57,14 @@
       const pos = mid.clone().addScaledVector(side, lerp(9, 7.5, e) * c.R).addScaledVector(toSun, lerp(0.2, 0.9, e) * c.R).addScaledVector(c.n, 0.8 * c.R);
       return { pos, look: mid };
     }],
-    // The shadow comes in from the Atlantic at sunrise and sweeps over Spain and North Africa: the camera rides along.
+    // The shadow comes in from the Atlantic at sunrise and sweeps over Spain and North Africa: the camera rides along,
+    // a little north of the track and slightly behind, on the day side from the first frame.
     [16, 33, (k, c) => { const e = smooth(k), p = c.spot; return { pos: geo(c, p[0] + 7, p[1] - 3, lerp(2.8, 2.2, e)), look: geo(c, p[0], p[1], 0.2) }; }],
-    // Egypt, the longest totality: close in over the desert west of the Nile.
-    [33, 41, (k, c) => { const e = ease(k), p = c.spot; return { pos: geo(c, p[0] + 2.5, p[1] - 1, lerp(1.8, 1.6, e)), look: geo(c, p[0] - 1, p[1], 0.1) }; }],
+    // Egypt, the longest totality: the same move carries on and closes in over the desert west of the Nile.
+    [33, 41, (k, c) => {
+      const e = ease(k), p = c.spot;
+      return { pos: geo(c, p[0] + lerp(7, 2.5, e), p[1] - lerp(3, 1, e), lerp(2.2, 1.6, e)), look: geo(c, p[0] - lerp(0, 1, e), p[1], lerp(0.2, 0.1, e)) };
+    }],
     // From the ground's point of view: the Moon slides over the Sun and the corona comes out. Camera on the Sun–Moon line.
     [41, 49, (k, c) => {
       const e = ease(k);
@@ -88,7 +94,7 @@
     const mo = r.byId.moon, M = mo.world.clone(), Sun = r.byId.sun.world.clone(), sr = r.byId.sun.radius;
     // Distance behind the Moon where it just covers the Sun (the Moon's disc ~8 % larger, as on 2 August 2027).
     const dsm = Sun.distanceTo(M), behind = mo.radius * dsm / (sr * 1.08 - mo.radius);
-    const ctx = { C, q, n, M, Sun, R: E.radius, mr: mo.radius, behind, V, spot: shadowSpot(r, q.clone().invert()) };
+    const ctx = { C, q, n, M, Sun, R: E.radius, mr: mo.radius, behind, V, spot: trackAt(minutesAt(t)) };
     let shot = SHOTS[SHOTS.length - 1];
     for (const sh of SHOTS) if (t < sh[1]) { shot = sh; break; }
     const k = (t - shot[0]) / (shot[1] - shot[0]);
