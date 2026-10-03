@@ -310,7 +310,7 @@ button { font: inherit; color: inherit; }
   <p class="voice collapsible" id="voice" hidden></p>
   <p class="fact collapsible"><span>Цікавий факт</span><span id="fact"></span></p>
   <p class="hint collapsible">Тягніть, щоб обертати. Колесо миші або два пальці наближають. Стрілки ← → перемикають тіла, Esc повертає до огляду. Дату можна змінити вгорі ліворуч.</p>
-  <p class="credits collapsible">Карти поверхонь: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; Титан — інфрачервона карта Cassini VIMS/ISS (Seignovert et al. 2019, через pyvims, BSD-3); інші супутники, Церера й Плутон — мозаїки NASA/JPL/USGS (Galileo, Cassini, Voyager, Dawn, New Horizons), частина з приблизним кольором; детальна Земля зблизька — NASA Blue Marble (через freetiler, відкриті дані NASA); нічна Земля, океани й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>. Фобос і Деймос показано з умовною текстурою. Положення планет — за елементами орбіт JPL (найточніші для 1800–2050 рр.); супутники, крім Місяця й галілеєвих, розставлено умовно.</p>
+  <p class="credits collapsible">Карти поверхонь: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; Титан — інфрачервона карта Cassini VIMS/ISS (Seignovert et al. 2019, через pyvims, BSD-3); інші супутники, Церера й Плутон — мозаїки NASA/JPL/USGS (Galileo, Cassini, Voyager, Dawn, New Horizons), частина з приблизним кольором; детальна Земля зблизька — NASA Blue Marble (через freetiler, відкриті дані NASA); рельєф Місяця — карта нормалей <a href="https://github.com/CelestiaProject/CelestiaContent" target="_blank" rel="noopener">Celestia</a> за цифровою моделлю висот USGS (GPL-2.0+); нічна Земля, океани й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>. Фобос і Деймос показано з умовною текстурою. Положення планет — за елементами орбіт JPL (найточніші для 1800–2050 рр.); супутники, крім Місяця й галілеєвих, розставлено умовно.</p>
 </aside>
 
 <div class="catalog glass" id="catalog" data-tab="planets" hidden>
@@ -575,7 +575,7 @@ const TEXTURES = {
   uranus: "uranus.jpg", neptune: "neptune.jpg",
 };
 const LATE_TEXTURES = ["io", "europa", "ganymede", "callisto", "enceladus", "rhea", "miranda", "titania", "oberon", "triton", "ceres", "pluto", "charon", "haumea", "makemake", "eris"];
-const DATA_MAPS = new Set(["earthSpec", "earthClouds", "titanLakes"]);
+const DATA_MAPS = new Set(["earthSpec", "earthClouds", "titanLakes", "moonNormal"]);
 
 /* ---------- Three.js scene ---------- */
 const canvas = document.getElementById("scene");
@@ -1427,17 +1427,35 @@ const SOLAR_GLSL = `
     return clamp(pen * 0.92 + core * 0.08, 0.0, 1.0);
   }
 `;
+// Relief from the real terrain: a normal map derived from the USGS lunar DEM (Celestia), streamed in after start.
+const moonRelief = { nmap: { value: null }, nOn: { value: 0 } };
 function moonMaterial(tex) {
   return new THREE.ShaderMaterial({
-    uniforms: Object.assign({ map: { value: tex.moon } }, lunarU),
+    uniforms: Object.assign({ map: { value: tex.moon } }, lunarU, moonRelief),
+    extensions: { derivatives: true },
     vertexShader: EARTH_VERT,
     fragmentShader: `
       uniform sampler2D map; uniform vec3 sunPos; uniform vec3 lmCenter; uniform vec3 lAnti; uniform vec3 lCone;
+      uniform sampler2D nmap; uniform float nOn;
       varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying vec3 vObj;
       void main() {
         vec3 N = normalize(vN), L = normalize(sunPos - vW);
         vec3 albedo = pow(texture2D(map, vUv).rgb, vec3(2.2));
-        vec3 col = albedo * (0.02 + 1.25 * max(dot(N, L), 0.0));
+        // Terrain normal: the map stores east in red and south in green (its rows run north to south);
+        // the surface frame comes from screen-space derivatives (no tangents on the sphere).
+        vec3 Ns = N;
+        if (nOn > 0.0) {
+          vec3 t = texture2D(nmap, vUv).xyz * 2.0 - 1.0;
+          vec3 dp1 = dFdx(vW), dp2 = dFdy(vW);
+          vec2 du1 = dFdx(vUv), du2 = dFdy(vUv);
+          vec3 p2 = cross(dp2, N), p1 = cross(N, dp1);
+          vec3 T = p2 * du1.x + p1 * du2.x, B = p2 * du1.y + p1 * du2.y;
+          float k = inversesqrt(max(max(dot(T, T), dot(B, B)), 1e-20));
+          Ns = normalize(mix(N, mat3(T * k, B * k, N) * vec3(vec2(t.x, -t.y) * 2.5, t.z), nOn));   // ×2.5: slopes read at this scale
+        }
+        // No air: the light ends sharply at the terminator, where the relief stands out most.
+        float lit = max(dot(Ns, L), 0.0) * smoothstep(-0.03, 0.03, dot(N, L));
+        vec3 col = albedo * (0.02 + 1.25 * lit);
         // Earth's shadow: penumbra dims, umbra turns the Moon copper-red (sunlight bent through Earth's atmosphere).
         vec3 P = lmCenter + N * lCone.x;
         float al = dot(P, lAnti);
@@ -1447,7 +1465,7 @@ function moonMaterial(tex) {
           float umbra = 1.0 - smoothstep(ru - 0.015, ru + 0.015, perp);
           float pen = 1.0 - smoothstep(ru, rp, perp);
           col *= 1.0 - 0.6 * pen * (1.0 - umbra);
-          col = mix(col, albedo * vec3(0.55, 0.16, 0.07) * 0.5 * (0.35 + 0.65 * max(dot(N, L), 0.0)), umbra);
+          col = mix(col, albedo * vec3(0.55, 0.16, 0.07) * 0.5 * (0.35 + 0.65 * lit), umbra);
         }
         gl_FragColor = vec4(col, 1.0);
         #include <encodings_fragment>
@@ -3350,6 +3368,9 @@ async function build() {
   for (const key of LATE_TEXTURES) {
     loadTexture(key + ".jpg", key).then(t => applyLateTexture(key, t)).catch(() => {});
   }
+  loadTexture(eco ? "moon_normal_2k.jpg" : "moon_normal.jpg", "moonNormal").then(t => {
+    moonRelief.nmap.value = t; moonRelief.nOn.value = 1;
+  }).catch(() => {});
 }
 build();
 })();
