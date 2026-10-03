@@ -796,7 +796,8 @@ function detailImage(dir, x, y) {
   let e = detailImages.get(k);
   if (!e) {
     e = { img: new Image(), ready: false, failed: false };
-    e.img.onload = () => { e.ready = true; };
+    // Decode off the main thread before use, so drawing the patch doesn't stall a frame.
+    e.img.onload = () => { (e.img.decode ? e.img.decode() : Promise.resolve()).catch(() => {}).then(() => { e.ready = true; }); };
     e.img.onerror = () => { e.failed = true; };          // e.g. open ocean on level 4: the level below is used
     e.img.src = `textures/earth/${k}.jpg`;
     detailImages.set(k, e);
@@ -811,6 +812,14 @@ const patches = {
 // Bring patch P to the chunks of `dir` around map point (u, v). Returns "same", "new", "loading" or "failed".
 function drawPatch(P, dir, u, v, span) {
   const [nx, ny] = DETAIL_GRID[dir], q = 0.25;
+  // Stay put while the point under the camera is near the patch centre: moving means redrawing and re-uploading a big
+  // texture, so small camera movements (and the damped controls settling) must not make the patch jump back and forth.
+  if (P.dir === dir && P.span === span) {
+    const dx = ((u * nx - (P.ox + span / 2)) % nx + nx * 1.5) % nx - nx / 2;
+    const dy = v * ny - (P.oy + span / 2);
+    const atPole = (dy < 0 && P.oy === 0) || (dy > 0 && P.oy === ny - span);
+    if (Math.abs(dx) < 0.3 * span && (Math.abs(dy) < 0.3 * span || atPole)) return "same";
+  }
   const ox = Math.round((u * nx - span / 2) / q) * q;
   const oy = Math.max(0, Math.min(ny - span, Math.round((v * ny - span / 2) / q) * q));
   const key = `${dir}:${ox}:${oy}:${span}`;
@@ -834,7 +843,7 @@ function drawPatch(P, dir, u, v, span) {
   const h = size / span;
   for (const p of parts) P.ctx.drawImage(p.e.img, (p.cx - ox) * h, (p.cy - oy) * h, h, h);
   P.tex.needsUpdate = true;
-  P.key = key; P.dir = dir;
+  P.key = key; P.dir = dir; P.ox = ox; P.oy = oy; P.span = span;
   P.box.value.set((((ox % nx) + nx) % nx) / nx, 1 - (oy + span) / ny, span / nx, span / ny);
   return "new";
 }
