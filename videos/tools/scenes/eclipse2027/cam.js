@@ -69,10 +69,14 @@
     }],
     // On across Arabia, Yemen and Somalia, pulling back.
     [49, 56, (k, c) => { const e = smooth(k), p = c.spot; return { pos: geo(c, p[0] + 9, p[1] - 6, lerp(2.3, 3.0, e)), look: geo(c, p[0], p[1], 0.2) }; }],
-    // Ukraine: back to its partial eclipse; looking south from above Ukraine at the shadow over Libya.
-    [56, 64, (k, c) => { const e = ease(k); return { pos: geo(c, lerp(56, 54, e), lerp(30, 29, e), lerp(2.2, 2.5, e)), look: geo(c, lerp(38, 35, e), 28, 0.2) }; }],
-    // Wide: the whole lit Earth with the shadow, for the end card.
-    [64, 72, (k, c) => { const e = ease(k); return { pos: geo(c, lerp(42, 30, e), lerp(26, 22, e), lerp(2.6, 5.0, e)), look: c.C }; }],
+    // One unbroken move to the end: from above Ukraine (its partial eclipse), looking south at the shadow over Libya,
+    // the camera slowly rises and swings south until the whole lit Earth is in view for the end card. The height grows
+    // slowly at first, so Ukraine stays in the frame while its caption is on.
+    [56, 72, (k, c) => {
+      const e = ease(k), climb = smooth(Math.pow(k, 1.4));
+      const pos = geo(c, lerp(56, 32, e), lerp(30, 23, e), lerp(2.2, 5.0, climb));
+      return { pos, look: geo(c, lerp(38, 28, e), lerp(28, 24, e), 0.2).lerp(c.C, smooth((k - 0.25) / 0.6)) };
+    }],
   ];
 
   window.__recCam = () => {
