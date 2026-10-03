@@ -21,6 +21,12 @@ function recPage() {
   const rep = (x, y) => { if (!src.includes(x)) throw new Error('site changed, hook not found: ' + x.slice(0, 40)); src = src.replace(x, y); };
   rep('function tick() {', 'window.__rec = { state, byId, BODIES, camera, controls, renderer, scene, THREE, shadowU, titanU };\nfunction tick() {');
   rep('  renderer.render(scene, camera);\n  requestAnimationFrame(tick);', '  if (window.__recCam) window.__recCam();\n  renderer.render(scene, camera);\n  requestAnimationFrame(tick);');
+  // Videos: every map at full size from the first frame (the site starts at 2K and swaps in 4K near a body,
+  // which would show as a pop mid-shot), all loaded before the scene opens.
+  rep('return LARGE_MAPS.has(key) ? f.replace(".jpg", "_2k.jpg") : f;', 'return f;');
+  rep('const FIRST_MAPS = [', 'const FIRST_MAPS = Object.keys(TEXTURES) || [');
+  rep('function updateHiRes(dt) {', 'function updateHiRes(dt) { return;');
+  rep('loadTexture("moon_normal_2k.jpg", "moonNormal")', 'loadTexture("moon_normal.jpg", "moonNormal")');
   for (const [x, y] of cfg.patches || []) rep(x, y);
   return src;
 }

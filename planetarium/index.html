@@ -857,7 +857,8 @@ function updateEarthDetail() {
     const alt = camera.position.distanceTo(E.world) / E.radius - 1;
     const need = innerHeight * renderer.getPixelRatio() / (2 * Math.tan(camera.fov * DEG / 2) * Math.max(alt, 0.01));
     const level = need > 6200 ? 4 : need > 3100 ? 3 : need > 1550 ? 2 : need > 780 ? 1 : 0;
-    if (level) {
+    // Only while the Earth is in view (from the Moon it can be close behind the camera).
+    if (level && discOf("earth").inView) {
       // Map position of the point under the camera (v counted from the north pole).
       const l = tmp.copy(camera.position).sub(E.world).applyQuaternion(tmpQ.copy(E.mesh.getWorldQuaternion(tmpQ)).invert()).normalize();
       const u = (Math.atan2(-l.z, l.x) / TAU + 1.5) % 1, v = 0.5 - Math.asin(Math.max(-1, Math.min(1, l.y))) / PI;
@@ -2162,7 +2163,7 @@ function createCometFx(b) {
     const pts = new THREE.Points(g, m);
     pts.frustumCulled = false;
     scene.add(pts);
-    return { n, pos, alpha, size, g, vel: new Float32Array(n * 3), age: new Float32Array(n).fill(99), life: new Float32Array(n).fill(1), head: 0, acc: 0 };
+    return { n, pos, alpha, size, g, vel: new Float32Array(n * 3), age: new Float32Array(n).fill(99), life: new Float32Array(n).fill(1), head: 0, acc: 0, alive: 0, idle: false, fresh: false, pts };
   };
   const ion = makeTail(Math.round(1500 * T), 0x6fa8ff), dust = makeTail(Math.round(1900 * T * D), 0xffe2a8);
   const v = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3();
@@ -2172,10 +2173,15 @@ function createCometFx(b) {
     while (t.acc >= 1) {
       t.acc -= 1;
       const i = t.head; t.head = (t.head + 1) % t.n;
+      t.fresh = true;
       fn(i);
     }
   }
   function step(t, dt, baseA, grow, s0) {
+    // A tail with no live particles and nothing new: nothing to move or upload (most of the time, far from the Sun).
+    if (!t.alive && !t.fresh && t.idle) return;
+    t.fresh = false; t.pts.visible = true;
+    let alive = 0;
     for (let i = 0; i < t.n; i++) {
       if (t.age[i] >= t.life[i]) { t.alpha[i] = 0; continue; }
       t.age[i] += dt;
@@ -2184,7 +2190,11 @@ function createCometFx(b) {
       const x = t.age[i] / t.life[i];
       t.alpha[i] = baseA * Math.pow(Math.max(0, 1 - x), 1.5) * Math.min(1, t.age[i] * 10);
       t.size[i] = s0 * (1 + x * grow);
+      alive++;
     }
+    t.idle = !alive && !t.alive;   // one last pass uploads the cleared alphas, then it rests (and is not drawn)
+    if (t.idle) t.pts.visible = false;
+    t.alive = alive;
     t.g.attributes.position.needsUpdate = true;
     t.g.attributes.alpha.needsUpdate = true;
     t.g.attributes.size.needsUpdate = true;
@@ -2956,7 +2966,7 @@ $("date").addEventListener("change", e => {
   jumpTo(next.getTime());
 });
 // Swap one texture for another everywhere it is used (material slots and shader uniforms).
-function swapTexture(oldT, newT) {
+function swapTexture(oldT, newT, keepOld) {
   newT.wrapS = oldT.wrapS; newT.wrapT = oldT.wrapT; newT.needsUpdate = true;
   scene.traverse(o => {
     const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
@@ -2965,7 +2975,7 @@ function swapTexture(oldT, newT) {
       if (m.uniforms) for (const u of Object.values(m.uniforms)) if (u && u.value === oldT) u.value = newT;
     }
   });
-  oldT.dispose();
+  if (!keepOld) oldT.dispose();
 }
 function applyQuality(nextEco) {
   if (nextEco === eco) return;
@@ -2976,9 +2986,7 @@ function applyQuality(nextEco) {
     if (eco) m.defines.ECO = 1; else delete m.defines.ECO;
     m.needsUpdate = true;
   }
-  if (loadedTex) for (const key of LARGE_MAPS) {
-    loadTexture(texFile(key), key).then(t => { swapTexture(loadedTex[key], t); loadedTex[key] = t; }).catch(() => {});
-  }
+  // Maps: updateHiRes drops the 4096 px versions in economy mode and brings them back on approach otherwise.
 }
 const Q_LABEL = { auto: "авто", high: "висока", eco: "економна" };
 function updateQualityButton() {
@@ -3177,6 +3185,7 @@ function tick() {
   for (const b of BODIES) b.group.getWorldPosition(b.world);
   updateShadows(fine ? state.moonVec : null);
   updateEarthDetail();
+  updateHiRes(dt);
 
   // The Sun boils in real time (not sped up with the orbit clock).
   if (sunFx) sunFx.update(state.paused ? 0 : dt * (reduceMotion ? 0.3 : 1), camera);
@@ -3298,9 +3307,13 @@ function tick() {
       tmp.copy(b.world); tmp.y += b.radius + (b.parent ? 0.3 : 1.2);
       tmp.project(camera);
       vis = tmp.z < 1 && Math.abs(tmp.x) < 1.1 && Math.abs(tmp.y) < 1.1;
-      if (vis) b.tag.style.transform = `translate(${(tmp.x * 0.5 + 0.5) * w}px, ${(-tmp.y * 0.5 + 0.5) * h}px) translate(-50%, -100%)`;
+      if (vis) {
+        // Whole pixels, and the DOM is touched only when a label moves or shows/hides (style writes cost on phones).
+        const tr = `translate(${Math.round((tmp.x * 0.5 + 0.5) * w)}px, ${Math.round((-tmp.y * 0.5 + 0.5) * h)}px) translate(-50%, -100%)`;
+        if (tr !== b.tagTr) { b.tag.style.transform = tr; b.tagTr = tr; }
+      }
     }
-    b.tag.hidden = !vis;
+    if (b.tag.hidden !== !vis) b.tag.hidden = !vis;
   }
 
   renderer.render(scene, camera);
@@ -3318,21 +3331,75 @@ function loadTexture(file, key) {
     }, undefined, () => reject(new Error(file)));
   });
 }
+// Large maps start at 2048 px; the 4096 px version loads only while the camera is near that body (updateHiRes).
 function texFile(key) {
   const f = TEXTURES[key];
-  return eco && LARGE_MAPS.has(key) ? f.replace(".jpg", "_2k.jpg") : f;
+  return LARGE_MAPS.has(key) ? f.replace(".jpg", "_2k.jpg") : f;
+}
+// The scene opens once these are in (~1.8 MB); the other planets show their own colour for a moment, then their maps.
+const FIRST_MAPS = ["sun", "earth", "earthNight", "earthSpec", "earthClouds", "moon", "saturnRing"];
+const MAP_COLOUR = { mercury: "mercury", venus: "venus", mars: "mars", jupiter: "jupiter", saturn: "saturn", uranus: "uranus", neptune: "neptune" };
+function colourTexture(hex) {
+  const c = new THREE.Color(hex), t = new THREE.DataTexture(new Uint8Array([c.r * 255, c.g * 255, c.b * 255, 255]), 1, 1);
+  t.encoding = THREE.sRGBEncoding; t.needsUpdate = true;
+  return t;
 }
 let loadedTex = null;
 function loadTextures() {
-  const keys = Object.keys(TEXTURES), tex = {};
+  const tex = {};
   loadedTex = tex;
   let done = 0;
-  return Promise.all(keys.map(k => loadTexture(texFile(k), k).then(t => {
+  for (const k in MAP_COLOUR) tex[k] = colourTexture(byId[MAP_COLOUR[k]].dot);
+  return Promise.all(FIRST_MAPS.map(k => loadTexture(texFile(k), k).then(t => {
     tex[k] = t;
     done++;
-    $("barFill").style.width = `${(done / keys.length) * 100}%`;
-    $("loadText").textContent = `Завантажено карт: ${done} з ${keys.length}`;
+    $("barFill").style.width = `${(done / FIRST_MAPS.length) * 100}%`;
+    $("loadText").textContent = `Завантажено карт: ${done} з ${FIRST_MAPS.length}`;
   }))).then(() => tex);
+}
+// 4096 px maps only where they show: a body in view whose disc is over ~420 device pixels across its radius
+// (a 2048 px map has ~1000 texels over the visible hemisphere), for at most two bodies; back to 2048 px when it shrinks
+// below ~260 px or two others are bigger. A 4K map takes ~40 MB of video memory, and phones have little.
+// One download at a time; never in economy mode, never mid-flight.
+const HIRES = { mercury: "mercury", venus: "venus", earth: "earth", moon: "moon", moonNormal: "moon", mars: "mars", jupiter: "jupiter", saturn: "saturn" };
+const HIRES_FILE = { moonNormal: "moon_normal.jpg" };
+const loRes = {}, hiRes = {};
+let hiBusy = false, hiCheck = 0;
+const hiV = new THREE.Vector3();
+// Radius on screen in device pixels, and whether the disc is in view.
+function discOf(id) {
+  const b = byId[id], d = Math.max(camera.position.distanceTo(b.world), b.radius * 1.0001);
+  const px = b.radius / (d * Math.tan(camera.fov * DEG / 2)) * renderer.domElement.height / 2;
+  hiV.copy(b.world).project(camera);
+  const m = 1 + 2 * px / renderer.domElement.height;
+  return { px, inView: hiV.z < 1 && Math.abs(hiV.x) < m * 1.5 && Math.abs(hiV.y) < m };
+}
+function updateHiRes(dt) {
+  if (!loadedTex || (hiCheck -= dt) > 0) return;
+  hiCheck = 0.3;
+  const keys = Object.keys(HIRES).filter(k => loadedTex[k] && loadedTex[k].image && loadedTex[k].image.width > 1);
+  const disc = {};
+  for (const k of keys) disc[HIRES[k]] = disc[HIRES[k]] || discOf(HIRES[k]);
+  const big = Object.keys(disc).sort((a, b) => disc[b].px - disc[a].px).slice(0, 2);
+  for (const k of keys) {
+    const c = disc[HIRES[k]];
+    if (hiRes[k] && (eco || c.px < 260 || !big.includes(HIRES[k]))) {
+      swapTexture(hiRes[k], loRes[k]);
+      loadedTex[k] = loRes[k]; hiRes[k] = null;
+    }
+  }
+  if (eco || hiBusy || state.flight) return;
+  const want = keys.filter(k => !hiRes[k] && big.includes(HIRES[k]) && disc[HIRES[k]].inView && disc[HIRES[k]].px > 420)
+    .sort((a, b) => disc[HIRES[b]].px - disc[HIRES[a]].px)[0];
+  if (!want) return;
+  hiBusy = true;
+  loadTexture(HIRES_FILE[want] || TEXTURES[want], want).then(t => {
+    hiBusy = false;
+    if (eco || hiRes[want] || discOf(HIRES[want]).px < 260) { t.dispose(); return; }
+    loRes[want] = loadedTex[want];
+    swapTexture(loRes[want], t, true);
+    loadedTex[want] = hiRes[want] = t;
+  }).catch(() => { hiBusy = false; });
 }
 async function build() {
   let tex;
@@ -3364,12 +3431,16 @@ async function build() {
   updateQualityButton();
   tick();
 
-  // Moons and dwarf planets: shown in their own colour until the map arrives.
+  // The other planets: their own colour until the map arrives.
+  for (const key in MAP_COLOUR) {
+    loadTexture(texFile(key), key).then(t => { swapTexture(tex[key], t); tex[key] = t; }).catch(() => {});
+  }
+  // Moons and dwarf planets: likewise.
   for (const key of LATE_TEXTURES) {
     loadTexture(key + ".jpg", key).then(t => applyLateTexture(key, t)).catch(() => {});
   }
-  loadTexture(eco ? "moon_normal_2k.jpg" : "moon_normal.jpg", "moonNormal").then(t => {
-    moonRelief.nmap.value = t; moonRelief.nOn.value = 1;
+  loadTexture("moon_normal_2k.jpg", "moonNormal").then(t => {
+    moonRelief.nmap.value = tex.moonNormal = t; moonRelief.nOn.value = 1;
   }).catch(() => {});
 }
 build();
