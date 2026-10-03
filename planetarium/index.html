@@ -810,7 +810,7 @@ const patches = {
   night: { key: "", dir: "", canvas: null, ctx: null, tex: null, map: detailU.nightDetailMap, box: detailU.nightBox },
 };
 // Bring patch P to the chunks of `dir` around map point (u, v). Returns "same", "new", "loading" or "failed".
-function drawPatch(P, dir, u, v, span) {
+function drawPatch(P, dir, u, v, span, maxSize) {
   const [nx, ny] = DETAIL_GRID[dir], q = 0.25;
   // Stay put while the point under the camera is near the patch centre: moving means redrawing and re-uploading a big
   // texture, so small camera movements (and the damped controls settling) must not make the patch jump back and forth.
@@ -829,7 +829,7 @@ function drawPatch(P, dir, u, v, span) {
     for (let cx = Math.floor(ox); cx < ox + span; cx++) parts.push({ cx, cy, e: detailImage(dir, ((cx % nx) + nx) % nx, cy) });
   if (parts.some(p => p.e.failed)) return "failed";
   if (!parts.every(p => p.e.ready)) return "loading";
-  const size = Math.min(2048 * span, renderer.capabilities.maxTextureSize);
+  const size = Math.min(2048 * span, maxSize, renderer.capabilities.maxTextureSize);
   if (!P.canvas || P.canvas.width !== size) {
     if (P.tex) P.tex.dispose();
     P.canvas = document.createElement("canvas");
@@ -837,7 +837,9 @@ function drawPatch(P, dir, u, v, span) {
     P.ctx = P.canvas.getContext("2d");
     P.tex = new THREE.CanvasTexture(P.canvas);
     P.tex.encoding = THREE.sRGBEncoding;
-    P.tex.anisotropy = maxAniso;
+    // No mipmaps: the level is chosen to match the screen, and rebuilding them on every update is what stalls phones.
+    P.tex.generateMipmaps = false;
+    P.tex.minFilter = THREE.LinearFilter;
     P.map.value = P.tex;
   }
   const h = size / span;
@@ -861,9 +863,15 @@ function updateEarthDetail() {
       const u = (Math.atan2(-l.z, l.x) / TAU + 1.5) % 1, v = 0.5 - Math.asin(Math.max(-1, Math.min(1, l.y))) / PI;
       const span = eco ? 1 : 2;
       // Finest level first; where its chunks don't exist (open ocean on level 4), the next one down.
-      for (let lv = level; lv >= 1; lv--) if (drawPatch(patches.day, String(lv), u, v, span) !== "failed") break;
+      let r = "";
+      for (let lv = level; lv >= 1; lv--) if ((r = drawPatch(patches.day, String(lv), u, v, span, 4096)) !== "failed") break;
       dayOn = !!patches.day.key;                           // keep the current patch while the next one loads
-      if (level >= 2 && drawPatch(patches.night, "n3", u, v, span) !== "failed") nightOn = !!patches.night.key;
+      // City lights: only when the night side is below (the patch reaches ~22° around the point), never in the same
+      // frame as a day update, and in a smaller texture (lights don't need more).
+      const sunUp = tmp2.copy(camera.position).sub(E.world).normalize().dot(tA.copy(E.world).negate().normalize());
+      if (level >= 2 && sunUp < 0.5 && r !== "new") {
+        if (drawPatch(patches.night, "n3", u, v, span, 2048) !== "failed") nightOn = !!patches.night.key;
+      } else nightOn = level >= 2 && sunUp < 0.5 && !!patches.night.key;
     }
   }
   for (const [m, on] of [[detailU.detailMix, dayOn], [detailU.nightMix, nightOn]]) {
