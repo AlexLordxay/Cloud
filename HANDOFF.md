@@ -9,7 +9,7 @@
   (акаунт автора lordxay576@gmail.com). Гілка **`main` = живий сайт** (Production branch), робоча гілка = preview-адреса.
   Налаштування — `wrangler.jsonc` у корені (віддає папку `planetarium/`, без збирання; `planetarium/.assetsignore`).
   Картка для соцмереж: `planetarium/og.jpg` (робиться `planetarium/tools/og_card.py` з кадру `videos/tools` сцени `ogcard`);
-  мета-теги в `index.html` мають абсолютні адреси workers.dev — **після купівлі домену замінити на nebozvid.com.ua**.
+  мета-теги в `index.html` мають абсолютні адреси https://nebozvid.com.ua/ (замінено 06.10.2026).
   **Домен nebozvid.com.ua куплено 06.10.2026 у HostiQ** (кабінет автора; продовження до 06.10.2027, ~713 грн/рік).
   Домен додано в Cloudflare (Free). NS Cloudflare: lana.ns.cloudflare.com, vern.ns.cloudflare.com → вписати в HostiQ → Workers → nebozvid → Domains →
   Custom domain → замінити адреси workers.dev у мета-тегах index.html на https://nebozvid.com.ua/.
