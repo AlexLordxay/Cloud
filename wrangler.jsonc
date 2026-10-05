@@ -1,0 +1,6 @@
+// Cloudflare: the site is the static files in planetarium/ (no build step).
+{
+  "name": "nebozvid",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "./planetarium" }
+}
