@@ -30,20 +30,20 @@ def text(s, fnt, x, y, fill):
     ImageDraw.Draw(img).text((x, y), s, font=fnt, fill=fill)
 
 # Logo with its star over the "ı" (static: no twinkle in a still).
-size = 128
+size = 112
 lay, (sx, sy) = C.logo_layer(size)
 sf = ImageFont.truetype(C.F_STAR, int(size * 0.36))
 glow = Image.new('RGBA', lay.size, (0, 0, 0, 0)); ImageDraw.Draw(glow).text((sx, sy), '✦', font=sf, fill=(170, 205, 255, 255), anchor='mm')
 lay.alpha_composite(glow.filter(ImageFilter.GaussianBlur(size * 0.08)))
 ImageDraw.Draw(lay).text((sx, sy), '✦', font=sf, fill=(255, 255, 255, 255), anchor='mm')
 pad = int(size * 0.6)
-lx, ly = 72 - pad, 170 - pad
+lx, ly = 64 - pad, 190 - pad
 shadow = Image.new('RGBA', (W, H), (0, 0, 0, 0)); shadow.paste((0, 0, 0, 255), (lx, ly + 3), lay.getchannel('A'))
 img.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(10)))
 img.alpha_composite(lay, (lx, ly))
 
-text('Сонячна система в 3D', C.font('Commissioner.ttf', 40, 500), 78, 330, (233, 237, 246, 255))
-text('на реальних даних · будь-яка дата', C.font('Commissioner.ttf', 28, 400), 80, 392, (165, 176, 200, 255))
+text('Сонячна система в 3D', C.font("Commissioner.ttf", 36, 500), 70, 330, (233, 237, 246, 255))
+text('на реальних даних · будь-яка дата', C.font("Commissioner.ttf", 25, 400), 71, 384, (165, 176, 200, 255))
 
 img.convert('RGB').save(out, 'JPEG', quality=88, optimize=True, progressive=True)
 print(out, os.path.getsize(out) // 1024, 'KB')
