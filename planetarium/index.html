@@ -108,12 +108,55 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
-// The app needs the 3D library; without it, say so instead of a black screen.
-
+// Fallback screen: instead of a black or frozen page, say what went wrong and what to try.
+// Shown when the 3D library or WebGL is missing, when start-up fails, or when the device drops the 3D context.
 const loaderEl = document.getElementById("loader");
-if (!window.THREE || !THREE.OrbitControls) {
-  loaderEl.innerHTML = '<span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span><p class="error">Не вдалося завантажити 3D-бібліотеку. Перевірте з\'єднання з інтернетом і оновіть сторінку.</p>';
+const FALLBACK = {
+  lib: "Не вдалося завантажити 3D-бібліотеку. Перевірте з'єднання з інтернетом і оновіть сторінку.",
+  webgl: "Цей браузер або пристрій не підтримує 3D-графіку (WebGL), тож модель не може запуститися. Спробуйте інший браузер — Safari, Chrome чи Firefox — або оновіть систему. На комп'ютері перевірте, чи ввімкнене апаратне прискорення в налаштуваннях браузера.",
+  error: "Щось пішло не так під час запуску. Оновіть сторінку. Якщо не допоможе — спробуйте інший браузер або оновіть систему.",
+  lost: "Пристрою забракло пам'яті для 3D-графіки. Оновіть сторінку — сайт увімкне економний режим, легший для телефона.",
+};
+let fallbackShown = false;
+function showFallback(reason, detail) {
+  if (fallbackShown) return;
+  fallbackShown = true;
+  const eco = reason === "lost";
+  loaderEl.classList.remove("done");
+  loaderEl.innerHTML = `<div class="fallback">
+    <span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span>
+    <p>${detail || FALLBACK[reason] || FALLBACK.error}</p>
+    <button type="button" class="more" id="reload">${eco ? "Оновити в економному режимі" : "Оновити сторінку"}</button>
+    <img src="og.jpg" alt="Так виглядає Небозвід: Сатурн з кільцями" width="1200" height="630">
+  </div>`;
+  document.getElementById("reload").addEventListener("click", () => {
+    if (eco) try { localStorage.setItem("planetarium.quality", "eco"); } catch (e) { /* not saved */ }
+    location.reload();
+  });
 }
+function hasWebGL() {
+  try {
+    const c = document.createElement("canvas"), gl = c.getContext("webgl2") || c.getContext("webgl");
+    if (gl && gl.getExtension("WEBGL_lose_context")) gl.getExtension("WEBGL_lose_context").loseContext();
+    return !!gl;
+  } catch (e) { return false; }
+}
+if (!window.THREE || !THREE.OrbitControls) showFallback("lib");
+else if (!hasWebGL()) showFallback("webgl");
+// Any error before the scene opens (old browser, broken start) — the fallback instead of an endless loading screen.
+const startFailed = e => {
+  // Only our own scripts and the 3D library count (not, say, a browser extension).
+  const f = e && e.filename;
+  if (f && !f.startsWith(location.origin) && !f.includes("cdn.jsdelivr.net")) return;
+  if (!loaderEl.classList.contains("done")) showFallback("error");
+};
+addEventListener("error", startFailed);
+addEventListener("unhandledrejection", startFailed);
+// A slow connection: say so, so the loading screen doesn't look stuck.
+setTimeout(() => {
+  const t = document.getElementById("loadText");
+  if (t && !loaderEl.classList.contains("done")) t.textContent += " З'єднання повільне — ще трохи…";
+}, 20000);
 </script>
 <script src="js/data.js"></script>
 <script src="js/scene.js"></script>

@@ -639,7 +639,7 @@ async function build() {
   try {
     tex = await loadTextures();
   } catch (err) {
-    loaderEl.innerHTML = `<span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span><p class="error">Не вдалося завантажити карту поверхні (${err.message}). Оновіть сторінку. Якщо відкриваєте файл локально, запустіть його через вебсервер, наприклад: python3 -m http.server</p>`;
+    showFallback("textures", `Не вдалося завантажити карту поверхні (${err.message}). Оновіть сторінку. Якщо відкриваєте файл локально, запустіть його через вебсервер, наприклад: python3 -m http.server`);
     return;
   }
   const jd0 = jdOf(state.simMs);

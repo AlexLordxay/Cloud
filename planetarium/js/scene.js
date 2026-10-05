@@ -5,6 +5,8 @@
 /* ---------- Three.js scene ---------- */
 const canvas = document.getElementById("scene");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// Phones can drop the 3D context when memory runs short: offer a reload in economy mode instead of a black screen.
+canvas.addEventListener("webglcontextlost", e => { e.preventDefault(); showFallback("lost"); });
 /* ---------- Quality ---------- */
 // "Economy" swaps 4K maps for 2K ones, lowers the render resolution on dense screens and simplifies the heaviest shaders.
 const Q_KEY = "planetarium.quality";
