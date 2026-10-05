@@ -8,6 +8,8 @@
 - **Живий сайт: Cloudflare (Workers, безкоштовно) — https://nebozvid.lordxay576.workers.dev**, проєкт `nebozvid`
   (акаунт автора lordxay576@gmail.com). Гілка **`main` = живий сайт** (Production branch), робоча гілка = preview-адреса.
   Налаштування — `wrangler.jsonc` у корені (віддає папку `planetarium/`, без збирання; `planetarium/.assetsignore`).
+  Картка для соцмереж: `planetarium/og.jpg` (робиться `planetarium/tools/og_card.py` з кадру `videos/tools` сцени `ogcard`);
+  мета-теги в `index.html` мають абсолютні адреси workers.dev — **після купівлі домену замінити на nebozvid.com.ua**.
   Зміни в main переносимо лише після «так» автора: `git push origin HEAD:main`. Далі — домен nebozvid.com.ua (Custom domains).
 - **Тестова версія для автора: https://claude.ai/artifact/87EQm3PuXEGG2dxK3rNqrv** (claude.ai artifact).
   Порядок роботи: зміни → робоча гілка → викласти на це посилання → автор перевіряє на iPhone → «так» → `git push origin HEAD:main`.
