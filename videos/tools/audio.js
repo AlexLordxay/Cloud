@@ -2,7 +2,7 @@
 //
 //   node audio.js <scene>        -> work/<scene>/audio.wav
 //
-// The music and voices are taken straight from planetarium/index.html, so the video sounds exactly like the site.
+// The music and voices are taken straight from the site (planetarium/js/audio.js), so the video sounds exactly like the site.
 const fs = require('fs'), path = require('path');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
 
@@ -21,7 +21,7 @@ function fnSource(src, fname) {
 }
 
 (async () => {
-  const site = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
+  const site = fs.readFileSync(path.join(SITE, 'js/audio.js'), 'utf8');
   const code = fnSource(site, 'createAmbientMusic') + '\n' + fnSource(site, 'createPlanetVoices');
   const br = await chromium.launch();
   const p = await br.newPage();

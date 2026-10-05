@@ -3,12 +3,13 @@
 //   node rec.js <scene> video [t0] [t1]    -> work/<scene>/frames/f_00000.jpg … (default: whole scene)
 //   node rec.js <scene> stills 5,12,30     -> work/<scene>/still_<t>.jpg (quick storyboard)
 //
-// The page is the real site (planetarium/index.html) with two small hooks added in memory, served by a built-in
+// The page is the real site (planetarium/index.html with its css/ and js/ inline, see site.js) with two small hooks added in memory, served by a built-in
 // static server; the scene's cam.js is injected before the page loads and drives the camera.
 const fs = require('fs'), path = require('path'), http = require('http');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
 
-const TOOLS = __dirname, SITE = path.resolve(TOOLS, '../../planetarium'), THREE_DIR = path.join(TOOLS, 'node_modules/three');
+const { SITE, sitePage } = require('./site');
+const TOOLS = __dirname, THREE_DIR = path.join(TOOLS, 'node_modules/three');
 const [sceneName, mode = 'video', a, b] = process.argv.slice(2);
 if (!sceneName) { console.log('usage: node rec.js <scene> video [t0 t1] | stills t1,t2,…'); process.exit(1); }
 const SCENE = path.join(TOOLS, 'scenes', sceneName), WORK = path.join(TOOLS, 'work', sceneName);
@@ -17,7 +18,7 @@ const FPS = cfg.fps || 30, W = cfg.width || 720, H = cfg.height || 1280;
 
 // The site with the recording hooks: expose a few internals, and let the scene move the camera right before rendering.
 function recPage() {
-  let src = fs.readFileSync(path.join(SITE, 'index.html'), 'utf8');
+  let src = sitePage();
   const rep = (x, y) => { if (!src.includes(x)) throw new Error('site changed, hook not found: ' + x.slice(0, 40)); src = src.replace(x, y); };
   rep('function tick() {', 'window.__rec = { state, byId, BODIES, camera, controls, renderer, scene, THREE, shadowU, titanU };\nfunction tick() {');
   rep('  renderer.render(scene, camera);\n  requestAnimationFrame(tick);', '  if (window.__recCam) window.__recCam();\n  renderer.render(scene, camera);\n  requestAnimationFrame(tick);');
