@@ -5,7 +5,11 @@
 - Автор не програмує: дає ідеї, перевіряє на iPhone, кидає скріншоти. Код, тести й відео робить асистент.
 - **Правило: перед початком будь-якої нової роботи — спитати підтвердження.** Ефекти робити стримано («не переборщити»).
 - Репозиторій `alexlordxay/cloud`, робоча гілка **`claude/ukrainian-conversation-tvi8yz`** (усе закомічено). PR не створювали.
-- Живий сайт (тимчасово, як claude.ai artifact): https://claude.ai/artifact/87EQm3PuXEGG2dxK3rNqrv
+- **Живий сайт: Cloudflare (Workers, безкоштовно) — https://nebozvid.lordxay576.workers.dev**, проєкт `nebozvid`
+  (акаунт автора lordxay576@gmail.com). Гілка **`main` = живий сайт** (Production branch), робоча гілка = preview-адреса.
+  Налаштування — `wrangler.jsonc` у корені (віддає папку `planetarium/`, без збирання; `planetarium/.assetsignore`).
+  Зміни в main переносимо лише після «так» автора: `git push origin HEAD:main`. Далі — домен nebozvid.com.ua (Custom domains).
+- Старий тимчасовий сайт (claude.ai artifact): https://claude.ai/artifact/87EQm3PuXEGG2dxK3rNqrv
   Публікується файл, зібраний з `planetarium/index.html` без `<!doctype>…<body>`; текстури — окремі файли артефакту.
 
 ## Що це
