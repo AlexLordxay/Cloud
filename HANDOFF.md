@@ -66,7 +66,7 @@
 картка для соцмереж + опис для Google, запасний екран, домен куплено й NS переведено на Cloudflare.
 
 1. ✅ **Домен під'єднано** (06.10.2026): https://nebozvid.com.ua і www — Custom domains воркера nebozvid; мета-теги на новій адресі.
-   Залишилось: перевірити превʼю в Telegram з новою адресою (на workers.dev Telegram превʼю не показував).
+   Превʼю в Telegram на nebozvid.com.ua працює (картинка й опис); на workers.dev Telegram превʼю не показує.
 2. ⭐ **Посилання на тіла** (`#saturn`, `#67p`…) + окремі адреси з власними картками для відео (`/saturn`, `/67p`,
    `/eclipse`, `/orionids`) — під кожне відео своє посилання.
 3. ✅ **Іконка** — варіант A, зірочка ✦ (`tools/icons.py` → favicon.ico, icon.svg, apple-touch-icon.png).
