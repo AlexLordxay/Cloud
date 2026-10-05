@@ -11,7 +11,7 @@
   Картка для соцмереж: `planetarium/og.jpg` (робиться `planetarium/tools/og_card.py` з кадру `videos/tools` сцени `ogcard`);
   мета-теги в `index.html` мають абсолютні адреси workers.dev — **після купівлі домену замінити на nebozvid.com.ua**.
   **Домен nebozvid.com.ua куплено 06.10.2026 у HostiQ** (кабінет автора; продовження до 06.10.2027, ~713 грн/рік).
-  Далі: додати домен у Cloudflare (Add a domain, Free) → вписати NS Cloudflare у HostiQ → Workers → nebozvid → Domains →
+  Домен додано в Cloudflare (Free). NS Cloudflare: lana.ns.cloudflare.com, vern.ns.cloudflare.com → вписати в HostiQ → Workers → nebozvid → Domains →
   Custom domain → замінити адреси workers.dev у мета-тегах index.html на https://nebozvid.com.ua/.
   Зміни в main переносимо лише після «так» автора: `git push origin HEAD:main`. Далі — домен nebozvid.com.ua (Custom domains).
 - **Тестова версія для автора: https://claude.ai/artifact/87EQm3PuXEGG2dxK3rNqrv** (claude.ai artifact).
