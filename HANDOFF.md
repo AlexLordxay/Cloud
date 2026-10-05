@@ -5,7 +5,7 @@
 - Автор не програмує: дає ідеї, перевіряє на iPhone, кидає скріншоти. Код, тести й відео робить асистент.
 - **Правило: перед початком будь-якої нової роботи — спитати підтвердження.** Ефекти робити стримано («не переборщити»).
 - Репозиторій `alexlordxay/cloud`, робоча гілка **`claude/ukrainian-conversation-tvi8yz`** (усе закомічено). PR не створювали.
-- **Живий сайт: Cloudflare (Workers, безкоштовно) — https://nebozvid.lordxay576.workers.dev**, проєкт `nebozvid`
+- **Живий сайт: https://nebozvid.com.ua** (Cloudflare Workers, безкоштовно; запасна адреса https://nebozvid.lordxay576.workers.dev), проєкт `nebozvid`
   (акаунт автора lordxay576@gmail.com). Гілка **`main` = живий сайт** (Production branch), робоча гілка = preview-адреса.
   Налаштування — `wrangler.jsonc` у корені (віддає папку `planetarium/`, без збирання; `planetarium/.assetsignore`).
   Картка для соцмереж: `planetarium/og.jpg` (робиться `planetarium/tools/og_card.py` з кадру `videos/tools` сцени `ogcard`);
@@ -65,9 +65,8 @@
 Зроблено 5–6.10: Cloudflare (живий сайт), код розкладено по файлах, підказка новачкам, зближення тачпадом,
 картка для соцмереж + опис для Google, запасний екран, домен куплено й NS переведено на Cloudflare.
 
-1. ⭐ **Під'єднати домен** (коли Cloudflare покаже Active / прийде лист «is now active» на lordxay576@gmail.com):
-   Cloudflare → nebozvid.com.ua → «Connect Worker» → nebozvid (Custom domain), плюс www → переадресація на основний.
-   Асистент: замінити адреси workers.dev у мета-тегах на https://nebozvid.com.ua/, перевірити превʼю в Telegram.
+1. ✅ **Домен під'єднано** (06.10.2026): https://nebozvid.com.ua і www — Custom domains воркера nebozvid; мета-теги на новій адресі.
+   Залишилось: перевірити превʼю в Telegram з новою адресою (на workers.dev Telegram превʼю не показував).
 2. ⭐ **Посилання на тіла** (`#saturn`, `#67p`…) + окремі адреси з власними картками для відео (`/saturn`, `/67p`,
    `/eclipse`, `/orionids`) — під кожне відео своє посилання.
 3. ✅ **Іконка** — варіант A, зірочка ✦ (`tools/icons.py` → favicon.ico, icon.svg, apple-touch-icon.png).
