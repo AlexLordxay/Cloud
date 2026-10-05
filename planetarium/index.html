@@ -207,6 +207,22 @@ button { font: inherit; color: inherit; }
 .bar i { display: block; height: 100%; width: 0; background: var(--sun); transition: width .2s; }
 
 .error { max-width: 420px; padding: 0 16px; color: var(--muted); }
+/* First-visit hint: a quiet card above the dock, shown once. */
+.welcome {
+  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 86px); transform: translateX(-50%);
+  width: min(380px, calc(100% - 32px)); margin: 0; padding: 14px 16px 12px; border-radius: var(--radius); z-index: 4;
+  background: var(--panel-solid);
+  display: flex; flex-direction: column; gap: 8px; opacity: 0; transition: opacity .8s;
+}
+.welcome.show { opacity: 1; }
+.welcome ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; line-height: 1.4; }
+.welcome li { display: flex; gap: 10px; }
+.welcome li .ico { flex: none; width: 20px; text-align: center; }
+.welcome b { font-weight: 600; }
+.welcome button {
+  align-self: flex-end; margin-top: 2px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  background: transparent; border: 1px solid var(--line); color: var(--sun); font-size: 13px;
+}
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 78px);
   width: min(460px, calc(100% - 32px)); margin: 0; padding: 12px 16px; border-radius: 12px;
@@ -334,6 +350,11 @@ button { font: inherit; color: inherit; }
 </nav>
 
 <p class="toast glass" id="toast" role="status" hidden></p>
+
+<div class="welcome glass" id="welcome" role="dialog" aria-label="Як користуватися" hidden>
+  <ul id="welcomeList"></ul>
+  <button type="button" id="welcomeOk">Зрозуміло</button>
+</div>
 
 <div class="loader" id="loader">
   <div class="loader-brand"><span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span><span class="loader-sub">Сонячна система в 3D</span></div>
@@ -3073,6 +3094,67 @@ addEventListener("keydown", e => {
 });
 
 
+// Trackpad pinch and two-finger scroll: smooth zoom right away, scaled by how far the fingers moved.
+// Chrome, Edge and Firefox send a pinch as a wheel event with ctrlKey; Safari on a Mac sends gesture events.
+function dollyBy(scale) {
+  if (state.flight || !controls.enabled) return;
+  tmp2.copy(camera.position).sub(controls.target);
+  const d = Math.min(controls.maxDistance, Math.max(controls.minDistance, tmp2.length() * scale));
+  camera.position.copy(controls.target).add(tmp2.setLength(d));
+}
+let gestureAt = 0, welcomeClose = null;
+addEventListener("wheel", e => {
+  if (e.target !== canvas) return;
+  e.preventDefault(); e.stopPropagation();
+  if (welcomeClose) welcomeClose();
+  if (e.ctrlKey && performance.now() - gestureAt < 200) return;
+  const dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? innerHeight : 1);
+  const k = (e.ctrlKey ? 0.012 : 0.0018) * controls.zoomSpeed;
+  dollyBy(Math.exp(Math.max(-0.5, Math.min(0.5, dy * k))));
+}, { capture: true, passive: false });
+if (navigator.maxTouchPoints === 0) {
+  let lastScale = 1;
+  addEventListener("gesturestart", e => { e.preventDefault(); lastScale = 1; gestureAt = performance.now(); });
+  addEventListener("gesturechange", e => {
+    e.preventDefault(); gestureAt = performance.now();
+    if (welcomeClose) welcomeClose();
+    if (e.scale > 0) dollyBy(Math.pow(lastScale / e.scale, 1.4));
+    lastScale = e.scale;
+  });
+  addEventListener("gestureend", e => e.preventDefault());
+}
+
+// First visit: a short hint above the dock, until the visitor dismisses it or starts exploring.
+const HINT_KEY = "planetarium.hintSeen";
+function showWelcome() {
+  try { if (localStorage.getItem(HINT_KEY)) return; } catch (e) { /* storage blocked: show anyway */ }
+  const mouse = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const rows = mouse ? [
+    ["👆", "<b>Клікни планету</b> — полетиш до неї"],
+    ["🖱️", "<b>Тягни</b> — обертати, <b>коліщатко</b> або <b>два пальці</b> на тачпаді — наблизити"],
+    ["📅", "<b>Дата вгорі</b> — небо будь-якого дня"],
+  ] : [
+    ["👆", "<b>Торкнись планети</b> — полетиш до неї"],
+    ["🤏", "<b>Два пальці</b> — наблизити, <b>один</b> — обертати"],
+    ["📅", "<b>Дата вгорі</b> — небо будь-якого дня"],
+  ];
+  $("welcomeList").innerHTML = rows.map(([i, t]) => `<li><span class="ico" aria-hidden="true">${i}</span><span>${t}</span></li>`).join("");
+  const el = $("welcome");
+  el.hidden = false;
+  requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("show")));
+  let gone = false;
+  const close = () => {
+    if (gone) return;
+    gone = true; welcomeClose = null;
+    try { localStorage.setItem(HINT_KEY, "1"); } catch (e) { /* not saved */ }
+    el.classList.remove("show");
+    setTimeout(() => { el.hidden = true; }, 800);
+  };
+  $("welcomeOk").addEventListener("click", close);
+  canvas.addEventListener("pointerdown", close);
+  welcomeClose = close;
+}
+
 // Click / tap a body in space
 const ray = new THREE.Raycaster(), ptr = new THREE.Vector2();
 let downAt = null;
@@ -3428,6 +3510,7 @@ async function build() {
   loaderEl.classList.add("done");
   setTimeout(preloadSurfaces, 5000);
   startFlight(() => ORIGIN, end, 3200, null);
+  setTimeout(showWelcome, reduceMotion ? 800 : 3800);
   updateQualityButton();
   tick();
 
