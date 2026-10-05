@@ -9,7 +9,11 @@
   (акаунт автора lordxay576@gmail.com). Гілка **`main` = живий сайт** (Production branch), робоча гілка = preview-адреса.
   Налаштування — `wrangler.jsonc` у корені (віддає папку `planetarium/`, без збирання; `planetarium/.assetsignore`).
   Зміни в main переносимо лише після «так» автора: `git push origin HEAD:main`. Далі — домен nebozvid.com.ua (Custom domains).
-- Старий тимчасовий сайт (claude.ai artifact, більше не оновлюється): https://claude.ai/artifact/87EQm3PuXEGG2dxK3rNqrv
+- **Тестова версія для автора: https://claude.ai/artifact/87EQm3PuXEGG2dxK3rNqrv** (claude.ai artifact).
+  Порядок роботи: зміни → робоча гілка → викласти на це посилання → автор перевіряє на iPhone → «так» → `git push origin HEAD:main`.
+  Файл для артефакту: `node -e 'process.stdout.write(require("./videos/tools/site").sitePage())'`, потім узяти від `<title>`
+  і прибрати рядки `</head>`, `<body>`, `</body>`, `</html>`; текстури — окремі файли артефакту (ліміт 511 файлів, зайнято 485).
+  Якщо зміна додає багато файлів (напр. WebP) — перевіряти на preview-адресі Cloudflare (Deployments → складання гілки).
 
 ## Що це
 **Небозвід** (`planetarium/`) — 3D Сонячна система на реальних даних (Three.js r147; `index.html` + `css/style.css` + `js/*.js` + `textures/`).
