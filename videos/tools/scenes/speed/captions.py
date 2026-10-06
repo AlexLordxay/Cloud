@@ -9,6 +9,6 @@ CAPTIONS = [
 ]
 CUTS = []
 END_CARD = 31.0
-END_TITLE = 'Поки ти дивився це відео,\nЗемля пролетіла\nпонад 1 000 км'
+END_TITLE = 'Поки ти дивився,\nЗемля пролетіла\nпонад 1 000 км'
 # A live distance counter: Earth's orbital speed (29.78 km/s) × seconds since the start of the video.
 COUNTER = {'per_s': 29.78, 'show': (3.8, 31.0), 'label': 'км пролетіла Земля з початку відео'}
