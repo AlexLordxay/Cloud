@@ -412,7 +412,8 @@ function createCinematicMusic(ctx, dest) {
   }
   return {
     output: out,
-    start(t) { nextChordAt = t; chordIndex = 0; scheduleUntil(t + 1); },
+    // `from` skips the quiet opening (videos start a chord in)
+    start(t, from = 0) { nextChordAt = t; chordIndex = from; scheduleUntil(t + 1); },
     scheduleUntil,
   };
 }

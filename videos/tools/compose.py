@@ -143,6 +143,10 @@ def frame(sc, i, src):
         # the name of what is on screen, up top in the sun colour
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
         if al > 0: draw_block(img, text, f_name, 330, al, fill=SUN)
+    for a, b, text in getattr(sc, 'SUBS', []):
+        # a quiet second line under the name (e.g. the mass)
+        al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
+        if al > 0: draw_block(img, text, f_end3, 412, al, fill=(200, 208, 224))
     for a, b, kind, text in sc.CAPTIONS:
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
         if al <= 0: continue

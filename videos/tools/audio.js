@@ -1,4 +1,4 @@
-// Renders the soundtrack offline: the site's own ambient music, plus (optionally) a planet's voice during a window.
+// Renders the soundtrack offline: the site's own ambient music (or the tour's cinematic one: scene.json "audio": {"music": "cinematic"}), plus (optionally) a planet's voice during a window.
 //
 //   node audio.js <scene>        -> work/<scene>/audio.wav
 //
@@ -22,18 +22,19 @@ function fnSource(src, fname) {
 
 (async () => {
   const site = fs.readFileSync(path.join(SITE, 'js/audio.js'), 'utf8');
-  const code = fnSource(site, 'createAmbientMusic') + '\n' + fnSource(site, 'createPlanetVoices');
+  const music = cfg.audio && cfg.audio.music === 'cinematic' ? 'createCinematicMusic' : 'createAmbientMusic';
+  const code = fnSource(site, music) + '\n' + fnSource(site, 'createPlanetVoices');
   const br = await chromium.launch();
   const p = await br.newPage();
-  const out = await p.evaluate(async ({ code, T, a }) => {
-    eval(code + '; window.__mk = createAmbientMusic; window.__pv = createPlanetVoices;');
+  const out = await p.evaluate(async ({ code, music, T, a }) => {
+    eval(code + '; window.__mk = ' + music + '; window.__pv = createPlanetVoices;');
     const SR = 44100;
     const ctx = new OfflineAudioContext(2, Math.ceil(SR * T), SR);
     const g = ctx.createGain(); g.connect(ctx.destination);
     g.gain.setValueAtTime(0, 0); g.gain.linearRampToValueAtTime(0.9, 2.0);
     g.gain.setValueAtTime(0.9, T - 4); g.gain.linearRampToValueAtTime(0, T - 0.3);
     const piece = window.__mk(ctx, g);
-    piece.start(0.05); piece.scheduleUntil(T);
+    piece.start(0.05, (a && a.fromChord) || 0); piece.scheduleUntil(T);
     if (a && a.voice) {
       // A planet's voice (synthesised after real recordings), faded in and out over the given window.
       const vg = ctx.createGain(); vg.connect(ctx.destination);
@@ -75,7 +76,7 @@ function fnSource(src, fname) {
     let bin = ''; const u8 = new Uint8Array(ab);
     for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
     return btoa(bin);
-  }, { code, T: cfg.duration + 1, a: cfg.audio || null });
+  }, { code, music, T: cfg.duration + 1, a: cfg.audio || null });
   fs.mkdirSync(WORK, { recursive: true });
   fs.writeFileSync(path.join(WORK, 'audio.wav'), Buffer.from(out, 'base64'));
   console.log('audio.wav written');
