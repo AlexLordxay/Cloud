@@ -12,9 +12,10 @@ const { SITE, sitePage } = require('./site');
 const TOOLS = __dirname, THREE_DIR = path.join(TOOLS, 'node_modules/three');
 const [sceneName, mode = 'video', a, b] = process.argv.slice(2);
 if (!sceneName) { console.log('usage: node rec.js <scene> video [t0 t1] | stills t1,t2,…'); process.exit(1); }
-const SCENE = path.join(TOOLS, 'scenes', sceneName), WORK = path.join(TOOLS, 'work', sceneName);
+// REC_W / REC_H override the frame size (e.g. a 1600×630 still for a link card); REC_TAG keeps such stills apart.
+const SCENE = path.join(TOOLS, 'scenes', sceneName), WORK = path.join(TOOLS, 'work', sceneName + (process.env.REC_TAG ? '_' + process.env.REC_TAG : ''));
 const cfg = JSON.parse(fs.readFileSync(path.join(SCENE, 'scene.json'), 'utf8'));
-const FPS = cfg.fps || 30, W = cfg.width || 720, H = cfg.height || 1280;
+const FPS = cfg.fps || 30, W = +process.env.REC_W || cfg.width || 720, H = +process.env.REC_H || cfg.height || 1280;
 
 // The site with the recording hooks: expose a few internals, and let the scene move the camera right before rendering.
 function recPage() {

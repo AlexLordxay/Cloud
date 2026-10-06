@@ -1,7 +1,8 @@
 # The card shown when a link to the site is shared (Telegram, Facebook, X…): 1200×630, a shot of the site with the logo.
 #
-#   python3 og_card.py <background.jpg> [out.jpg]     (default out: ../og.jpg)
+#   python3 og_card.py <background.jpg> [out.jpg] [title] [subtitle] [crop-x]   (default out: ../og.jpg)
 #
+# Title and subtitle default to the site's own; crop-x is where the 1200 px window starts in a wider still.
 # The background is a still from the site: in videos/tools, `node rec.js ogcard stills 10` → work/ogcard/still_10.jpg
 # (a 1600×630 frame with Saturn in the middle; the left 1200 px are kept, so Saturn sits on the right, text on the left).
 import importlib.util, os, sys
@@ -12,9 +13,12 @@ spec = importlib.util.spec_from_file_location('compose', os.path.join(HERE, '../
 C = importlib.util.module_from_spec(spec); spec.loader.exec_module(C)   # the logo and fonts used in the videos
 
 W, H = 1200, 630
-src, out = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, '../og.jpg')
+args = sys.argv[1:] + [None] * 5
+src, out = args[0], args[1] or os.path.join(HERE, '../og.jpg')
+TITLE, SUB = args[2] or 'Сонячна система в 3D', args[3] or 'на реальних даних · будь-яка дата'
+CROP_X = int(args[4] or 0)
 bg = Image.open(src).convert('RGB')
-bg = bg.crop((0, 0, W, H)) if bg.size[0] >= W else bg.resize((W, H), Image.LANCZOS)
+bg = bg.crop((CROP_X, 0, CROP_X + W, H)) if bg.size[0] >= W else bg.resize((W, H), Image.LANCZOS)
 img = bg.convert('RGBA')
 
 # Soft darkening on the left so the text reads over the stars.
@@ -42,8 +46,8 @@ shadow = Image.new('RGBA', (W, H), (0, 0, 0, 0)); shadow.paste((0, 0, 0, 255), (
 img.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(10)))
 img.alpha_composite(lay, (lx, ly))
 
-text('Сонячна система в 3D', C.font("Commissioner.ttf", 36, 500), 70, 330, (233, 237, 246, 255))
-text('на реальних даних · будь-яка дата', C.font("Commissioner.ttf", 25, 400), 71, 384, (165, 176, 200, 255))
+text(TITLE, C.font("Commissioner.ttf", 36, 500), 70, 330, (233, 237, 246, 255))
+text(SUB, C.font("Commissioner.ttf", 25, 400), 71, 384, (165, 176, 200, 255))
 
 img.convert('RGB').save(out, 'JPEG', quality=88, optimize=True, progressive=True)
 print(out, os.path.getsize(out) // 1024, 'KB')

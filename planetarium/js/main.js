@@ -79,6 +79,31 @@ function setActive(b) {
   if (main) main.chip.scrollIntoView({ block: "nearest", inline: "center" });
   $("overview").setAttribute("aria-pressed", b ? "false" : "true");
 }
+/* ---------- Links to a body or an event: nebozvid.com.ua/#saturn, #titan, #67p, #eclipse ---------- */
+// Any body id works (#titan, #halley…); a few friendlier names and events have their own entries.
+// The address bar follows the view, so a copied link opens what was on screen.
+const LINKS = {
+  "67p": { body: "cg67p" },
+  "hale-bopp": { body: "halebopp" },
+  eclipse: { body: "earth", date: "2027-08-02T09:10:00Z", rate: 1, label: "Затемнення 2 серпня 2027" },
+  orionids: { body: "halley" },
+};
+const SLUG = { cg67p: "67p" };
+function linkTarget(hash) {
+  const k = decodeURIComponent((hash || "").replace(/^#/, "")).toLowerCase();
+  if (!k) return null;
+  if (LINKS[k]) return LINKS[k];
+  return byId[k] ? { body: k } : null;
+}
+function openLink(t) {
+  if (t.date) jumpTo(Date.parse(t.date), t.rate, t.label);
+  focusBody(byId[t.body].index);
+}
+function setLinkHash(slug) {
+  try { history.replaceState(null, "", slug ? "#" + slug : location.pathname + location.search); } catch (e) { /* not allowed here */ }
+}
+addEventListener("hashchange", () => { const t = linkTarget(location.hash); if (t) openLink(t); });
+
 function focusBody(i) {
   const b = BODIES[i];
   state.mode = "focus"; state.index = i;
@@ -91,6 +116,8 @@ function focusBody(i) {
   startFlight(() => b.world, offset, 1900, b);
   renderInfo(b);
   setActive(b);
+  const cur = linkTarget(location.hash);
+  if (!cur || cur.body !== b.id) setLinkHash(SLUG[b.id] || b.id);
 }
 function stepMain(dir) {
   const cur = state.index >= 0 ? BODIES[state.index] : null;
@@ -104,6 +131,7 @@ function showOverview() {
   startFlight(() => ORIGIN, overviewCam(), 2000, null);
   renderInfo(null);
   setActive(null);
+  setLinkHash("");
 }
 
 $("prev").addEventListener("click", () => stepMain(-1));
@@ -660,7 +688,8 @@ async function build() {
   await new Promise(r => requestAnimationFrame(r));
   loaderEl.classList.add("done");
   setTimeout(preloadSurfaces, 5000);
-  startFlight(() => ORIGIN, end, 3200, null);
+  const first = linkTarget(location.hash);
+  if (first) openLink(first); else startFlight(() => ORIGIN, end, 3200, null);
   setTimeout(showWelcome, reduceMotion ? 800 : 3800);
   updateQualityButton();
   tick();
