@@ -75,6 +75,11 @@ button { font: inherit; color: inherit; }
   padding: 6px; border-radius: 999px;
 }
 .menu-btn { display: none; }
+/* Social links inside the controls: a thin divider, then four small outline icons. */
+.socials { display: flex; align-items: center; gap: 2px; padding-left: 8px; margin-left: 2px; border-left: 1px solid var(--line); }
+.socials a { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 50%; color: var(--muted); transition: color .2s, background .2s; }
+.socials a:hover { color: var(--fg); background: rgba(255,255,255,0.07); }
+.socials svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .btn {
   border: 0; background: transparent; cursor: pointer;
   padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 500;
@@ -256,6 +261,9 @@ button { font: inherit; color: inherit; }
   .controls .btn { justify-content: flex-start; padding: 10px 12px; font-size: 14px; }
   .controls .speed { padding: 10px 12px; justify-content: space-between; }
   .controls .speed input { width: 90px; }
+  .socials { border-left: 0; margin: 4px 0 0; padding: 8px 4px 2px; border-top: 1px solid var(--line); justify-content: space-around; }
+  .socials a { width: 40px; height: 40px; }
+  .socials svg { width: 20px; height: 20px; }
   .toast { top: calc(env(safe-area-inset-top, 0px) + 120px); }
   /* Phones: the catalogue shows one column at a time, picked with tabs. */
   .catalog { left: 16px; right: 16px; width: auto; max-width: none; bottom: calc(env(safe-area-inset-bottom, 0px) + 74px); max-height: 58vh; padding: 12px; }

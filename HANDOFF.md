@@ -73,9 +73,8 @@
    з `tools/og_card.py` + кадри `REC_W=1600 REC_H=630 REC_TAG=card node rec.js <сцена> stills <t>`).
 3. ✅ **Іконка** — варіант A, зірочка ✦ (`tools/icons.py` → favicon.ico, icon.svg, apple-touch-icon.png).
 4. ⭐ **Кнопка «Підтримати»** — автор створює банку Monobank «На розвиток Небозводу» і дає посилання.
-4a. ⭐ **Соцмережі на сайті:** стримані контурні значки Instagram, Telegram, TikTok, YouTube — рядок у меню ☰ і на
-   сторінці «Про проєкт». Автор ще має створити акаунти (бажано однакове ім'я @nebozvid усюди) і дати посилання.
-   Аватар — іконка A (зірочка), `planetarium/apple-touch-icon.png` / `tools/icons.py` (можна у 1024 px).
+4a. ✅ **Соцмережі** (6.10): Instagram, TikTok, YouTube, Telegram — усюди **@nebozvid**; значки в меню сайту (`.socials` у
+   index.html). Аватар і обкладинка YouTube — `brand/` (README там). Ще: значки на сторінці «Про проєкт».
 5. ⭐ **Сторінка «Про проєкт»**: автор, контакт, подяки, ліцензії джерел, кілька слів про приватність.
 6. ✅ **Статистика** — Cloudflare Web Analytics увімкнено 06.10.2026 (автоматично, без cookies): меню → Web Analytics → nebozvid.com.ua.
 7. Сторінка 404, карта сайту (robots.txt уже робить Cloudflare — Bot Preference Sync).
