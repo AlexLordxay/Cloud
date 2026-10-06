@@ -1,0 +1,5 @@
+# Cloudflare adds its own rules for AI crawlers above these (Bot Preference Sync in the dashboard).
+User-agent: *
+Allow: /
+
+Sitemap: https://nebozvid.com.ua/sitemap.xml

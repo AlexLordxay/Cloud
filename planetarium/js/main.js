@@ -221,7 +221,7 @@ $("music").addEventListener("click", async () => {
   $("music").setAttribute("aria-pressed", String(on));
   if (on && !musicExplained) {
     musicExplained = true;
-    showToast("Фонова музика — композиція в дусі космічних саундтреків, створена автором: lord-xay.", 6000);
+    showToast("Фонова музика — композиція в дусі космічних саундтреків, створена автором: Lord-xay.", 6000);
   }
 });
 let soundExplained = false;
