@@ -1,0 +1,19 @@
+{
+  "title": "Ти зараз летиш",
+  "date": "2026-10-08T01:00:00Z",
+  "rate": 0,
+  "duration": 35,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "patches": [
+    [
+      "window.__rec = { state, byId,",
+      "window.__rec = { asteroidBelt, kuiperBelt, state, byId,"
+    ],
+    [
+      "float flash = step(0.965, beat)",
+      "float flash = 0.0 * step(0.965, beat)"
+    ]
+  ]
+}

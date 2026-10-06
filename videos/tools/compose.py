@@ -130,6 +130,14 @@ def frame(sc, i, src):
             if al > 0:
                 draw_block(img, f'{m // 60:02d}:{m % 60:02d}', f_tick, 330, al, fill=SUN)
                 draw_block(img, sc.CLOCK_LABEL, f_end3, 420, al, fill=(200, 208, 224))
+    cnt = getattr(sc, 'COUNTER', None)
+    if cnt:
+        # a live counter: per_s × seconds since the start, e.g. the km the Earth has flown while you watch
+        a, b = cnt['show']
+        al = fade(t, a, b, 0.4)
+        if al > 0:
+            draw_block(img, f"{int(cnt['per_s'] * t):,}".replace(',', '\u202f'), f_tick, 330, al, fill=SUN)
+            draw_block(img, cnt['label'], f_end3, 420, al, fill=(200, 208, 224))
     for a, b, kind, text in sc.CAPTIONS:
         al = fade(t, a, b)
         if al <= 0: continue
