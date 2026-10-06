@@ -431,9 +431,31 @@ function watchFrameRate() {
   }
 }
 
+// Dynamic resolution: when frames come too slowly (the Sun filling the screen on a laptop), render with fewer pixels for
+// a while, in small steps, and give them back once there is room again. Looks a touch softer instead of stuttering.
+const drsWatch = { t0: 0, frames: 0, calm: 0 };
+function keepFrameRate() {
+  const now = performance.now();
+  if (window.__step) return;   // video recording and test tools run on a virtual clock: keep full resolution
+  if (state.flight) { drsWatch.t0 = 0; return; }   // flights start with heavy uploads: don't judge them
+  if (!drsWatch.t0 || now - drsWatch.t0 > 3000) { drsWatch.t0 = now; drsWatch.frames = 0; return; }   // (re)start after a pause
+  drsWatch.frames++;
+  if (now - drsWatch.t0 < 1000) return;
+  const fps = drsWatch.frames * 1000 / (now - drsWatch.t0);
+  drsWatch.t0 = now; drsWatch.frames = 0;
+  let next = drs.scale;
+  if (fps < 42 && drs.scale > 0.5) { next = Math.max(0.5, drs.scale * 0.85); drsWatch.calm = 0; }
+  else if (fps > 56 && drs.scale < 1 && ++drsWatch.calm >= 3) { next = Math.min(1, drs.scale / 0.85); drsWatch.calm = 0; }
+  if (next !== drs.scale) {
+    drs.scale = next;
+    renderer.setPixelRatio(pixelRatio());
+    renderer.setSize(innerWidth, innerHeight, false);
+  }
+}
+
 function tick() {
   const dt = Math.min(clock.getDelta(), 0.05);
-  if (!document.hidden) watchFrameRate();
+  if (!document.hidden) { watchFrameRate(); keepFrameRate(); }
   const cur = state.index >= 0 ? BODIES[state.index] : null;
 
   // Simulated clock.

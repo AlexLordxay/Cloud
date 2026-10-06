@@ -24,7 +24,9 @@ try { qualitySetting = localStorage.getItem(Q_KEY) || "auto"; } catch (e) { /* s
 let autoDegraded = false;
 let eco = qualitySetting === "eco" || (qualitySetting === "auto" && detectLowEnd());
 const ecoMaterials = [];
-const pixelRatio = () => Math.min(devicePixelRatio || 1, eco ? 1.25 : 2);
+// drs.scale: dynamic resolution, lowered for a while when frames come too slowly (see keepFrameRate in main.js).
+const drs = { scale: 1 };
+const pixelRatio = () => Math.min(devicePixelRatio || 1, eco ? 1.25 : 2) * drs.scale;
 renderer.setPixelRatio(pixelRatio());
 renderer.setSize(innerWidth, innerHeight, false);
 renderer.outputEncoding = THREE.sRGBEncoding;

@@ -1070,6 +1070,7 @@ float fbm(vec3 p){
   for (int i = 0; i < 4; i++) { s += a * snoise(p); p *= 2.03; a *= 0.5; }
   return s;
 }
+float fbm2(vec3 p){ return 0.5 * snoise(p) + 0.25 * snoise(p * 2.03); }
 `;
 
 function createSunFx(sun, tex) {
@@ -1142,7 +1143,8 @@ function createSunFx(sun, tex) {
         #ifdef ECO
           float big = fbm(p * 2.2 + vec3(0.0, 0.0, t * 0.03)) * 0.5 + 0.5;
         #else
-          vec3 q = p * 2.2 + vec3(fbm(p * 1.6 + t * 0.02), fbm(p * 1.6 + 7.3 - t * 0.02), fbm(p * 1.6 + 13.1 + t * 0.015));
+          // The slow warp needs only the broad shapes: two octaves instead of four (half the noise calls).
+          vec3 q = p * 2.2 + vec3(fbm2(p * 1.6 + t * 0.02), fbm2(p * 1.6 + 7.3 - t * 0.02), fbm2(p * 1.6 + 13.1 + t * 0.015));
           float big = fbm(q + vec3(0.0, 0.0, t * 0.03)) * 0.5 + 0.5;
         #endif
         // Granulation: bright cells split by dark lanes, boiling quickly.
@@ -1150,12 +1152,16 @@ function createSunFx(sun, tex) {
           float gran = 0.6 + 0.12 * snoise(p * 55.0 + vec3(0.0, t * 0.2, t * 0.15));
         #else
           vec3 gp = p * 70.0 + snoise(p * 22.0 + t * 0.05) * 0.35;
-          vec2 F = worley(gp, t * 0.6);
-          float lanes = smoothstep(0.0, 0.14, F.y - F.x);
-          float cell = 1.0 - F.x * 0.55;
+          // Cells are only worked out where they are big enough to see (close up); further away they blur to an even tone.
           float fw = fwidth(gp.x) + fwidth(gp.y);
           float detail = 1.0 - smoothstep(0.35, 1.0, fw);
-          float gran = mix(0.62, lanes * cell * (0.9 + 0.2 * snoise(gp * 0.4 + t * 0.1)), detail);
+          float gran = 0.62;
+          if (detail > 0.0) {
+            vec2 F = worley(gp, t * 0.6);
+            float lanes = smoothstep(0.0, 0.14, F.y - F.x);
+            float cell = 1.0 - F.x * 0.55;
+            gran = mix(0.62, lanes * cell * (0.9 + 0.2 * snoise(gp * 0.4 + t * 0.1)), detail);
+          }
         #endif
         float activity = dot(texture2D(map, vUv).rgb, vec3(0.3, 0.5, 0.2));
         float heat = 0.18 + big * 0.42 + gran * 0.28 + activity * 0.3;
@@ -1163,6 +1169,7 @@ function createSunFx(sun, tex) {
         // Sunspots: dark umbra, ragged penumbra, bright faculae around them.
         for (int i = 0; i < ${SPOTS}; i++) {
           float ang = acos(clamp(dot(p, spots[i].xyz), -1.0, 1.0));
+          if (ang > spots[i].w * 3.6) continue;   // far from this spot: nothing to add (saves the noise below)
           float w = spots[i].w * (1.0 + 0.25 * snoise(p * 40.0 + float(i)));
           float pen = 1.0 - smoothstep(w * 0.55, w, ang);
           float umb = 1.0 - smoothstep(w * 0.2, w * 0.45, ang);
@@ -1173,7 +1180,9 @@ function createSunFx(sun, tex) {
 
         // Flares: sudden white-hot bursts.
         for (int i = 0; i < ${FLARES}; i++) {
+          if (flares[i].w < 0.001) continue;      // flare not burning
           float ang = acos(clamp(dot(p, flares[i].xyz), -1.0, 1.0));
+          if (ang > 0.2) continue;
           float ribbon = 0.6 + 0.4 * snoise(p * 90.0 + t * 0.8);
           col += vec3(1.0, 0.92, 0.75) * flares[i].w * (1.0 - smoothstep(0.0, 0.07, ang)) * ribbon * 1.6;
           col += vec3(1.0, 0.55, 0.2) * flares[i].w * (1.0 - smoothstep(0.0, 0.2, ang)) * 0.35;
