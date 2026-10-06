@@ -1,6 +1,7 @@
 # Site icons from the logo's star ✦ (gold → pink → blue on deep navy), variant A chosen by the author (6.10.2026).
 #
-#   python3 icons.py      → ../favicon.ico (16/32/48), ../icon.svg (crisp tab icon), ../apple-touch-icon.png (180, iPhone)
+#   python3 icons.py      → ../favicon.ico (16/32/48), ../icon.svg (crisp tab icon), ../apple-touch-icon.png (180, iPhone),
+#                           ../../brand/avatar.png (1080, profile picture for the social networks; they crop it to a circle)
 import math, os
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -33,6 +34,8 @@ def master():
     return img
 
 img = master()
+os.makedirs(os.path.join(OUT, '../brand'), exist_ok=True)
+img.resize((1080, 1080), Image.LANCZOS).save(os.path.join(OUT, '../brand/avatar.png'), optimize=True)
 img.resize((180, 180), Image.LANCZOS).save(os.path.join(OUT, 'apple-touch-icon.png'), optimize=True)
 img.resize((48, 48), Image.LANCZOS).save(os.path.join(OUT, 'favicon.ico'), sizes=[(16, 16), (32, 32), (48, 48)])
 
