@@ -252,6 +252,26 @@ $("allBtn").addEventListener("click", () => setCatalog(catalogEl.hidden));
 $("menuBtn").addEventListener("click", () => setCatalog(false));
 $("overview").addEventListener("click", () => setMenu(false));
 
+/* ---------- Support (Monobank jar) ---------- */
+// Opens only when the visitor asks for it. Until the jar exists (empty link) every way in stays hidden.
+// The amount is passed to the jar page as ?a=<UAH>; "Своя сума" opens it empty.
+const JAR_URL = "";
+const SUPPORT_SUMS = [20, 50, 100, 200];
+function setSupport(open) {
+  $("support").hidden = $("supportBack").hidden = !open;
+  if (open) { setMenu(false); setCatalog(false); $("supportClose").focus(); }
+}
+if (JAR_URL) {
+  $("supportSums").innerHTML = SUPPORT_SUMS.map(n => `<a href="${JAR_URL}?a=${n}" target="_blank" rel="noopener">${n} ₴</a>`).join("")
+    + `<a class="own" href="${JAR_URL}" target="_blank" rel="noopener">Своя сума</a>`;
+  $("supportBtn").hidden = $("supportIcon").hidden = $("supportLine").hidden = false;
+  for (const id of ["supportBtn", "supportIcon", "supportLink"]) $(id).addEventListener("click", () => setSupport(true));
+  $("supportClose").addEventListener("click", () => setSupport(false));
+  $("supportBack").addEventListener("click", () => setSupport(false));
+  // From the About page: nebozvid.com.ua/#support opens the panel.
+  if (location.hash === "#support") setSupport(true);
+}
+
 // The info panel folds down to its name row; the choice is remembered (open by default on wide screens only).
 const INFO_KEY = "planetarium.infoOpen";
 function setInfoOpen(open, remember) {
@@ -268,7 +288,7 @@ addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON" && e.key === " ") return;
   if (e.key === "ArrowRight") stepMain(1);
   else if (e.key === "ArrowLeft") stepMain(-1);
-  else if (e.key === "Escape") { if (!catalogEl.hidden) setCatalog(false); else showOverview(); }
+  else if (e.key === "Escape") { if (!$("support").hidden) setSupport(false); else if (!catalogEl.hidden) setCatalog(false); else showOverview(); }
   else if (e.key === " " && e.target === document.body) { e.preventDefault(); $("pause").click(); }
 });
 
