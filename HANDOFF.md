@@ -67,8 +67,10 @@
 
 1. ✅ **Домен під'єднано** (06.10.2026): https://nebozvid.com.ua і www — Custom domains воркера nebozvid; мета-теги на новій адресі.
    Превʼю в Telegram на nebozvid.com.ua працює (картинка й опис); на workers.dev Telegram превʼю не показує.
-2. ⭐ **Посилання на тіла** (`#saturn`, `#67p`…) + окремі адреси з власними картками для відео (`/saturn`, `/67p`,
-   `/eclipse`, `/orionids`) — під кожне відео своє посилання.
+2. ✅ **Посилання на тіла** (6.10): будь-яке тіло `/#saturn`, `/#titan`…, плюс `#67p`, `#eclipse` (Земля 2.08.2027, 1 хв/с),
+   `#orionids` (Галлей); адреса в рядку браузера йде за переглядом. Короткі адреси з власними картками для відео:
+   **nebozvid.com.ua/saturn, /67p, /eclipse, /orionids** (`tools/link_pages.py` → `<slug>/index.html`, картки `og/<slug>.jpg`
+   з `tools/og_card.py` + кадри `REC_W=1600 REC_H=630 REC_TAG=card node rec.js <сцена> stills <t>`).
 3. ✅ **Іконка** — варіант A, зірочка ✦ (`tools/icons.py` → favicon.ico, icon.svg, apple-touch-icon.png).
 4. ⭐ **Кнопка «Підтримати»** — автор створює банку Monobank «На розвиток Небозводу» і дає посилання.
 4a. ⭐ **Соцмережі на сайті:** стримані контурні значки Instagram, Telegram, TikTok, YouTube — рядок у меню ☰ і на
