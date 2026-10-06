@@ -255,7 +255,7 @@ $("overview").addEventListener("click", () => setMenu(false));
 /* ---------- Support (Monobank jar) ---------- */
 // Opens only when the visitor asks for it. Until the jar exists (empty link) every way in stays hidden.
 // The amount is passed to the jar page as ?a=<UAH>; "Своя сума" opens it empty.
-const JAR_URL = "";
+const JAR_URL = "https://send.monobank.ua/jar/AAWqhjPjcW";
 const SUPPORT_SUMS = [20, 50, 100, 200];
 function setSupport(open) {
   $("support").hidden = $("supportBack").hidden = !open;

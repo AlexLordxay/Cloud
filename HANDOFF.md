@@ -72,7 +72,7 @@
    **nebozvid.com.ua/saturn, /67p, /eclipse, /orionids** (`tools/link_pages.py` → `<slug>/index.html`, картки `og/<slug>.jpg`
    з `tools/og_card.py` + кадри `REC_W=1600 REC_H=630 REC_TAG=card node rec.js <сцена> stills <t>`).
 3. ✅ **Іконка** — варіант A, зірочка ✦ (`tools/icons.py` → favicon.ico, icon.svg, apple-touch-icon.png).
-4. ⭐ **Кнопка «Підтримати»** — зроблено, чекає посилання на банку: `const JAR_URL = ""` у `js/main.js` (порожнє → усі входи
+4. ✅ **Кнопка «Підтримати»** — банка «На Небозвід ✦»: https://send.monobank.ua/jar/AAWqhjPjcW (`JAR_URL` у `js/main.js`; порожнє → усі входи
    приховані). Входи: «✦ Підтримати» в меню ☰ (телефон), золота ✦ біля соцмереж (комп'ютер), рядок у панелі «Детальніше»,
    `/#support` відкриває панель. Суми 20/50/100/200 → `JAR_URL?a=<сума>` (перевірити на справжній банці, чи підставляє суму),
    «Своя сума». Банку робить автор (monobank: 6.10 «Реєстр податкової недоступний» — повторити) або сестра.
