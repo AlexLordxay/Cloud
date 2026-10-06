@@ -102,7 +102,27 @@
     }
     // The Sun: 400 times the Moon. At the Moon's distance it would be bigger than the whole sky, so it grows until it
     // covers all of the sky above the hills. Plain map, a little dimmed: bright, but no glare.
-    const sm = new T.MeshBasicMaterial({ map: await load('sun.jpg'), color: 0xe6e0d6, transparent: true, depthTest: false, depthWrite: false, toneMapped: false });
+    // Up close any map is hugely magnified, so the surface is drawn here: fine granulation over slow larger cells.
+    const sm = new T.ShaderMaterial({
+      uniforms: { opacity: { value: 0 }, time: { value: 0 } },
+      // the pattern follows the direction on the sky, so the grain keeps its size however close the surface comes
+      vertexShader: 'varying vec3 vP; void main(){ vP = (modelMatrix * vec4(position, 1.0)).xyz - cameraPosition; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform float opacity, time; varying vec3 vP;
+        float h(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+        float n(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(h(i), h(i + vec3(1,0,0)), f.x), mix(h(i + vec3(0,1,0)), h(i + vec3(1,1,0)), f.x), f.y),
+                     mix(mix(h(i + vec3(0,0,1)), h(i + vec3(1,0,1)), f.x), mix(h(i + vec3(0,1,1)), h(i + vec3(1,1,1)), f.x), f.y), f.z); }
+        void main(){
+          vec3 p = normalize(vP);
+          float big = n(p * 9.0 + time * 0.02) * 0.6 + n(p * 19.0 - time * 0.03) * 0.4;
+          float gr = n(p * 70.0 + time * 0.05) * 0.55 + n(p * 150.0 - time * 0.04) * 0.45;
+          float v = clamp(0.25 + 0.45 * big + 0.45 * gr, 0.0, 1.0);
+          vec3 c = mix(vec3(0.78, 0.30, 0.05), vec3(1.0, 0.78, 0.42), v);
+          gl_FragColor = vec4(c * 0.92, opacity);
+        }`,
+      transparent: true, depthTest: false, depthWrite: false,
+    });
     sun = new T.Mesh(new T.SphereGeometry(1, 128, 96), sm);
     sun.renderOrder = 1; sun.visible = false;
     group.add(sun);
@@ -135,7 +155,7 @@
       sun.scale.setScalar(R);
       sun.position.set(Math.sin(4 * D) * Math.cos(el) * d, Math.sin(el) * d, -Math.cos(4 * D) * Math.cos(el) * d);
       sun.rotation.y = 0.01 * (t - SUN_A);
-      sun.material.opacity = ks;
+      sun.material.uniforms.opacity.value = ks; sun.material.uniforms.time.value = t;
       wSum += ks; elSum += ks * (12.5 + 5 * g);
     }
     dome.visible = ks < 0.98;
