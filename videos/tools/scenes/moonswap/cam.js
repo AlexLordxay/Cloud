@@ -1,6 +1,6 @@
 // "What if instead of the Moon…": a night landscape with a planet hung where the Moon is — at the Moon's distance
-// (384 400 km), so each shows at its true angular size: Moon 0.52°, Mars 1.0°, Venus 1.8°, Neptune 7.3°,
-// Saturn 17.3° (rings 40°), Jupiter 20.8°. The site's Solar System is hidden; the scene builds its own sky objects
+// (384 400 km), so each shows at its true angular size: Pluto 0.35°, Moon 0.52°, Mercury 0.73°, Ganymede 0.79°, Mars 1.0°,
+// Venus 1.8°, Earth 1.9°, Neptune 7.3°, Uranus 7.6°, Saturn 17.3° (rings 40°), Jupiter 20.8°. The site's Solar System is hidden; the scene builds its own sky objects
 // from the site's maps. Camera: 45° vertical field, looking a little above the horizon.
 (() => {
   const smooth = window.__smooth, D = Math.PI / 180;
@@ -8,14 +8,20 @@
   const MOON_KM = 384400;
   // id, diameter km, map, shown from–to (s), ring
   const SHOW = [
-    ['moon', 3474, 'moon_2k.jpg', 0, 4.6],
-    ['mars', 6779, 'mars_2k.jpg', 4.6, 9.6],
-    ['venus', 12104, 'venus_atmosphere_2k.jpg', 9.6, 14.6],
-    ['neptune', 49244, 'neptune.jpg', 14.6, 20.4],
-    ['saturn', 116460, 'saturn.jpg', 20.4, 27.4, true],
-    ['jupiter', 139820, 'jupiter.jpg', 27.4, 40],
+    ['moon', 3474, 'moon_2k.jpg', 0, 6.4],
+    ['pluto', 2377, 'pluto.jpg', 6.4, 11.9],
+    ['mercury', 4879, 'mercury_2k.jpg', 11.9, 17.4],
+    ['ganymede', 5268, 'ganymede.jpg', 17.4, 22.9],
+    ['mars', 6779, 'mars_2k.jpg', 22.9, 28.4],
+    ['venus', 12104, 'venus_atmosphere_2k.jpg', 28.4, 33.9],
+    ['earth', 12742, 'earth_day_2k.jpg', 33.9, 39.4],
+    ['neptune', 49244, 'neptune.jpg', 39.4, 44.9],
+    ['uranus', 50724, 'uranus.jpg', 44.9, 50.4],
+    ['saturn', 116460, 'saturn.jpg', 50.4, 56.4, true],
+    ['jupiter', 139820, 'jupiter.jpg', 56.4, 62.6],
+    ['moon', 3474, 'moon_2k.jpg', 62.6, 99],
   ];
-  const FADE = 0.7;
+  const FADE = 1.8;                        // long, overlapping dissolves between worlds
   let ready = false, items = [], keep = null, group = null;
 
   function hills(T) {
@@ -64,6 +70,11 @@
       sph.rotation.y = -Math.PI / 2;                          // the map's middle towards the viewer
       node.add(sph);
       const mats = [mat];
+      if (id === 'earth') {
+        const cm = new T.MeshStandardMaterial({ map: await load('earth_clouds.png'), roughness: 1, metalness: 0, transparent: true, depthWrite: false });
+        const cl = new T.Mesh(new T.SphereGeometry(rad * 1.01, 96, 64), cm);
+        cl.rotation.y = -Math.PI / 2 + 0.6; node.add(cl); mats.push(cm);
+      }
       if (ring) {
         const rm = ringMesh(rad * 1.24, rad * 2.27, ringTex, 0xffffff);
         rm.material.transparent = true;
@@ -88,18 +99,18 @@
     const r = window.__rec, T = r.THREE, t = window.__vt() - (window.__t0 || 0);
     // Only our sky: everything of the site but the stars stays hidden.
     for (const o of r.scene.children) if (o !== keep && o !== group && !o.isLight) o.visible = false;
-    let lookEl = 9 * D;
+    let wSum = 0, elSum = 0;
     for (const it of items) {
       const k = Math.min(smooth((t - it.a + FADE / 2) / FADE), 1 - smooth((t - it.b + FADE / 2) / FADE));
       it.node.visible = k > 0.002;
       it.mats.forEach(m => { m.opacity = k; });
       if (it.halo) it.halo.material.opacity = 0.35 * k;
-      // each new world arrives with a slow, slight rise
-      if (it.node.visible) it.node.rotation.y = 0.04 * (t - it.a);
+      // each world turns very slowly while it is up
+      if (it.node.visible) it.node.rotation.y = 0.03 * (t - it.a);
+      // the view tilts up a little for the big ones so they sit well in the frame
+      wSum += k; elSum += k * (it.rad > 100 ? 12.5 : 9);
     }
-    // The view tilts up a little for the big ones so they sit well in the frame.
-    const big = t > 20 ? smooth((t - 20.2) / 1.4) : 0;
-    lookEl = (9 + 3.5 * big) * D;
+    const lookEl = (wSum > 0 ? elSum / wSum : 9) * D;
     const cam = r.camera;
     cam.position.set(0, 0, 0); cam.up.set(0, 1, 0);
     cam.lookAt(Math.sin(4 * D) * Math.cos(lookEl) * 10, Math.sin(lookEl) * 10, -Math.cos(4 * D) * Math.cos(lookEl) * 10);

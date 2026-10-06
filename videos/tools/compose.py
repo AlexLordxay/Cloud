@@ -139,7 +139,7 @@ def frame(sc, i, src):
             draw_block(img, f"{int(cnt['per_s'] * t):,}".replace(',', '\u202f'), f_tick, 330, al, fill=SUN)
             draw_block(img, cnt['label'], f_end3, 420, al, fill=(200, 208, 224))
     for a, b, kind, text in sc.CAPTIONS:
-        al = fade(t, a, b)
+        al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
         if al <= 0: continue
         if kind == 'hook': draw_block(img, text, f_hook, 520, al, spacing=18)
         else: draw_block(img, text, f_cap, 1400, al)
