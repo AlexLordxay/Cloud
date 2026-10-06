@@ -26,9 +26,9 @@ for _ in range(2600):
     d.ellipse([x - r, y - r, x + r, y + r], fill=col)
 
 # Saturn: the rendered shot scaled down, its edges fading into the sky, the planet on the right of the safe area.
-k = 0.6
+k = 0.52
 shot = Image.open(src).convert('RGB'); shot = shot.resize((int(shot.width * k), int(shot.height * k)), Image.LANCZOS)
-cx = int(SAFE[2] - 330)                       # where Saturn's centre goes
+cx = int(SAFE[2] - 380)                       # where Saturn's centre goes
 ox, oy = cx - shot.width // 2, (H - shot.height) // 2
 mask = Image.new('L', shot.size, 0); md = ImageDraw.Draw(mask)
 md.ellipse([shot.width * 0.18, shot.height * 0.02, shot.width * 0.82, shot.height * 0.98], fill=255)
