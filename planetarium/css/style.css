@@ -251,6 +251,38 @@ button { font: inherit; color: inherit; }
   align-self: flex-end; margin-top: 2px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
   background: transparent; border: 1px solid var(--line); color: var(--sun); font-size: 13px;
 }
+.welcome-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.welcome .welcome-tour { align-self: auto; border-color: rgba(243,185,100,0.4); background: rgba(243,185,100,0.1); }
+.welcome-row #welcomeOk { margin-left: auto; color: var(--fg); }
+.tour-btn { color: var(--sun); }
+/* Guided tour: a quiet card at the bottom; the info panel and the dock step aside while it runs. */
+body.touring .info, body.touring .dock, body.touring .catalog, body.touring .welcome { display: none !important; }
+.tour {
+  /* on a computer it takes the info panel's side, so the body in the middle stays clear */
+  position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  width: 360px; max-width: calc(100% - 32px); padding: 14px 18px 0; border-radius: var(--radius); z-index: 3;
+  overflow: hidden; opacity: 0; transition: opacity .9s;
+}
+.tour.show { opacity: 1; }
+.tour-head { display: flex; justify-content: space-between; align-items: center; }
+.tour-count { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--sun); font-variant-numeric: tabular-nums; }
+.tour-count span:first-child { color: var(--muted); }
+.tour-close { border: 0; background: transparent; color: var(--muted); cursor: pointer; width: 32px; height: 32px; margin: -6px -8px -6px 0; border-radius: 50%; font-size: 15px; }
+.tour-close:hover { background: rgba(255,255,255,0.08); color: var(--fg); }
+.tour h2 { margin: 4px 0 6px; font: 600 22px/1.15 var(--font-display); }
+.tour p { margin: 0; color: #c9d0e0; font-size: 14.5px; line-height: 1.5; min-height: 4.5em; }
+.tour-nav { display: flex; justify-content: center; gap: 10px; margin: 10px 0 12px; }
+.tour-nav button {
+  width: 44px; height: 38px; border-radius: 999px; border: 1px solid var(--line); background: transparent;
+  cursor: pointer; font-size: 18px; line-height: 1; color: var(--fg);
+}
+.tour-nav button:hover:not(:disabled) { background: rgba(255,255,255,0.07); }
+.tour-nav button:disabled { opacity: 0.3; cursor: default; }
+#tourPause { font-size: 12px; letter-spacing: -0.1em; color: var(--sun); }
+#tourNext { min-width: 44px; width: auto; padding: 0 14px; }
+.tour.paused #tourPause { background: rgba(243,185,100,0.16); font-size: 15px; letter-spacing: 0; }
+.tour-bar { height: 2px; margin: 0 -18px; background: var(--line); }
+.tour-bar i { display: block; height: 100%; background: var(--sun); opacity: 0.7; transform-origin: left; transform: scaleX(0); }
 .toast {
   position: fixed; left: 50%; transform: translateX(-50%); top: calc(env(safe-area-inset-top, 0px) + 78px);
   width: min(460px, calc(100% - 32px)); margin: 0; padding: 12px 16px; border-radius: 12px;
@@ -272,6 +304,10 @@ button { font: inherit; color: inherit; }
   }
   .info h1 { font-size: 22px; }
   .dock { left: 16px; right: 16px; transform: none; max-width: none; }
+  .tour { left: 16px; right: 16px; width: auto; max-width: none; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); padding: 12px 16px 0; }
+  .tour-bar { margin: 0 -16px; }
+  .tour h2 { font-size: 19px; }
+  .tour p { font-size: 14px; }
   /* Phones: the controls fold into a menu button, leaving only the name, date and "Now" in view. */
   .topbar { flex-wrap: nowrap; }
   .menu-wrap { position: relative; }

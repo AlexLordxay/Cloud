@@ -732,7 +732,9 @@ async function build() {
   setTimeout(preloadSurfaces, 5000);
   const first = linkTarget(location.hash);
   if (first) openLink(first); else startFlight(() => ORIGIN, end, 3200, null);
-  setTimeout(showWelcome, reduceMotion ? 800 : 3800);
+  // nebozvid.com.ua/#tour starts the guided tour (js/tour.js) once the opening flight is done
+  if (location.hash === "#tour") setTimeout(startTour, reduceMotion ? 300 : 3300);
+  else setTimeout(showWelcome, reduceMotion ? 800 : 3800);
   updateQualityButton();
   tick();
 

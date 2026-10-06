@@ -45,6 +45,7 @@
   <button class="menu-btn glass" id="menuBtn" type="button" aria-expanded="false" aria-controls="controls" aria-label="Меню">☰</button>
   <div class="controls glass" id="controls">
     <button class="btn" id="overview" type="button" aria-pressed="true">Огляд</button>
+    <button class="btn tour-btn" id="tourBtn" type="button">▶ Екскурсія</button>
     <button class="btn" id="pause" type="button" aria-pressed="false">Пауза</button>
     <button class="btn" id="orbits" type="button" aria-pressed="true">Орбіти</button>
     <button class="btn" id="sound" type="button" aria-pressed="false" title="Звук Сонця">Звук</button>
@@ -111,6 +112,22 @@
 
 <p class="toast glass" id="toast" role="status" hidden></p>
 
+<!-- The guided tour: one card at the bottom, the camera does the rest. -->
+<section class="tour glass" id="tour" aria-label="Екскурсія" aria-live="polite" hidden>
+  <div class="tour-head">
+    <span class="tour-count"><span>Екскурсія</span> <span id="tourCount"></span></span>
+    <button type="button" class="tour-close" id="tourClose" aria-label="Завершити екскурсію">✕</button>
+  </div>
+  <h2 id="tourTitle"></h2>
+  <p id="tourText"></p>
+  <div class="tour-nav">
+    <button type="button" id="tourPrev" aria-label="Назад">‹</button>
+    <button type="button" id="tourPause" aria-label="Пауза">❚❚</button>
+    <button type="button" id="tourNext" aria-label="Далі">›</button>
+  </div>
+  <div class="tour-bar"><i id="tourBar"></i></div>
+</section>
+
 <div class="support-back" id="supportBack" hidden></div>
 <div class="support glass" id="support" role="dialog" aria-modal="true" aria-labelledby="supportTitle" hidden>
   <button class="support-close" id="supportClose" type="button" aria-label="Закрити">✕</button>
@@ -124,7 +141,10 @@
 
 <div class="welcome glass" id="welcome" role="dialog" aria-label="Як користуватися" hidden>
   <ul id="welcomeList"></ul>
-  <button type="button" id="welcomeOk">Зрозуміло</button>
+  <div class="welcome-row">
+    <button type="button" class="welcome-tour" id="welcomeTour">▶ Екскурсія Сонячною системою</button>
+    <button type="button" id="welcomeOk">Зрозуміло</button>
+  </div>
 </div>
 
 <div class="loader" id="loader">
@@ -194,5 +214,6 @@ setTimeout(() => {
 <script src="js/ui.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/main.js"></script>
+<script src="js/tour.js"></script>
 </body>
 </html>
