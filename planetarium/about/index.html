@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Про проєкт — Небозвід</title>
+<meta name="description" content="Небозвід — Сонячна система в 3D на реальних даних, українською, безкоштовно й без реклами. Хто робить, як це працює, джерела й подяки.">
+<meta name="theme-color" content="#04060c">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Небозвід">
+<meta property="og:locale" content="uk_UA">
+<meta property="og:url" content="https://nebozvid.com.ua/about/">
+<meta property="og:title" content="Про проєкт — Небозвід">
+<meta property="og:description" content="Сонячна система в 3D на реальних даних, українською, безкоштовно й без реклами.">
+<meta property="og:image" content="https://nebozvid.com.ua/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@1,700&family=Unbounded:wght@600&family=Commissioner:wght@400;500;600&display=swap">
+<style>
+/* The "About" page: one calm column in the site's dark look. */
+:root {
+  --void: #04060c; --panel: rgba(10, 14, 26, 0.74); --line: rgba(160, 182, 230, 0.16);
+  --fg: #e9edf6; --muted: #8f9ab4; --sun: #f3b964; --ice: #9cc2ff;
+  --font-display: "Unbounded", "Commissioner", system-ui, sans-serif;
+  --font-body: "Commissioner", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--void); color: var(--fg); font: 16px/1.65 var(--font-body); -webkit-font-smoothing: antialiased;
+  background-image: radial-gradient(1px 1px at 12% 18%, #fff8 50%, transparent 51%), radial-gradient(1px 1px at 78% 9%, #fff6 50%, transparent 51%),
+    radial-gradient(1px 1px at 44% 31%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 91% 42%, #fff7 50%, transparent 51%),
+    radial-gradient(1px 1px at 23% 63%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 67% 77%, #fff6 50%, transparent 51%),
+    radial-gradient(1px 1px at 8% 88%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 55% 95%, #fff4 50%, transparent 51%);
+  background-attachment: fixed;
+}
+main { max-width: 680px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 28px) 20px 64px; }
+.back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 14px; }
+.back:hover { color: var(--fg); }
+.logo {
+  font: italic 700 64px/1 "Cormorant", Georgia, serif; margin: 28px 0 4px; display: inline-block; padding: 0.08em 0.06em 0.12em 0;
+  background: linear-gradient(100deg, #f7c66b 0%, #f39a8b 52%, #9cc2ff 100%); -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+}
+.lead { font-size: 19px; color: #c9d0e0; margin: 8px 0 8px; }
+h2 { font: 600 15px/1.3 var(--font-display); letter-spacing: 0.04em; color: var(--sun); margin: 44px 0 10px; }
+p { margin: 0 0 12px; color: #c9d0e0; }
+ul { margin: 0 0 12px; padding-left: 20px; color: #c9d0e0; }
+li { margin: 4px 0; }
+a { color: var(--ice); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+.small { font-size: 14px; color: var(--muted); }
+.socials { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.socials a {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px;
+  color: var(--fg); text-decoration: none; font-size: 14px;
+}
+.socials a:hover { background: rgba(255,255,255,0.06); }
+.socials svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; color: var(--muted); }
+.open { display: inline-block; margin-top: 36px; padding: 12px 22px; border-radius: 999px; background: var(--sun); color: var(--void); font-weight: 600; text-decoration: none; }
+footer { margin-top: 48px; font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">← До Небозводу</a>
+
+  <div class="logo" role="img" aria-label="Небозвід">Небозвід</div>
+  <p class="lead">Сонячна система в 3D на реальних даних. Планети, супутники й комети стоять там, де вони є насправді, — на будь-яку дату з 1800 по 2200 рік. Українською, безкоштовно й без реклами.</p>
+
+  <h2>Хто робить</h2>
+  <p>Привіт, я Alex, або Lord-xay. Небозвід почався з простого бажання: побачити небо не на картинці в підручнику, а живим. Покрутити Сатурн і роздивитися його кільця, зазирнути під помаранчевий серпанок Титана, побачити, куди 2 серпня 2027 року впаде тінь Місяця.</p>
+  <p>Хотілося, щоб таке було українською й доступно кожному — просто з телефона, без реєстрації й без підписок. Тут немає реклами й ніхто не стежить за вами: лише космос, який можна крутити й досліджувати самому. Сподіваюся, хтось, відкривши Небозвід, уперше захоче подивитися вгору вночі.</p>
+
+  <h2>Як це працює</h2>
+  <ul>
+    <li><b>Положення планет</b> розраховуються за елементами орбіт NASA JPL (найточніші для 1800–2050 рр.), Місяця — за формулами Жана Меуса, галілеєвих супутників — за їхніми реальними періодами. Затемнення й тіні — справжня геометрія.</li>
+    <li><b>Розміри й відстані не в масштабі.</b> У справжніх пропорціях більшість планет були б меншими за піксель, тому відстані стиснуто, але порядок і форма орбіт збережені.</li>
+    <li><b>Поверхні</b> — справжні карти з космічних апаратів. Рух хмар, бурі, блискавки, полярні сяйва й життя Сонця — симуляція за характером реальних спостережень. Де апарати не знімали (частина Плутона, Харона, Тритона), поверхню відтворено художньо — про це сказано в описі тіла.</li>
+    <li><b>Звуки</b> синтезовано за мотивами реальних записів: коливань Сонця, вітру на Марсі, радіохвиль Юпітера й Сатурна. Фонова музика — власна, автор Lord-xay.</li>
+  </ul>
+
+  <h2>Джерела й подяки</h2>
+  <div class="card small">
+    <p>Карти поверхонь: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA.</p>
+    <p>Титан — інфрачервона карта Cassini VIMS/ISS (Seignovert et al. 2019, через pyvims, BSD-3).</p>
+    <p>Інші супутники, Церера й Плутон — мозаїки NASA/JPL/USGS (Galileo, Cassini, Voyager, Dawn, New Horizons), частина з приблизним кольором.</p>
+    <p>Детальна Земля зблизька — NASA Blue Marble і Black Marble (через freetiler, відкриті дані NASA).</p>
+    <p>Рельєф Місяця — карта нормалей <a href="https://github.com/CelestiaProject/CelestiaContent" target="_blank" rel="noopener">Celestia</a> за цифровою моделлю висот USGS (GPL-2.0+).</p>
+    <p>Нічна Земля, океани й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>; 3D-рушій — <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT).</p>
+    <p style="margin:0">Положення планет — «Approximate Positions of the Planets» (E. M. Standish, NASA JPL); Місяць — «Astronomical Algorithms» (J. Meeus). Шрифти — Cormorant, Unbounded, Commissioner (SIL OFL).</p>
+  </div>
+
+  <h2>Приватність</h2>
+  <p>Небозвід не збирає особистих даних і не використовує cookies. Відвідування рахуються знеособлено (Cloudflare Web Analytics — без стеження за окремими людьми). Ваші налаштування, як-от якість графіки, зберігаються лише у вашому браузері.</p>
+
+  <h2>Зв'язок і соцмережі</h2>
+  <p>Ідеї, питання чи знайшли помилку — пишіть у Telegram. Нові відео й події — у соцмережах:</p>
+  <div class="socials">
+    <a href="https://t.me/nebozvid" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4 3 11.2l6.2 2.2L18 7.2l-6.9 7.4V20l3.5-3.6 4 3L21 4z"/></svg>Telegram</a>
+    <a href="https://instagram.com/nebozvid" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="0.6" fill="currentColor" stroke="none"/></svg>Instagram</a>
+    <a href="https://www.tiktok.com/@nebozvid" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2.8v12a4.2 4.2 0 1 1-4.2-4.2"/><path d="M14 2.8c.5 2.9 2.6 4.8 5.6 5"/></svg>TikTok</a>
+    <a href="https://www.youtube.com/@nebozvid" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.2 9.3v5.4l4.6-2.7z" fill="currentColor" stroke="none"/></svg>YouTube</a>
+  </div>
+
+  <a class="open" href="/">Відкрити Небозвід ✦</a>
+
+  <footer>© 2026 Небозвід · Alex (Lord-xay) · nebozvid.com.ua</footer>
+</main>
+</body>
+</html>
