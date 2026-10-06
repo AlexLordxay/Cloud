@@ -297,16 +297,136 @@ function createAmbientMusic(ctx, dest) {
   };
 }
 
+/* ---------- Tour music ---------- */
+// Original cinematic piece for the guided tour: low strings that swell with each chord, a deep bass, a soft
+// eighth-note ostinato that joins after the opening, distant low drums and, later, a high choir-like line.
+// D minor: Dm → B♭ → F → C, two bars each, at 72 bpm. It grows over the first minute and breathes back every
+// twelve chords. No samples, no quotations.
+function createCinematicMusic(ctx, dest) {
+  const midi = m => 440 * Math.pow(2, (m - 69) / 12);
+  const CHORDS = [[50, 53, 57, 62], [46, 50, 53, 58], [45, 48, 53, 57], [43, 48, 52, 55]];
+  const BASS = [38, 34, 41, 36];
+  const BEAT = 60 / 72 / 2, CHORD_LEN = BEAT * 16;
+
+  const out = ctx.createGain(); out.gain.value = 1; out.connect(dest);
+  const len = Math.floor(ctx.sampleRate * 4.5), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+  }
+  const verb = ctx.createConvolver(); verb.buffer = ir;
+  const wet = ctx.createGain(); wet.gain.value = 0.6;
+  verb.connect(wet).connect(out);
+  const bus = (gain, dry = 1) => {
+    const g = ctx.createGain(); g.gain.value = gain;
+    if (dry) g.connect(out);
+    g.connect(verb);
+    return g;
+  };
+  const strings = bus(0.03), bass = bus(0.085), pluck = bus(0.028), drum = bus(0.11, 1), choir = bus(0.016, 0);
+  const delay = ctx.createDelay(2); delay.delayTime.value = BEAT * 3;
+  const fb = ctx.createGain(); fb.gain.value = 0.3;
+  pluck.connect(delay); delay.connect(fb).connect(delay); delay.connect(verb);
+
+  // strings: three detuned saws through a low-pass that opens and closes over the chord
+  function string(m, t0, t1, bright) {
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.Q.value = 0.6;
+    lp.frequency.setValueAtTime(350, t0);
+    lp.frequency.linearRampToValueAtTime(700 + 900 * bright, (t0 + t1) / 2);
+    lp.frequency.linearRampToValueAtTime(400, t1 + 2);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(1, t0 + 2.5);
+    g.gain.setValueAtTime(1, t1);
+    g.gain.linearRampToValueAtTime(0, t1 + 3);
+    lp.connect(g).connect(strings);
+    for (const cents of [-8, 0, 7]) {
+      const o = ctx.createOscillator(); o.type = "sawtooth";
+      o.frequency.value = midi(m); o.detune.value = cents;
+      o.connect(lp); o.start(t0); o.stop(t1 + 3.1);
+    }
+  }
+  function low(m, t0, t1) {
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(1, t0 + 1.5);
+    g.gain.setValueAtTime(1, t1);
+    g.gain.linearRampToValueAtTime(0, t1 + 2.5);
+    g.connect(bass);
+    for (const [mul, type, amp] of [[1, "sine", 1], [2, "triangle", 0.25]]) {
+      const o = ctx.createOscillator(), a = ctx.createGain();
+      o.type = type; o.frequency.value = midi(m) * mul; a.gain.value = amp;
+      o.connect(a).connect(g); o.start(t0); o.stop(t1 + 2.6);
+    }
+  }
+  function note(m, t, vel) {
+    const lp = ctx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vel, t + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+    const o = ctx.createOscillator(); o.type = "triangle"; o.frequency.value = midi(m);
+    o.connect(lp).connect(g).connect(pluck); o.start(t); o.stop(t + 1);
+  }
+  // a soft, far-away low drum: a falling sine
+  function boom(t) {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(78, t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.9);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(1, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 2.4);
+    o.connect(g).connect(drum); o.start(t); o.stop(t + 2.5);
+  }
+  function voice(m, t0, t1) {
+    const o = ctx.createOscillator(), vib = ctx.createOscillator(), va = ctx.createGain(), g = ctx.createGain();
+    o.frequency.value = midi(m);
+    vib.frequency.value = 4.6; va.gain.value = 3.5;
+    vib.connect(va).connect(o.frequency);
+    g.gain.setValueAtTime(0, t0);
+    g.gain.linearRampToValueAtTime(1, t0 + 4);
+    g.gain.setValueAtTime(1, t1 - 1);
+    g.gain.linearRampToValueAtTime(0, t1 + 2);
+    o.connect(g).connect(choir);
+    o.start(t0); vib.start(t0); o.stop(t1 + 2.1); vib.stop(t1 + 2.1);
+  }
+
+  const PAT = [0, 2, 1, 2, 3, 2, 1, 2];
+  let nextChordAt = 0, chordIndex = 0;
+  function scheduleUntil(until) {
+    while (nextChordAt < until) {
+      const k = chordIndex % 4, part = chordIndex % 12;   // 0–1 opening, 2–3 pulse, 4–11 full, then again
+      const chord = CHORDS[k], t0 = nextChordAt, t1 = t0 + CHORD_LEN;
+      const bright = part < 2 ? 0.2 : part < 4 ? 0.5 : 1;
+      for (const m of chord) string(m, t0, t1, bright);
+      low(BASS[k], t0, t1);
+      if (part >= 2) {
+        const vel = part < 4 ? 0.6 : 1;
+        for (let i = 0; i < 16; i++) note(chord[PAT[i % 8]] + 12, t0 + i * BEAT, vel * (i % 4 === 0 ? 1 : 0.7));
+      }
+      if (part >= 4) { boom(t0); if (part >= 6) boom(t0 + BEAT * 8); }
+      if (part >= 6) voice(chord[3] + 12, t0, t1);
+      chordIndex++;
+      nextChordAt += CHORD_LEN;
+    }
+  }
+  return {
+    output: out,
+    start(t) { nextChordAt = t; chordIndex = 0; scheduleUntil(t + 1); },
+    scheduleUntil,
+  };
+}
+
 // Page wiring: own audio context, gentle fade in/out, quieter while the Sun's hum is loud.
 let music = null;
-function createMusicPlayer() {
+function createMusicPlayer(makePiece = createAmbientMusic) {
   const Ctx = window.AudioContext || window.webkitAudioContext;
   if (!Ctx) return null;
   const ctx = new Ctx();
   const master = ctx.createGain();
   master.gain.value = 0;
   master.connect(ctx.destination);
-  const piece = createAmbientMusic(ctx, master);
+  const piece = makePiece(ctx, master);
   let on = false, timer = 0, duck = 1;
   const level = () => 0.9 * duck;
   return {
