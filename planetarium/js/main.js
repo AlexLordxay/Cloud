@@ -82,11 +82,16 @@ function setActive(b) {
 /* ---------- Links to a body or an event: nebozvid.com.ua/#saturn, #titan, #67p, #eclipse ---------- */
 // Any body id works (#titan, #halley…); a few friendlier names and events have their own entries.
 // The address bar follows the view, so a copied link opens what was on screen.
+// Comets open near the Sun, with the coma and tails out and the camera closer (`zoom`), as in the tour,
+// rather than as a cold speck far away.
+const HALLEY = { body: "halley", date: "1986-01-20T12:00:00Z", rate: 3, zoom: 0.5, label: "Останній прихід комети Галлея" };
+const CG67P = { body: "cg67p", date: "2015-07-20T00:00:00Z", rate: 3, zoom: 0.3, label: "Комета 67P біля Сонця" };
+const HALEBOPP = { body: "halebopp", date: "1997-03-22T00:00:00Z", rate: 3, zoom: 0.6, label: "Велика комета 1997 року" };
 const LINKS = {
-  "67p": { body: "cg67p" },
-  "hale-bopp": { body: "halebopp" },
+  "67p": CG67P, cg67p: CG67P,
+  "hale-bopp": HALEBOPP, halebopp: HALEBOPP,
+  halley: HALLEY, orionids: HALLEY,
   eclipse: { body: "earth", date: "2027-08-02T09:10:00Z", rate: 1, label: "Затемнення 2 серпня 2027" },
-  orionids: { body: "halley" },
 };
 const SLUG = { cg67p: "67p" };
 function linkTarget(hash) {
@@ -96,6 +101,7 @@ function linkTarget(hash) {
   return byId[k] ? { body: k } : null;
 }
 function openLink(t) {
+  state.linkZoom = t.zoom ? t : null;
   if (t.date) jumpTo(Date.parse(t.date), t.rate, t.label);
   focusBody(byId[t.body].index);
 }
@@ -109,7 +115,8 @@ function focusBody(i) {
   state.mode = "focus"; state.index = i;
   const dir = b.id !== "sun" ? b.world.clone().normalize() : new THREE.Vector3(0, 0, 1);
   const narrow = Math.max(1, 1.1 / (innerWidth / innerHeight));
-  const dist = b.comet ? 22 * narrow : b.radius * (b.rings === "saturn" ? 5.6 : b.id === "sun" ? 3.4 : b.ring ? 6 : 4.4) * narrow;
+  if (state.linkZoom && state.linkZoom.body !== b.id) state.linkZoom = null;
+  const dist = b.comet ? 22 * narrow * (state.linkZoom ? state.linkZoom.zoom : 1) : b.radius * (b.rings === "saturn" ? 5.6 : b.id === "sun" ? 3.4 : b.ring ? 6 : 4.4) * narrow;
   const offset = dir.multiplyScalar(-dist).applyAxisAngle(tmp2.set(0, 1, 0), b.id === "sun" ? 0 : b.comet ? 1.25 : 0.62);
   offset.y += dist * (b.comet ? 0.45 : 0.26);
   if (b.id === "sun") offset.set(0, dist * 0.3, dist);
@@ -709,7 +716,7 @@ async function build() {
   try {
     tex = await loadTextures();
   } catch (err) {
-    showFallback("textures", `Не вдалося завантажити карту поверхні (${err.message}). Оновіть сторінку. Якщо відкриваєте файл локально, запустіть його через вебсервер, наприклад: python3 -m http.server`);
+    showFallback("textures", `Не вдалося завантажити карту поверхні (${err.message}). Онови сторінку. Якщо відкриваєш файл локально, запусти його через вебсервер, наприклад: python3 -m http.server`);
     return;
   }
   const jd0 = jdOf(state.simMs);

@@ -85,7 +85,7 @@
   <p class="desc collapsible" id="desc"></p>
   <p class="voice collapsible" id="voice" hidden></p>
   <p class="fact collapsible"><span>Цікавий факт</span><span id="fact"></span></p>
-  <p class="hint collapsible">Тягніть, щоб обертати. Колесо миші або два пальці наближають. Стрілки ← → перемикають тіла, Esc повертає до огляду. Дату можна змінити вгорі ліворуч.</p>
+  <p class="hint collapsible">Тягни, щоб обертати. Колесо миші або два пальці наближають. Стрілки ← → перемикають тіла, Esc повертає до огляду. Дату можна змінити вгорі ліворуч.</p>
   <p class="support-line collapsible" id="supportLine" hidden>Небозвід безкоштовний і без реклами. <button type="button" id="supportLink">✦ Підтримати проєкт</button></p>
   <p class="credits collapsible">Карти поверхонь: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0) на основі даних NASA; Титан — інфрачервона карта Cassini VIMS/ISS (Seignovert et al. 2019, через pyvims, BSD-3); інші супутники, Церера й Плутон — мозаїки NASA/JPL/USGS (Galileo, Cassini, Voyager, Dawn, New Horizons), частина з приблизним кольором; детальна Земля зблизька — NASA Blue Marble (через freetiler, відкриті дані NASA); рельєф Місяця — карта нормалей <a href="https://github.com/CelestiaProject/CelestiaContent" target="_blank" rel="noopener">Celestia</a> за цифровою моделлю висот USGS (GPL-2.0+); нічна Земля, океани й хмари — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>. Фобос і Деймос показано з умовною текстурою. Положення планет — за елементами орбіт JPL (найточніші для 1800–2050 рр.); супутники, крім Місяця й галілеєвих, розставлено умовно. <a href="/about/">Про проєкт, джерела й подяки →</a></p>
 </aside>
@@ -163,10 +163,10 @@
 // Shown when the 3D library or WebGL is missing, when start-up fails, or when the device drops the 3D context.
 const loaderEl = document.getElementById("loader");
 const FALLBACK = {
-  lib: "Не вдалося завантажити 3D-бібліотеку. Перевірте з'єднання з інтернетом і оновіть сторінку.",
-  webgl: "Цей браузер або пристрій не підтримує 3D-графіку (WebGL), тож модель не може запуститися. Спробуйте інший браузер — Safari, Chrome чи Firefox — або оновіть систему. На комп'ютері перевірте, чи ввімкнене апаратне прискорення в налаштуваннях браузера.",
-  error: "Щось пішло не так під час запуску. Оновіть сторінку. Якщо не допоможе — спробуйте інший браузер або оновіть систему.",
-  lost: "Пристрою забракло пам'яті для 3D-графіки. Оновіть сторінку — сайт увімкне економний режим, легший для телефона.",
+  lib: "Не вдалося завантажити 3D-бібліотеку. Перевір з'єднання з інтернетом і онови сторінку.",
+  webgl: "Цей браузер або пристрій не підтримує 3D-графіку (WebGL), тож модель не може запуститися. Спробуй інший браузер — Safari, Chrome чи Firefox — або онови систему. На комп'ютері перевір, чи ввімкнене апаратне прискорення в налаштуваннях браузера.",
+  error: "Щось пішло не так під час запуску. Онови сторінку. Якщо не допоможе — спробуй інший браузер або онови систему.",
+  lost: "Пристрою забракло пам'яті для 3D-графіки. Онови сторінку — сайт увімкне економний режим, легший для телефона.",
 };
 let fallbackShown = false;
 function showFallback(reason, detail) {
