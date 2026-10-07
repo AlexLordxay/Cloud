@@ -34,6 +34,13 @@ f_end3 = font('Commissioner.ttf', 34, 500)
 f_tick = font('Unbounded.ttf', 96, 600)
 f_name = font('Unbounded.ttf', 64, 600)
 
+_hooks = {}
+def hook_font(sc):
+    # HOOK_SIZE in captions.py: a bigger opening title
+    size = getattr(sc, 'HOOK_SIZE', 72)
+    if size not in _hooks: _hooks[size] = font('Unbounded.ttf', size, 600)
+    return _hooks[size]
+
 def ease(x):
     x = min(1.0, max(0.0, x))
     return 4 * x ** 3 if x < 0.5 else 1 - (-2 * x + 2) ** 3 / 2
@@ -100,7 +107,9 @@ def frame(sc, i, src):
     t = i / FPS
     im = Image.open(src).convert('RGB').resize((W, H), Image.LANCZOS)
     # dips to black at cuts, at the start and at the end; the scene dims under the end card
-    k = min(1.0, t / 0.6)
+    # FADE_IN = 0 in captions.py: no fade from black, so the first frame (the one the feed shows) is already the picture
+    fade_in = getattr(sc, 'FADE_IN', 0.6)
+    k = min(1.0, t / fade_in) if fade_in else 1.0
     for c in sc.CUTS:
         # a cut is a time, or (time, half-width) for a longer fade through black
         c, half = c if isinstance(c, tuple) else (c, 0.28)
@@ -109,7 +118,7 @@ def frame(sc, i, src):
     k = min(k, max(0.0, (sc.DURATION - t) / 0.5))
     if k < 1: im = Image.eval(im, lambda v: int(v * k))
     img = im.convert('RGBA')
-    draw_logo(img, 64, 170, min(1.0, t) * (1 if t < sc.END_CARD else max(0, 1 - (t - sc.END_CARD) / 0.5)) * 0.92, t)
+    draw_logo(img, 64, 170, (min(1.0, t) if fade_in else 1.0) * (1 if t < sc.END_CARD else max(0, 1 - (t - sc.END_CARD) / 0.5)) * 0.92, t)
     tick = getattr(sc, 'TICKER', None)
     # a year counter (e.g. a ten-year flight), eased like the scene's date; TICKER is one (t0, t1, y0, y1)
     # or a list of (t0, t1, y0, y1, show from, show to)
@@ -150,7 +159,7 @@ def frame(sc, i, src):
     for a, b, kind, text in sc.CAPTIONS:
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
         if al <= 0: continue
-        if kind == 'hook': draw_block(img, text, f_hook, 520, al, spacing=18)
+        if kind == 'hook': draw_block(img, text, hook_font(sc), 520, al, spacing=18)
         else: draw_block(img, text, f_cap, 1400, al)
     if t > sc.END_CARD:
         e = lambda delay: max(0.0, min(1.0, (t - sc.END_CARD - delay) / 0.6))

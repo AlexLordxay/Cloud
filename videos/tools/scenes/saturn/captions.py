@@ -3,7 +3,7 @@ TS = 1.2
 DURATION = 60.0 * TS
 # (start, end, kind, text); kind 'hook' = big title at the top, 'cap' = caption in the lower third
 CAPTIONS = [(a * TS, b * TS, k, t) for a, b, k, t in [
-    (0.6, 7.0, 'hook', 'Ця планета могла б\nплавати у воді'),
+    (-1.0, 7.0, 'hook', 'Ця планета\nмогла б плавати\nу воді'),   # on screen from the very first frame
     (7.6, 13.0, 'cap', 'Сатурн — друга за розміром\nпланета: у ньому вмістилося б\n760 Земель'),
     (13.4, 19.0, 'cap', 'Кільця в поперечнику — як 21 Земля,\nа завтовшки — лише близько 10 метрів'),
     (19.4, 25.0, 'cap', 'На північному полюсі — шестикутний\nвихор. Кожна його сторона\nдовша за діаметр Землі'),
@@ -17,3 +17,5 @@ CAPTIONS = [(a * TS, b * TS, k, t) for a, b, k, t in [
 CUTS = [41.0 * TS]          # short dips to black (Titan -> closing shot is a continuous glide)
 END_CARD = 55.4 * TS        # the end card fades in from here
 END_TITLE = 'Покрути Сатурн\nсам'
+FADE_IN = 0             # no fade from black: Saturn is there from the first frame
+HOOK_SIZE = 84

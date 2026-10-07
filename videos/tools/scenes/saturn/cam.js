@@ -47,8 +47,8 @@
   }
   // Shots: [start, end, fn(k, ctx) -> { pos, look }], k = 0..1 within the shot.
   const SHOTS = [
-    // flight in from above the planets, past Jupiter
-    [0, 7.5 * TS, (k, c) => { const e = ease(k); return { pos: sat(c, lerp(75, 30, e), lerp(48, 22, e), lerp(70, 7.5, Math.pow(e, 0.7))), look: c.C }; }],
+    // opening: Saturn big from the first frame and already moving (fast at first, settling into the next shot)
+    [0, 7.5 * TS, (k, c) => { const e = 1 - Math.pow(1 - k, 3); return { pos: sat(c, lerp(48, 30, e), lerp(32, 22, e), lerp(11, 7.5, e)), look: c.C }; }],
     // slow arc over the rings on the day side
     [7.5 * TS, 19 * TS, (k, c) => { const e = ease(k); return { pos: sat(c, lerp(30, -35, e), lerp(22, 12, e), lerp(7.5, 5.2, e)), look: c.C }; }],
     // climb to the north pole and its hexagon
@@ -87,8 +87,8 @@
       pos = from.pos.clone().lerp(pos, w);
       look = from.look.clone().lerp(look, w);
     }
-    // Orbit lines: visible in the wide opening, fading out as we close in.
-    const of = 1 - smooth((t - 2.4) / 4.8);
+    // Orbit lines: none — the opening is already close to Saturn.
+    const of = 0;
     for (const x of r.BODIES) if (x.orbitLine) { x.orbitLine.visible = of > 0.01; x.orbitLine.material.opacity = x.baseOpacity * of * 1.4; }
     // Under Titan's haze while the caption about methane seas is on; the haze returns slowly as the camera pulls away.
     r.titanU.surface.value = t > 41 * TS && t < 51 * TS + 3.0 ? 0.9 * smooth((t - 56.0) / 1.6) * (1 - smooth((t - 60.4) / 2.6)) : 0;
