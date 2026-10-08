@@ -75,7 +75,7 @@
     return [arms, disc, bulge, bar, dust];
   }
 
-  function buildGalaxy(r) {
+  function buildGalaxy(r, img) {
     const THREE = r.THREE, V = THREE.Vector3;
     const scene = new THREE.Scene();
     const gal = new THREE.Group(), local = new THREE.Group(), core = new THREE.Group();
@@ -102,88 +102,48 @@
       const p = new THREE.Points(g, mat); p.frustumCulled = false; return p;
     };
 
-    // 1. The smooth light of the disc, arms, bar and bulge (positions relative to the centre).
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(150000, 150000, 1, 1), new THREE.ShaderMaterial({
-      uniforms: { gain: { value: 0 } },
-      vertexShader: `varying vec2 vP; void main() { vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: GLSL_MODEL + `
-        uniform float gain; varying vec2 vP;
+    // 1. The galaxy's face: the NASA/JPL-Caltech/R. Hurt (SSC/Caltech) reconstruction of the Milky Way, laid on the disc
+    //    (2576 px across ≈ 124 000 ly; the Sun 26 000 ly "below" the centre in the picture, which is +z here).
+    const S = 124000;
+    const tex = new THREE.Texture(img); tex.needsUpdate = true; tex.anisotropy = r.renderer.capabilities.getMaxAnisotropy();
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(S, S, 1, 1), new THREE.ShaderMaterial({
+      uniforms: { map: { value: tex }, gain: { value: 0 } },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform sampler2D map; uniform float gain; varying vec2 vUv;
         void main() {
-          float x = vP.x, z = -vP.y;                        // plane is rotated onto XZ
-          float r = length(vec2(x, z)), th = atan(z, x);
-          float w = 1300.0 + 0.045 * r, arms = 0.0, dust = 0.0, young = 0.0;
-          vec2 A[4]; A[0] = ${ARMS_GLSL.split('), ')[0]}); A[1] = ${ARMS_GLSL.split('), ')[1]}); A[2] = ${ARMS_GLSL.split('), ')[2]}); A[3] = ${ARMS_GLSL.split('), ')[3]};
-          float lumpy = fbm(vec2(x, z) / 2600.0), fine = fbm(vec2(x, z) / 700.0 + 3.0);
-          for (int k = 0; k < 4; k++) {
-            float wind = ${PITCH_B.toFixed(5)} * log(max(r, 1.0) / ${R0.toFixed(1)});
-            float fadeIn = smoothstep(9000.0, 14000.0, r) * (1.0 - smoothstep(A[k].y > 0.8 ? 4.2 : 3.0, A[k].y > 0.8 ? 5.6 : 4.2, wind));
-            float o = armOff(r, th, A[k].x) + (lumpy - 0.5) * 3600.0 + (fbm(vec2(r / 5000.0, float(k) * 7.0)) - 0.5) * 2500.0;
-            float along = 0.45 + 1.1 * fbm(vec2(r / 6000.0 + float(k) * 3.0, th));
-            arms += A[k].y * fadeIn * along * exp(-o * o / (2.0 * w * w));
-            float od = o + 0.55 * w;
-            dust += A[k].y * fadeIn * exp(-od * od / (2.0 * pow(0.28 * w, 2.0)));
-          }
-          if (r > 18000.0 && r < 35000.0) {
-            float o = armOff(r, th, ${SPUR_PHI.toFixed(5)}) + (lumpy - 0.5) * 1500.0, k = exp(-pow((r - ${SUN_R.toFixed(1)}) / 4500.0, 2.0));
-            arms += 0.45 * k * exp(-o * o / (2.0 * pow(0.7 * w, 2.0)));
-          }
-          float disc = exp(-r / 11000.0) * (1.0 - smoothstep(50000.0, 65000.0, r));
-          float bulge = exp(-r / 2200.0);
-          float ca = cos(${THETA_BAR.toFixed(5)}), sa = sin(${THETA_BAR.toFixed(5)});
-          float u = x * ca + z * sa, v = -x * sa + z * ca;
-          float bar = exp(-pow(u / 10500.0, 2.0) - pow(v / 2600.0, 2.0));
-          float clump = fbm(vec2(x, z) / 1300.0 + 21.0);
-          arms *= (0.25 + 1.5 * fine * fine) * (0.4 + 1.4 * smoothstep(0.35, 0.75, clump));
-          float broken = smoothstep(0.42, 0.68, fbm(vec2(x, z) / 1100.0 + 5.0));
-          dust *= broken;
-          // thin dust filaments across the disc
-
-          // star-forming knots along the arms
-          float knots = smoothstep(0.72, 0.9, fbm(vec2(x, z) / 450.0 + 11.0)) * arms;
-          vec3 old = vec3(1.0, 0.82, 0.6), blue = vec3(0.62, 0.78, 1.0), pink = vec3(1.0, 0.38, 0.55);
-          float bulge2 = exp(-r / 1500.0);
-          vec3 c = old * (disc * 0.16 + bar * 1.0) * (0.75 + 0.5 * lumpy) + vec3(1.0, 0.86, 0.62) * bulge2 * 0.9
-                 + blue * arms * disc * 2.1 + blue * arms * 0.05 + pink * knots * disc * 1.4;
-          c *= 1.0 - 0.9 * clamp(dust * 2.0, 0.0, 1.0);
-          gl_FragColor = vec4(c * gain, 1.0);
+          vec3 c = texture2D(map, vUv).rgb;
+          c = max(c - vec3(0.02, 0.025, 0.05), 0.0);                       // the picture's dark-blue sky becomes black
+          float edge = 1.0 - smoothstep(0.42, 0.5, length(vUv - 0.5));     // no square edge
+          gl_FragColor = vec4(c * edge * gain, 1.0);
         }`,
       transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     }));
     plane.rotation.x = -Math.PI / 2;
     gal.add(plane);
 
-    // 2. Stars across the galaxy, drawn from the same model (each sprite stands for many stars).
+    // 2. Stars scattered over the same picture, with its colours, and given thickness (a thin disc, a fat bulge), so the
+    //    arms have depth when the camera flies over them.
     {
-      const n = 520000, pos = [], col = [], size = [];
+      const R = 1288, cv = document.createElement('canvas'); cv.width = cv.height = R;
+      const g = cv.getContext('2d'); g.drawImage(img, 0, 0, R, R);
+      const px = g.getImageData(0, 0, R, R).data;
+      const n = 360000, pos = [], col = [], size = [];
       let made = 0, tries = 0;
-      while (made < n && tries < n * 40) {
+      while (made < n && tries < n * 60) {
         tries++;
-        const rr = 60000 * Math.sqrt(rnd()), th = rnd() * 2 * Math.PI, x = rr * Math.cos(th), z = rr * Math.sin(th);
-        const [arms, disc, bulge, bar, dust] = model(x, z);
-        const p = (Math.pow(arms, 1.5) * disc * 2.2 + disc * 0.12 + Math.exp(-Math.hypot(x, z) / 1500) * 1.2 + bar * 0.7) * (1 - 0.85 * Math.min(1, dust * 1.5));
-        if (rnd() > p) continue;
-        const inArm = arms > 0.35 && rnd() < arms, inCore = bulge + bar > disc * 1.5;
-        const h = inCore ? 1500 * (bulge + 0.4) : inArm ? 280 : 650;
-        pos.push(x, gauss() * h, z);
-        const c = inArm ? (rnd() < 0.85 ? [0.7, 0.82, 1] : [1, 0.55, 0.7]) : inCore ? [1, 0.82, 0.58] : [1, 0.9, 0.78];
-        const b = 0.35 + rnd() ** 3 * 1.2;
-        col.push(c[0] * b, c[1] * b, c[2] * b);
-        size.push(rnd() < 0.02 ? 9000 : 3500);
+        const ix = Math.floor(rnd() * R), iy = Math.floor(rnd() * R), k = (iy * R + ix) * 4;
+        const cr = px[k] / 255, cg = px[k + 1] / 255, cb = px[k + 2] / 255, lum = (cr + cg + cb) / 3;
+        if (rnd() > Math.pow(Math.max(0, lum - 0.05), 2.2) * 1.6) continue;
+        const x = ((ix + rnd()) / R - 0.5) * S, z = ((iy + rnd()) / R - 0.5) * S, rr = Math.hypot(x, z);
+        pos.push(x, gauss() * (220 + 2600 * Math.exp(-rr / 2800)), z);
+        const b = (0.55 + rnd() ** 3 * 1.6) / Math.max(0.35, lum);
+        col.push(cr * b, cg * b, cb * b);
+        size.push(rnd() < 0.015 ? 9000 : 3500);
         made++;
       }
       const pts = pointsOf(pos, col, size, pointMat({ pmin: 0.9, pmax: 2.2 }));
       gal.add(pts);
       scene.userData.galStars = pts;
-    }
-    // 3. Pink star-forming regions along the arms: big soft glows.
-    {
-      const pos = [], col = [], size = [];
-      for (let k = 0; k < 900;) {
-        const rr = 12000 + 42000 * rnd(), th = rnd() * 2 * Math.PI, x = rr * Math.cos(th), z = rr * Math.sin(th);
-        if (rnd() > model(x, z)[0] * 0.9) continue;
-        pos.push(x, gauss() * 150, z); const b = 0.15 + rnd() * 0.25; col.push(1 * b, 0.35 * b, 0.5 * b); size.push(1.2e5 + rnd() * 2e5); k++;
-      }
-      const p = pointsOf(pos, col, size, pointMat({ pmin: 1.5, pmax: 9 })); gal.add(p); scene.userData.hii = p;
     }
     // 4. The bulge: a warm glow sprite.
     const glowTex = (() => {
@@ -221,9 +181,11 @@
       const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe9c0, sizeAttenuation: false }));
       sun.scale.set(0.05, 0.05, 1); local.add(sun); scene.userData.sun = sun;
       const cv = document.createElement('canvas'); cv.width = cv.height = 256;
-      const g = cv.getContext('2d'); g.strokeStyle = 'rgba(243,185,100,0.95)'; g.lineWidth = 6; g.beginPath(); g.arc(128, 128, 110, 0, 2 * Math.PI); g.stroke();
+      cv.width = 512; cv.height = 512;
+      const g = cv.getContext('2d'); g.strokeStyle = 'rgba(243,185,100,0.95)'; g.lineWidth = 6; g.beginPath(); g.arc(256, 200, 90, 0, 2 * Math.PI); g.stroke();
+      g.fillStyle = 'rgba(255,205,130,1)'; g.shadowColor = 'rgba(0,0,0,0.9)'; g.shadowBlur = 12; g.font = '700 70px sans-serif'; g.textAlign = 'center'; g.fillText('ти тут', 256, 370);
       const ring = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false, depthWrite: false, sizeAttenuation: false, opacity: 0 }));
-      ring.scale.set(0.09, 0.09, 1); local.add(ring); scene.userData.ring = ring;
+      ring.scale.set(0.2, 0.2, 1); ring.center.set(0.5, 0.61); local.add(ring); scene.userData.ring = ring;
     }
     // Around the centre (own coordinates): the nuclear star cluster and the S-stars close to the black hole.
     {
@@ -350,7 +312,7 @@
     const W = r.renderer.domElement.width, H = r.renderer.domElement.height;
     const rtOpts = { type: THREE.HalfFloatType, depthBuffer: true };
     G = {
-      ...buildGalaxy(r), hole: buildHole(r), comp: buildComposite(r),
+      ...buildGalaxy(r, await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = '/scene/milkyway.jpg'; })), hole: buildHole(r), comp: buildComposite(r),
       rtSite: new THREE.WebGLRenderTarget(W, H, rtOpts), rtGal: new THREE.WebGLRenderTarget(W, H, rtOpts), rtHole: new THREE.WebGLRenderTarget(W, H, rtOpts),
       starfield: r.scene.children.find(o => o.isPoints && o.geometry.attributes.position.count === 7000),
     };
@@ -369,13 +331,13 @@
       dist = lerpLog(0.004, 1500, clamp(k, 0, 1) ** 1.15); target = sunPos; el = lerp(38, 30, k); az = lerp(0, 25, k);
     } else if (t < T.wide) {                          // out to the whole galaxy, the view sliding to its centre
       const k = ease((t - T.arm) / (T.wide - T.arm));
-      dist = lerpLog(1500, 125000, (t - T.arm) / (T.wide - T.arm)); target = sunPos.clone().lerp(new V(), k); el = lerp(30, 58, k); az = lerp(25, 60, k);
+      dist = lerpLog(1500, 210000, (t - T.arm) / (T.wide - T.arm)); target = sunPos.clone().lerp(new V(), k); el = lerp(30, 58, k); az = lerp(25, 60, k);
     } else if (t < T.dive) {                          // a breath at the widest view
       const k = (t - T.wide) / (T.dive - T.wide);
-      dist = lerpLog(125000, 112000, k); target = new V(); el = 58; az = lerp(60, 66, k);
+      dist = lerpLog(210000, 190000, k); target = new V(); el = 58; az = lerp(60, 66, k);
     } else if (t < T.hole) {                          // the dive into the centre, to ~30 r_s
       const k = (t - T.dive) / (T.hole - T.dive), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-      dist = lerpLog(112000, 48 * RS_LY, e); target = new V(); el = lerp(58, 9, smooth(k * 1.1)); az = lerp(66, 140, e);
+      dist = lerpLog(190000, 48 * RS_LY, e); target = new V(); el = lerp(58, 9, smooth(k * 1.1)); az = lerp(66, 140, e);
     } else {                                           // slow drift round the black hole
       const k = (t - T.hole) / (70 - T.hole);
       dist = lerp(48, 38, smooth(k)) * RS_LY; target = new V(); el = lerp(9, 6, k); az = 140 + 25 * k;
@@ -428,19 +390,18 @@
       G.core.position.copy(target).negate();
       cam.near = Math.max(dist * 1e-4, 1e-9); cam.far = 1e7; cam.aspect = r.camera.aspect; cam.updateProjectionMatrix();
       const scale = ren.domElement.height / (2 * Math.tan(cam.fov * D / 2));
-      for (const p of [G.scene.userData.galStars, G.scene.userData.hii, G.scene.userData.localStars, G.scene.userData.coreStars]) p.material.uniforms.scale.value = scale;
+      for (const p of [G.scene.userData.galStars, G.scene.userData.localStars, G.scene.userData.coreStars]) p.material.uniforms.scale.value = scale;
       G.scene.children.forEach(o => { if (o.isPoints) o.material.uniforms.scale.value = scale; });
       // what shows at which scale
       const L = Math.log10(dist);
-      G.plane.material.uniforms.gain.value = 0.85 * smooth((L - 3.7) / 1.0);
+      G.plane.material.uniforms.gain.value = 1.15 * smooth((L - 4.0) / 0.9);
       G.scene.userData.galStars.material.uniforms.gain.value = 0.16 + 0.6 * smooth((4.6 - L) / 1.2);
-      G.scene.userData.hii.material.uniforms.gain.value = 0.8 * smooth((L - 4.0) / 0.8);
       G.scene.userData.localStars.material.uniforms.gain.value = 1 - smooth((L - 3.2) / 0.8) + 0.0;
-      G.bulgeGlow.material.opacity = 0.3 * smooth((L - 4.3) / 0.7);
+      G.bulgeGlow.material.opacity = 0.12 * smooth((L - 4.3) / 0.7);
       G.scene.userData.coreStars.material.uniforms.gain.value = t > T.dive ? 1 : 0;
       const sun = G.scene.userData.sun, ring = G.scene.userData.ring;
       sun.material.opacity = t < T.wide + 1 ? 1 : 0;
-      ring.material.opacity = smooth((t - T.stars - 4) / 1.5) * (1 - smooth((t - T.wide + 0.5) / 1.5));
+      ring.material.opacity = smooth((t - T.stars - 4) / 1.5) * (1 - smooth((t - T.dive - 0.3) / 0.8));
       const toHole = t > T.dive + 6;
       ren.setRenderTarget(toHole ? G.rtHole : G.rtGal); ren.setClearColor(0x000000, 1); ren.clear();
       ren.render(G.scene, cam);

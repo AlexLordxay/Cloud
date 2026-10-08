@@ -33,6 +33,7 @@ f_end2 = font('Commissioner.ttf', 44, 500)
 f_end3 = font('Commissioner.ttf', 34, 500)
 f_tick = font('Unbounded.ttf', 96, 600)
 f_name = font('Unbounded.ttf', 64, 600)
+f_small = font('Commissioner.ttf', 26, 500)
 
 _hooks = {}
 def hook_font(sc):
@@ -161,6 +162,10 @@ def frame(sc, i, src):
         if al <= 0: continue
         if kind == 'hook': draw_block(img, text, hook_font(sc), 520, al, spacing=18)
         else: draw_block(img, text, f_cap, 1400, al)
+    for a, b, text in getattr(sc, 'CREDITS', []):
+        # small print at the bottom (whose picture, artist's view)
+        al = ease(fade(t, a, b, 0.5))
+        if al > 0: draw_block(img, text, f_small, 1830, al * 0.8, fill=(180, 188, 205))
     if t > sc.END_CARD:
         e = lambda delay: max(0.0, min(1.0, (t - sc.END_CARD - delay) / 0.6))
         draw_block(img, sc.END_TITLE, f_end1, 700, e(0.3), spacing=16)
