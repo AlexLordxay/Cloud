@@ -170,13 +170,17 @@
       const near = [[4.24, [1, 0.6, 0.45], 0.5], [4.37, [1, 0.95, 0.85], 1.6], [5.96, [1, 0.6, 0.45], 0.4], [8.6, [0.8, 0.88, 1], 3.0], [11.4, [1, 0.85, 0.7], 1.2], [16.7, [0.85, 0.9, 1], 2.2], [25, [0.8, 0.88, 1], 2.6]];
       const pos = [], col = [], size = [];
       near.forEach(([d, c, b], i) => { const a = i * 2.4 + 0.6, e = (i % 3 - 1) * 0.35; pos.push(Math.cos(a) * Math.cos(e) * d, Math.sin(e) * d, Math.sin(a) * Math.cos(e) * d); col.push(c[0] * b, c[1] * b, c[2] * b); size.push(60); });
+      for (let k = 0; k < 400; k++) {
+        const d = 6 + 80 * Math.cbrt(rnd()), u = rnd() * 2 - 1, t = rnd() * 2 * Math.PI, s = Math.sqrt(1 - u * u), b = 0.8 + rnd() ** 2 * 2.5, warm = rnd() < 0.6;
+        pos.push(s * Math.cos(t) * d, u * d * 0.6, s * Math.sin(t) * d); col.push(b * (warm ? 1 : 0.78), b * 0.88, b * (warm ? 0.72 : 1)); size.push(40);
+      }
       for (let k = 0; k < 40000; k++) {
         const d = 3000 * Math.cbrt(rnd()) + 3, u = rnd() * 2 - 1, t = rnd() * 2 * Math.PI, s = Math.sqrt(1 - u * u);
         pos.push(s * Math.cos(t) * d, u * d * 0.35, s * Math.sin(t) * d);
         const warm = rnd() < 0.7, b = 0.3 + rnd() ** 4 * 2.2;
         col.push(b * (warm ? 1 : 0.75), b * (warm ? 0.85 : 0.85), b * (warm ? 0.7 : 1)); size.push(25 + rnd() * 40);
       }
-      const p = pointsOf(pos, col, size, pointMat({ pmin: 0.9, pmax: 4 })); local.add(p); scene.userData.localStars = p;
+      const p = pointsOf(pos, col, size, pointMat({ pmin: 0.9, pmax: 5 })); local.add(p); scene.userData.localStars = p;
       // the Sun itself and a "you are here" ring
       const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe9c0, sizeAttenuation: false }));
       sun.scale.set(0.05, 0.05, 1); local.add(sun); scene.userData.sun = sun;
@@ -331,16 +335,16 @@
       dist = lerpLog(0.004, 1500, clamp(k, 0, 1) ** 1.15); target = sunPos; el = lerp(38, 30, k); az = lerp(0, 25, k);
     } else if (t < T.wide) {                          // out to the whole galaxy, the view sliding to its centre
       const k = ease((t - T.arm) / (T.wide - T.arm));
-      dist = lerpLog(1500, 210000, (t - T.arm) / (T.wide - T.arm)); target = sunPos.clone().lerp(new V(), k); el = lerp(30, 58, k); az = lerp(25, 60, k);
+      dist = lerpLog(1500, 210000, (t - T.arm) / (T.wide - T.arm)); target = sunPos.clone().lerp(new V(), k); el = lerp(30, 58, k); az = lerp(25, -90, k);   // the Sun ends up in the upper half
     } else if (t < T.dive) {                          // a breath at the widest view
       const k = (t - T.wide) / (T.dive - T.wide);
-      dist = lerpLog(210000, 190000, k); target = new V(); el = 58; az = lerp(60, 66, k);
+      dist = lerpLog(210000, 190000, k); target = new V(); el = 58; az = lerp(-90, -84, k);
     } else if (t < T.hole) {                          // the dive into the centre, to ~30 r_s
       const k = (t - T.dive) / (T.hole - T.dive), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-      dist = lerpLog(190000, 48 * RS_LY, e); target = new V(); el = lerp(58, 9, smooth(k * 1.1)); az = lerp(66, 140, e);
+      dist = lerpLog(190000, 48 * RS_LY, e); target = new V(); el = lerp(58, 9, smooth(k * 1.1)); az = lerp(-84, 0, e);
     } else {                                           // slow drift round the black hole
       const k = (t - T.hole) / (70 - T.hole);
-      dist = lerp(48, 38, smooth(k)) * RS_LY; target = new V(); el = lerp(9, 6, k); az = 140 + 25 * k;
+      dist = lerp(48, 38, smooth(k)) * RS_LY; target = new V(); el = lerp(9, 6, k); az = 25 * k;
     }
     const dir = new V(Math.cos(el * D) * Math.cos(az * D), Math.sin(el * D), Math.cos(el * D) * Math.sin(az * D));
     return { target, dist, dir };
@@ -394,9 +398,9 @@
       G.scene.children.forEach(o => { if (o.isPoints) o.material.uniforms.scale.value = scale; });
       // what shows at which scale
       const L = Math.log10(dist);
-      G.plane.material.uniforms.gain.value = 1.15 * smooth((L - 4.0) / 0.9);
+      G.plane.material.uniforms.gain.value = 1.15 * smooth((L - 3.75) / 0.8);
       G.scene.userData.galStars.material.uniforms.gain.value = 0.16 + 0.6 * smooth((4.6 - L) / 1.2);
-      G.scene.userData.localStars.material.uniforms.gain.value = 1 - smooth((L - 3.2) / 0.8) + 0.0;
+      G.scene.userData.localStars.material.uniforms.gain.value = 1.7 * (1 - smooth((L - 3.2) / 0.8));
       G.bulgeGlow.material.opacity = 0.12 * smooth((L - 4.3) / 0.7);
       G.scene.userData.coreStars.material.uniforms.gain.value = t > T.dive ? 1 : 0;
       const sun = G.scene.userData.sun, ring = G.scene.userData.ring;
