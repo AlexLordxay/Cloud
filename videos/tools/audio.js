@@ -22,8 +22,10 @@ function fnSource(src, fname) {
 
 (async () => {
   const site = fs.readFileSync(path.join(SITE, 'js/audio.js'), 'utf8');
-  const music = cfg.audio && cfg.audio.music === 'cinematic' ? 'createCinematicMusic' : 'createAmbientMusic';
-  const code = fnSource(site, music) + '\n' + fnSource(site, 'createPlanetVoices');
+  // "music": "scene" — the scene's own piece (scenes/<scene>/music.js, function createSceneMusic), for this video only
+  const own = cfg.audio && cfg.audio.music === 'scene';
+  const music = own ? 'createSceneMusic' : cfg.audio && cfg.audio.music === 'cinematic' ? 'createCinematicMusic' : 'createAmbientMusic';
+  const code = (own ? fs.readFileSync(path.join(TOOLS, 'scenes', name, 'music.js'), 'utf8') : fnSource(site, music)) + '\n' + fnSource(site, 'createPlanetVoices');
   const br = await chromium.launch();
   const p = await br.newPage();
   const out = await p.evaluate(async ({ code, music, T, a }) => {

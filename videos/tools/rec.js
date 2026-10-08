@@ -83,7 +83,8 @@ function serve(page) {
     let cur = 0;
     for (const t of String(a).split(',').map(Number)) {
       while (cur < t - 1e-6) {
-        const d = Math.min(1 / FPS, t - cur);
+        // FAST=1: jump to each still in one-second steps (for scenes whose camera is a pure function of time)
+        const d = process.env.FAST && t - cur > 1.5 / FPS ? Math.min(1, t - cur - 1 / FPS) : Math.min(1 / FPS, t - cur);
         if (t - cur > 1 / FPS + 1e-6) await p.evaluate(d => window.__step(d), d);
         else fs.writeFileSync(path.join(WORK, `still_${t}.jpg`), await grab(d));
         cur += d;
