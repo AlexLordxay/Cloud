@@ -18,6 +18,8 @@ ffmpeg=$(python3 -c "import imageio_ffmpeg as i; print(i.get_ffmpeg_exe())")
 
 if [ "$mode" != sound ]; then
   node rec.js "$scene" video
+  # a scene may finish its frames itself (e.g. lay them over a photo)
+  [ -f "scenes/$scene/post.py" ] && python3 "scenes/$scene/post.py"
   python3 compose.py "$scene"
 fi
 node audio.js "$scene"
