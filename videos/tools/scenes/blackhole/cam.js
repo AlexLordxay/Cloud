@@ -332,11 +332,11 @@
     let rs;
     if (t < 5) rs = lerp(58, 50, t / 5);                                   // hanging there: the hook
     else if (t < 18) rs = lerpLog(50, 10, smooth((t - 5) / 13));          // falling
-    else if (t < 25) rs = lerpLog(10, 3, smooth((t - 18) / 7));           // close: the shadow grows
-    else rs = lerpLog(3, 1.3, smooth((t - 25) / 5));                       // the last stretch to the horizon
+    else if (t < 25) rs = lerpLog(10, 4.5, smooth((t - 18) / 7));         // close: the shadow grows
+    else rs = lerpLog(4.5, 2.6, smooth((t - 25) / 4));                     // the last stretch; the fade to black is the horizon
     const el = lerp(9, 14, smooth((t - 5) / 20)), az = lerp(0, 60, smooth(t / 30));
     // close in, the view tilts up off the centre so the shadow sinks low and the disc and bent sky stay in the frame
-    const off = 28 * D * smooth((t - 17) / 8);
+    const off = 48 * D * smooth((t - 17) / 10);
     const dir = new V(Math.cos(el * D) * Math.cos(az * D), Math.sin(el * D), Math.cos(el * D) * Math.sin(az * D));
     return { target: new V(), dist: rs * RS_LY, dir, off };
   }
