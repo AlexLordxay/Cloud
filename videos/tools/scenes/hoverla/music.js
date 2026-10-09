@@ -1,6 +1,7 @@
-// "What if over Hoverla instead of the Moon…" — the video's own score: pipe organ only, no bass, no drums. Calm held
-// chords while the worlds change, an arpeggio from Neptune on that speeds up towards the Sun, a full organ chord while
-// the Sun fills the sky, then a soft chord for the Moon's return. Everything is synthesised. Times in seconds of the video.
+// "What if over Hoverla instead of the Moon…" — the video's own score: soft organ flutes only, no bass, no drums.
+// A slow, calm tune in D major over D – Bm – G – A, one chord per world, voices added as the worlds grow; light broken
+// chords from Neptune on; no sudden climax: the Sun's chord swells in over three seconds (G -> D, a soft "amen"),
+// the tune rises to its highest note and the Moon's return fades back down. Everything is synthesised.
 function createSceneMusic(ctx, dest) {
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -158,9 +159,9 @@ function createSceneMusic(ctx, dest) {
   const REG8 = [[1, 1], [2, 0.4]];
   const REG_MID = [[1, 1], [2, 0.6], [3, 0.3], [4, 0.25]];
   const REG_FULL = [[1, 1], [2, 0.8], [3, 0.5], [4, 0.5], [5, 0.3], [6, 0.3], [8, 0.2]];
-  function organ(t0, t1, m, reg, level, cut, att = 0.05) {
+  function organ(t0, t1, m, reg, level, cut, att = 0.05, rel = 0.4) {
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cut; lp.Q.value = 0.5;
-    const g = env(t0, att, Math.max(0, t1 - t0 - att), 0.4, level);
+    const g = env(t0, att, Math.max(0, t1 - t0 - att), rel, level);
     lp.connect(g).connect(organBus);
     const lfo = ctx.createOscillator(), ld = ctx.createGain(); lfo.frequency.value = 5.2; ld.gain.value = 5;
     lfo.connect(ld); lfo.start(t0); lfo.stop(t1 + 0.5);
@@ -177,27 +178,32 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const BUILD = 25.5, SUN = 35.5, SUN_END = 43.0;
-    // held chords, two bars each (5 s), growing slowly; brighter stops as the worlds get bigger
-    for (let c = 0; c * CHORD < SUN; c++) {
-      const t0 = c * CHORD, t1 = Math.min(SUN, t0 + CHORD), up = UPPER[c % 4];
-      const reg = c < 3 ? REG8 : c < 5 ? REG_MID : REG_FULL;
-      for (const m of up) organ(t0, t1, m, reg, 0.24 + 0.04 * c, 800 + c * 500, c === 0 ? 1.2 : 0.5);
+    const SUN = 35.5, MOON = 43.0, END = 49.5;
+    const FL = [[1, 1], [2, 0.35]];                         // a soft flute stop
+    const CH = [[62, 66, 69, 73], [59, 62, 66, 69], [55, 59, 62, 66], [57, 61, 64, 69]];   // Dmaj7, Bm7, Gmaj7, A
+    const ORDER = [0, 1, 2, 3, 0, 1, 2];                    // one chord per 5 s up to the Sun
+    ORDER.forEach((k, c) => {
+      const t0 = c * 5, t1 = c === 6 ? SUN + 1.0 : t0 + 5.6;            // chords overlap: no gaps, no clicks
+      const lvl = 0.16 + 0.035 * c, cut = 900 + c * 260;
+      for (const m of CH[k]) organ(t0, t1, m, c < 4 ? FL : REG_MID, lvl, cut, c === 0 ? 2.0 : 1.0, 1.2);
+    });
+    // the tune: [start, length, note], half notes and longer, in a soft flute an octave up
+    const TUNE = [[1.25, 1.25, 78], [2.5, 1.25, 76], [3.75, 1.25, 74],
+      [5, 2.5, 74], [7.5, 2.5, 73], [10, 2.5, 71], [12.5, 2.5, 74], [15, 3.75, 76], [18.75, 1.25, 73],
+      [20, 2.5, 78], [22.5, 2.5, 81], [25, 2.5, 83], [27.5, 2.5, 81], [30, 2.5, 79], [32.5, 3.0, 81],
+      [SUN, 6.5, 86],                                      // the Sun: the highest note, held
+      [MOON, 2.5, 81], [MOON + 2.5, 4.0, 78]];
+    for (const [t0, len, m] of TUNE) organ(t0, t0 + len - 0.08, m, FL, t0 >= SUN ? 0.30 : 0.24, 2600, 0.12, 0.6);
+    // light broken chords from Neptune on, eighths, getting a little louder towards the Sun
+    for (let t = 20, i = 0; t < SUN - 0.2; t += BEAT / 2, i++) {
+      const k = ORDER[Math.min(6, Math.floor(t / 5))], ch = CH[k];
+      organ(t, t + 0.3, ch[[0, 2, 1, 3][i % 4]] + 12, FL, 0.07 + 0.08 * (t - 20) / 15, 2200, 0.02, 0.25);
     }
-    // a slow arpeggio under Neptune, then faster from Saturn on, up to the Sun
-    let t = 20.5, i = 0;
-    const pat = [0, 7, 12, 15, 12, 7, 0, 7];
-    while (t < SUN - 0.1) {
-      const base = UPPER[Math.floor(t / CHORD) % 4][0];
-      const dt = t < BUILD ? BEAT : t < 31 ? BEAT / 2 : S16;
-      const prog = (t - 20.5) / (SUN - 20.5);
-      organ(t, t + Math.max(0.14, dt * 1.6), base + pat[i % 8] + (prog > 0.6 ? 12 : 0), prog < 0.4 ? REG8 : REG_MID, 0.22 + 0.3 * prog, 1200 + 3500 * prog, 0.01);
-      i++; t += dt;
-    }
-    // the Sun: the full organ, C major for once, held and fading
-    for (const m of [48, 55, 60, 64, 67, 72, 76]) organ(SUN, SUN_END - 0.5, m, REG_FULL, 0.55, 6000, 0.05);
-    // the Moon again: a soft high chord
-    for (const m of [72, 76, 79, 84]) organ(SUN_END, 49.5, m, REG8, 0.28, 2500, 1.2);
+    // the Sun: D major swelling in over three seconds before it appears, warm and wide, then fading
+    for (const m of [50, 57, 62, 66, 69, 74]) organ(SUN - 2.0, MOON + 0.8, m, REG_MID, 0.36, 3200, 3.0, 2.0);
+    // the Moon again: soft Gmaj7 -> D, fading out
+    for (const m of [67, 71, 74, 78]) organ(MOON, MOON + 3.2, m, FL, 0.2, 2000, 1.5, 1.2);
+    for (const m of [62, 66, 69, 74]) organ(MOON + 3.0, END, m, FL, 0.2, 2000, 1.5, 0.8);
   }
   return {
     output: master,
