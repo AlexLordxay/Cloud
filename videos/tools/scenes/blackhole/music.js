@@ -177,26 +177,26 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const STOP = 29.4;                                   // the horizon: everything stops
-    // held chords, two bars each (5 s), louder and with more stops as the fall goes on
+    const FALL = 14, STOP = 35.7;                        // the fall starts at 14 s; the horizon (everything stops) at 35.7 s
+    // held chords, two bars each (5 s): quiet and still while the friend watches, then growing with the fall
     for (let c = 0; c * CHORD < STOP; c++) {
       const t0 = c * CHORD, t1 = Math.min(STOP, t0 + CHORD), up = UPPER[c % 4];
-      const reg = c < 2 ? REG8 : c < 4 ? REG_MID : REG_FULL;
-      for (const m of up) organ(t0, t1, m, reg, 0.28 + 0.06 * c, 800 + c * 800, c === 0 ? 1.5 : 0.5);
-      if (c >= 4) organ(t0, t1, up[0] + 1, REG8, 0.16, 1500, 0.5);               // a minor second: unease
+      const reg = c < 3 ? REG8 : c < 5 ? REG_MID : REG_FULL;
+      for (const m of up) organ(t0, t1, m, reg, 0.26 + 0.05 * c, 800 + c * 650, c === 0 ? 1.5 : 0.5);
+      if (c >= 5) organ(t0, t1, up[0] + 1, REG8, 0.16, 1500, 0.5);               // a minor second: unease
     }
-    // the arpeggio enters with the fall (5 s) and speeds up: eighths -> sixteenths -> thirty-seconds
-    let t = 5, i = 0;
+    // the arpeggio enters with the fall and speeds up: eighths -> sixteenths -> thirty-seconds
+    let t = FALL, i = 0;
     const pat = [0, 7, 12, 15, 12, 7, 0, 7];
     while (t < STOP - 0.1) {
       const base = UPPER[Math.floor(t / CHORD) % 4][0];
-      const dt = t < 13 ? BEAT / 2 : t < 22 ? S16 : S16 / 2;
-      const prog = (t - 5) / (STOP - 5);
+      const dt = t < 21 ? BEAT / 2 : t < 29 ? S16 : S16 / 2;
+      const prog = (t - FALL) / (STOP - FALL);
       organ(t, t + Math.max(0.12, dt * 1.6), base + pat[i % 8] + (prog > 0.55 ? 12 : 0), prog < 0.35 ? REG8 : REG_MID, 0.26 + 0.3 * prog, 1200 + 4000 * prog, 0.01);
       i++; t += dt;
     }
     // after the horizon: silence, then a lone soft high chord (A flat major over C: open, unanswered)
-    for (const m of [72, 75, 80, 84]) organ(30.8, 37.5, m, REG8, 0.3, 2500, 1.2);
+    for (const m of [72, 75, 80, 84]) organ(37.0, 42.5, m, REG8, 0.3, 2500, 1.2);
   }
   return {
     output: master,

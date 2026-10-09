@@ -16,6 +16,10 @@
 
   // Timeline (s). The flight never stops; each stretch hands over to the next at speed.
   const T = { moon: 6, sun: 13, system: 21, fade0: -3, fade1: -2, stars: -20, arm: -20, wide: -20, dive: -20, hole: -20, end: 34 };   // black-hole-only cut: the galaxy scene from frame 0
+  // Part A (0 - A_END s): a friend far away watches the astronaut fall in. Part B: the fall through his own eyes.
+  // The camera follows the old timeline in "story time" TT: part A stretches its first 5 s, part B runs a bit faster.
+  const A_END = 14, FALL = 1.15;
+  const TT = t => t < A_END ? t * 5 / A_END : 5 + (t - A_END) * FALL;
   const RS_LY = 1.27e-6;                 // Schwarzschild radius of Sgr A* (4.1 million Suns) in light years
   const SUN_R = 26000;                   // the Sun's distance from the centre, ly
 
@@ -306,6 +310,35 @@
     return { scene, mat, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
   }
 
+  // The astronaut (a cut-out picture, AI-generated) drawn over the finished frame: it falls towards the hole, shrinks,
+  // slows down, reddens and dims, and freezes just outside the shadow -- what a far-away observer would see.
+  function buildAstro(r, img) {
+    const THREE = r.THREE, tex = new THREE.Texture(img); tex.needsUpdate = true;
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { map: { value: tex }, tint: { value: new THREE.Vector3(1, 1, 1) }, op: { value: 1 } },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform sampler2D map; uniform vec3 tint; uniform float op; varying vec2 vUv;
+        void main() { vec4 c = texture2D(map, vUv); gl_FragColor = vec4(c.rgb * tint, c.a * op); }`,
+      transparent: true, depthTest: false, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(img.width / img.height, 1), mat);
+    const scene = new THREE.Scene(); scene.add(mesh);
+    return { scene, mesh, mat, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1) };
+  }
+  function drawAstro(ren, t) {
+    if (t > A_END) return;
+    const A = G.astro, k = 1 - Math.exp(-t / 2.6);              // closes in fast, then hardly moves: it freezes
+    const aspect = ren.domElement.width / ren.domElement.height;
+    const size = lerpLog(1.15, 0.022, k);                        // height in screen halves
+    A.mesh.position.set(lerp(0.32, 0.075, k), lerp(-0.6, 0.075, k), 0);
+    A.mesh.scale.set(size / aspect, size, 1);
+    A.mesh.rotation.z = 0.35 + 1.1 * k;                          // its tumble slows down with it
+    const red = k * k;
+    A.mat.uniforms.tint.value.set(1, 1 - 0.7 * red, 1 - 0.92 * red);
+    A.mat.uniforms.op.value = 1 - smooth((t - 8.5) / 4.5);       // dimmer and dimmer, then gone
+    const ac = ren.autoClear; ren.autoClear = false; ren.render(A.scene, A.cam); ren.autoClear = ac;
+  }
+
   window.__sceneSetup = async (r) => {
     const THREE = r.THREE, s = r.state;
     s.index = r.BODIES.indexOf(r.byId.earth); s.mode = 'focus'; s.flight = null; s.rate = 0;
@@ -320,6 +353,7 @@
       rtSite: new THREE.WebGLRenderTarget(W, H, rtOpts), rtGal: new THREE.WebGLRenderTarget(W, H, rtOpts), rtHole: new THREE.WebGLRenderTarget(W, H, rtOpts),
       starfield: r.scene.children.find(o => o.isPoints && o.geometry.attributes.position.count === 7000),
     };
+    G.astro = buildAstro(r, await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = '/scene/astronaut.png'; }));
     console.log('[scene] galaxy stars', G.scene.userData.galStars.geometry.attributes.position.count);
     ready = true;
   };
@@ -364,7 +398,7 @@
     const oAll = smooth((t - T.system + 3) / 3);
     for (const x of r.BODIES) if (x.orbitLine) { const o = x.parent ? (x.id === 'moon' ? 0.5 * smooth((t - 3) / 2) * (1 - smooth((t - 12) / 3)) : 0) : x.baseOpacity * 1.8 * oAll; x.orbitLine.visible = o > 0.003; x.orbitLine.material.opacity = o; }
     if (r.asteroidBelt) r.asteroidBelt.visible = r.kuiperBelt.visible = t > T.system - 3;
-    G.t = t;
+    G.t = TT(t); G.real = t;
   };
 
   // Rendering (replaces the site's renderer.render through a patch in scene.json).
@@ -405,7 +439,7 @@
         u.bg.value = G.rtHole.texture;
         u.camPos.value.copy(cam.position).divideScalar(RS_LY);
         u.camRot.value.setFromMatrix4(cam.matrixWorld);
-        u.tanHalf.value = Math.tan(cam.fov * D / 2); u.aspect.value = cam.aspect; u.time.value = t * 6;
+        u.tanHalf.value = Math.tan(cam.fov * D / 2); u.aspect.value = cam.aspect; u.time.value = (G.real || 0) * 6;
         u.mixIn.value = smooth((Math.log10(dist / RS_LY) - 4.5) / -1.2);
         const vc = cam.clone(); vc.position.copy(cam.position).divideScalar(RS_LY); vc.near = 0.1; vc.far = 1e6; vc.updateMatrixWorld(); vc.updateProjectionMatrix();
         u.viewProj.value.multiplyMatrices(vc.projectionMatrix, vc.matrixWorldInverse);
@@ -415,5 +449,6 @@
     const cu = G.comp.mat.uniforms;
     cu.site.value = G.rtSite.texture; cu.gal.value = G.rtGal.texture; cu.k.value = k; cu.exposure.value = 1.25 * (1 - smooth((t - 28.5) / 1.5));   // the horizon: fade to black
     ren.setRenderTarget(null); ren.clear(); ren.render(G.comp.scene, G.comp.cam);
+    drawAstro(ren, G.real || 0);
   };
 })();
