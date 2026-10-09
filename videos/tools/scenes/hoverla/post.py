@@ -39,10 +39,11 @@ def frame(path):
     w = np.asarray(Image.open(path).convert('RGB').resize((W, H), Image.BICUBIC), np.float32) / 255
     dusk = sm((t - 3.0) / 31.0)                         # 0 at the start .. 1 when Jupiter has been up a while
     sun = min(sm((t - SUN_A + 0.8) / 1.6), 1 - sm((t - SUN_B + 1.5) / 3.0))
-    sky = plate * (1 - 0.5 * dusk) + stars * dusk * (1 - sun) + w * (1 - 0.75 * cloud)
+    sky = plate * (1 - 0.5 * dusk) + stars * dusk * (1 - sun) + 0.78 * w * (1 - 0.75 * cloud)
+    # the Sun is far brighter than the dusk: over the sky it takes its own colour rather than adding to it
+    sky = sky * (1 - sun) + w * 1.25 * sun
     land = plate * (1 - 0.25 * dusk) * (1 + sun * np.array([0.55, 0.35, 0.12], np.float32))
     out = sky * mask + land * (1 - mask)
-    out = 1 - np.exp(-out * 1.15) if sun > 0.01 else out    # soft shoulder: the Sun glows instead of clipping hard
     Image.fromarray((np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8)).save(path, quality=93)
 
 
