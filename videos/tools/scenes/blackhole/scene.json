@@ -1,0 +1,26 @@
+{
+  "title": "Що буде, якщо впасти в чорну діру",
+  "date": "2026-10-10T15:40:00Z",
+  "rate": 0,
+  "duration": 38,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "audio": {
+    "music": "scene"
+  },
+  "patches": [
+    [
+      "window.__rec = { state, byId,",
+      "window.__rec = { asteroidBelt, kuiperBelt, state, byId,"
+    ],
+    [
+      "float flash = step(0.965, beat)",
+      "float flash = 0.0 * step(0.965, beat)"
+    ],
+    [
+      "  renderer.render(scene, camera);\n  requestAnimationFrame(tick);",
+      "  if (window.__recRender) window.__recRender(); else renderer.render(scene, camera);\n  requestAnimationFrame(tick);"
+    ]
+  ]
+}
