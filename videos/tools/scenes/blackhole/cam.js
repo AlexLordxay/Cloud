@@ -327,15 +327,15 @@
   }
   function drawAstro(ren, t) {
     if (t > A_END) return;
-    const A = G.astro, k = 1 - Math.exp(-t / 2.6);              // closes in fast, then hardly moves: it freezes
+    const A = G.astro, k = 1 - Math.exp(-t / 5.5);              // goes away, slower and slower: it freezes
     const aspect = ren.domElement.width / ren.domElement.height;
-    const size = lerpLog(1.15, 0.022, k);                        // height in screen halves
-    A.mesh.position.set(lerp(0.32, 0.075, k), lerp(-0.6, 0.075, k), 0);
+    const size = lerpLog(1.3, 0.03, Math.pow(k, 1.6));          // height in screen halves
+    A.mesh.position.set(lerp(0.3, 0.17, k), lerp(-0.62, 0.17, k), 0);   // ends at the upper right edge of the shadow
     A.mesh.scale.set(size / aspect, size, 1);
     A.mesh.rotation.z = 0.35 + 1.1 * k;                          // its tumble slows down with it
     const red = k * k;
     A.mat.uniforms.tint.value.set(1, 1 - 0.7 * red, 1 - 0.92 * red);
-    A.mat.uniforms.op.value = 1 - smooth((t - 8.5) / 4.5);       // dimmer and dimmer, then gone
+    A.mat.uniforms.op.value = 1 - smooth((t - 10.5) / 3.2);       // dimmer and dimmer, then gone
     const ac = ren.autoClear; ren.autoClear = false; ren.render(A.scene, A.cam); ren.autoClear = ac;
   }
 
