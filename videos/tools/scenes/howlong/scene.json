@@ -1,0 +1,16 @@
+{
+  "title": "Скільки летіти",
+  "date": "2026-10-13T18:00:00Z",
+  "rate": 0,
+  "duration": 47.5,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "audio": { "music": "scene" },
+  "patches": [
+    [
+      "  renderer.render(scene, camera);\n  requestAnimationFrame(tick);",
+      "  if (window.__recRender) window.__recRender(); else renderer.render(scene, camera);\n  requestAnimationFrame(tick);"
+    ]
+  ]
+}

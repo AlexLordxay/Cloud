@@ -161,7 +161,7 @@ def frame(sc, i, src):
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
         if al <= 0: continue
         if kind == 'hook': draw_block(img, text, hook_font(sc), 520, al, spacing=18)
-        else: draw_block(img, text, f_cap, 1400, al)
+        else: draw_block(img, text, f_cap, kind if isinstance(kind, (int, float)) else 1400, al)   # a number: own height (rows)
     for a, b, text in getattr(sc, 'CREDITS', []):
         # small print at the bottom (whose picture, artist's view)
         al = ease(fade(t, a, b, 0.5))
