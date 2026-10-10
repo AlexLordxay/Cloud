@@ -1,0 +1,11 @@
+{
+  "title": "Захід Сонця на Марсі",
+  "date": "2026-10-15T18:00:00Z",
+  "rate": 0,
+  "duration": 42,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "audio": { "music": "scene" },
+  "patches": []
+}
