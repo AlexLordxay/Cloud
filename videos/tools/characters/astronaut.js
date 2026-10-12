@@ -204,21 +204,33 @@
     const head = joint(body, 0, 0.625, -0.01); J.head = head;
     head.add(at(ringY(0.148, 0.026, metal), 0, 0, 0));
     head.add(at(ringY(0.16, 0.012, grey), 0, -0.03, 0));
-    const helmet = mesh(new THREE.SphereGeometry(0.188, 56, 40), shell, 0, 0.16, 0.0); helmet.scale.set(1, 1.03, 1.06); head.add(helmet);
-    // the visor covers the front (-z) of the helmet: phi centred on 1.5π in three's sphere parametrisation
-    // The visor bulges: a slightly larger sphere centred a little forward, so it stands out in the middle and its
-    // edges run under the helmet shell; a dark rubber gasket round the window seats it in the shell.
+    // the helmet shell with the window cut out of it (triangles whose centre falls inside the window are dropped)
     const P0 = Math.PI * 1.13, PL = Math.PI * 0.74, T0 = Math.PI * 0.2, TL = Math.PI * 0.46;
-    const vis = mesh(new THREE.SphereGeometry(0.191, 72, 48, P0, PL, T0, TL), visor, 0, 0.16, -0.011);
+    const shellGeo = (() => {
+      const g = new THREE.SphereGeometry(0.188, 96, 64).toNonIndexed(), p = g.attributes.position, keep = [];
+      const inWin = (x, y, z) => { const r = Math.hypot(x, y, z), th = Math.acos(y / r); let ph = Math.atan2(z, -x); if (ph < 0) ph += Math.PI * 2;
+        return th > T0 && th < T0 + TL && ph > P0 && ph < P0 + PL; };
+      for (let i = 0; i < p.count; i += 3) {
+        const cx = (p.getX(i) + p.getX(i + 1) + p.getX(i + 2)) / 3, cy = (p.getY(i) + p.getY(i + 1) + p.getY(i + 2)) / 3, cz = (p.getZ(i) + p.getZ(i + 1) + p.getZ(i + 2)) / 3;
+        if (!inWin(cx, cy, cz)) for (let k = 0; k < 3; k++) keep.push(p.getX(i + k), p.getY(i + k), p.getZ(i + k));
+      }
+      const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(keep, 3));
+      const nrm = keep.map((v, i) => v / 0.188); out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); return out;   // a sphere's normals are smooth: position / radius
+    })();
+    const helmet = mesh(shellGeo, shell, 0, 0.16, 0.0); helmet.scale.set(1, 1.03, 1.06); head.add(helmet);
+    // the visor covers the front (-z) of the helmet: phi centred on 1.5π in three's sphere parametrisation
+    // The visor sits recessed in the window cut in the shell; a thick dark rubber gasket lines the window's edge and
+    // covers the depth between the shell and the glass.
+    const vis = mesh(new THREE.SphereGeometry(0.177, 72, 48, P0 - 0.06, PL + 0.12, T0 - 0.05, TL + 0.1), visor, 0, 0.16, 0);   // set back inside the shell
     vis.scale.set(1, 1.03, 1.06); head.add(vis);
     {
-      const pts = [], r = 0.1915, sp = (ph, th) => new THREE.Vector3(-r * Math.cos(ph) * Math.sin(th), r * Math.cos(th), r * Math.sin(ph) * Math.sin(th));
+      const pts = [], r = 0.1855, sp = (ph, th) => new THREE.Vector3(-r * Math.cos(ph) * Math.sin(th), r * Math.cos(th), r * Math.sin(ph) * Math.sin(th));
       const n = 24, e = 0.01;   // walk round the window's edge (a rectangle in angles), corners rounded by the curve
       for (let k = 0; k < n; k++) pts.push(sp(P0 + e + (PL - 2 * e) * k / n, T0 + e));
       for (let k = 0; k < n; k++) pts.push(sp(P0 + PL - e, T0 + e + (TL - 2 * e) * k / n));
       for (let k = 0; k < n; k++) pts.push(sp(P0 + PL - e - (PL - 2 * e) * k / n, T0 + TL - e));
       for (let k = 0; k < n; k++) pts.push(sp(P0 + e, T0 + TL - e - (TL - 2 * e) * k / n));
-      const rim = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 200, 0.0065, 10, true), gasket, 0, 0.16, 0);
+      const rim = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 200, 0.0095, 12, true), gasket, 0, 0.16, 0);
       rim.scale.set(1, 1.03, 1.06); head.add(rim);
     }
     const brow = mesh(new THREE.SphereGeometry(0.195, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.16, Math.PI * 0.05), shell, 0, 0.16, 0); brow.scale.set(1, 1.03, 1.06); head.add(brow);
