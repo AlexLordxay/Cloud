@@ -204,27 +204,64 @@
     }
 
     /* legs */
+    // the boot: a side profile with a rounded toe and heel, extruded and bevelled, on a thicker ridged sole
     const bootShape = new THREE.Shape();
-    [[0.065, 0.0], [-0.17, 0.0], [-0.215, 0.02], [-0.215, 0.055], [-0.17, 0.095], [-0.075, 0.13], [-0.07, 0.2], [0.075, 0.2], [0.08, 0.03]]
-      .forEach(([z, y], i) => i ? bootShape.lineTo(z, y) : bootShape.moveTo(z, y));
-    const bootGeo = new THREE.ExtrudeGeometry(bootShape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.022, bevelSegments: 5, curveSegments: 8 });
+    bootShape.moveTo(0.07, 0.0); bootShape.lineTo(-0.15, 0.0);
+    bootShape.quadraticCurveTo(-0.235, 0.0, -0.232, 0.05); bootShape.quadraticCurveTo(-0.225, 0.1, -0.13, 0.115);
+    bootShape.quadraticCurveTo(-0.085, 0.13, -0.075, 0.2); bootShape.lineTo(0.07, 0.2);
+    bootShape.quadraticCurveTo(0.095, 0.1, 0.085, 0.03); bootShape.quadraticCurveTo(0.082, 0.0, 0.07, 0.0);
+    const bootGeo = new THREE.ExtrudeGeometry(bootShape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.028, bevelSize: 0.024, bevelSegments: 6, curveSegments: 14 });
     bootGeo.translate(0, -0.2, -0.05); bootGeo.rotateY(-Math.PI / 2); bootGeo.scale(1.12, 1.05, 1.05); bootGeo.computeVertexNormals();
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
       const hp = joint(body, s * 0.105, -0.13, -0.035);
-      hp.add(mesh(limb(0.34, 0.1, 0.098, 0.1, 3 * s), fabric, 0, -0.1, 0));   // starts inside the briefs   // starts inside the briefs
-      hp.add(at(ringY(0.116, 0.006, grey), 0, -0.2, 0));
-      const kn = joint(hp, 0, -0.48, 0);
-      kn.add(mesh(bellows(0.12, 0.098, 3), fabric2));
-      const pad = mesh(lumpy(new THREE.SphereGeometry(0.1, 40, 24, Math.PI * 1.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), 0.004), fabric2, 0, -0.02, 0); pad.scale.set(1.08, 1.25, 1.12); kn.add(pad);   // a padded patch over the knee
-      kn.add(mesh(limb(0.34, 0.096, 0.084, 0.05, 1 - s), fabric, 0, -0.065, 0));
-      const an = joint(kn, 0, -0.46, 0);
-      an.add(at(ringY(0.086, 0.017, metal), 0, 0.02, 0));
+      // thigh: full at the top (it starts inside the briefs), narrowing to the knee
+      hp.add(mesh(limb(0.37, 0.124, 0.096, 0.06, 3 * s), fabric, 0, -0.09, 0));
+      hp.add(at(ringY(0.116, 0.006, grey), 0, -0.24, 0));                                     // a seam / restraint line
+      const kn = joint(hp, 0, -0.5, 0);
+      kn.add(mesh(bellows(0.11, 0.1, 3), fabric2));
+      const pad = mesh(lumpy(new THREE.SphereGeometry(0.104, 40, 24, Math.PI * 1.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), 0.004), fabric2, 0, -0.02, 0); pad.scale.set(1.08, 1.25, 1.12); kn.add(pad);   // a padded patch over the knee
+      // shin with a calf: fuller just below the knee at the back, slimmer to the ankle
+      const shin = mesh(limb(0.38, 0.098, 0.08, 0.1, 1 - s), fabric, 0, -0.06, 0.008); shin.scale.set(1, 1, 1.06); kn.add(shin);
+      const an = joint(kn, 0, -0.5, 0);
+      an.add(mesh(lumpy(lathe([[0, -0.02], [0.094, -0.02], [0.1, 0.03], [0.092, 0.08], [0, 0.085]], 48), 0.004), fabric2, 0, 0.02, 0));   // a cloth cuff over the boot top
+      an.add(at(ringY(0.096, 0.015, metal), 0, 0.03, 0));
       an.add(mesh(bootGeo, shell, 0, 0.02, 0));
-      an.add(mesh(rbox(0.17, 0.032, 0.33, 0.013), dark, 0, -0.2, -0.075));                      // sole
-      an.add(mesh(new THREE.BoxGeometry(0.18, 0.022, 0.065), grey, 0, -0.09, 0.02));               // strap
+      an.add(mesh(rbox(0.175, 0.04, 0.34, 0.016), dark, 0, -0.2, -0.078));                      // sole
+      for (let k = 0; k < 6; k++) an.add(mesh(new THREE.BoxGeometry(0.17, 0.01, 0.018), grey, 0, -0.222, 0.06 - k * 0.055));   // tread
+      an.add(mesh(new THREE.BoxGeometry(0.185, 0.024, 0.07), grey, 0, -0.09, 0.02));               // strap
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
+
+    /* the Nebozvid emblem: a round patch drawn on a canvas (the site's dawn-to-night gradient, its four-point star) */
+    function emblemTexture() {
+      const N = 512, cv = document.createElement('canvas'); cv.width = cv.height = N;
+      const g = cv.getContext('2d'), c = N / 2;
+      const grad = g.createLinearGradient(0, 0, N, 0);
+      grad.addColorStop(0, '#f7c66b'); grad.addColorStop(0.52, '#f39a8b'); grad.addColorStop(1, '#9cc2ff');
+      g.fillStyle = grad; g.beginPath(); g.arc(c, c, c - 4, 0, Math.PI * 2); g.fill();                  // gradient rim
+      const bg = g.createRadialGradient(c, c * 0.8, 10, c, c, c);
+      bg.addColorStop(0, '#1b2a55'); bg.addColorStop(1, '#070b1c');
+      g.fillStyle = bg; g.beginPath(); g.arc(c, c, c - 30, 0, Math.PI * 2); g.fill();                  // night-sky field
+      let sd = 5; const r = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+      for (let i = 0; i < 40; i++) { const a = r() * 6.283, d = r() * (c - 60); g.fillStyle = `rgba(255,255,255,${0.3 + 0.6 * r()})`; g.beginPath(); g.arc(c + Math.cos(a) * d, c + Math.sin(a) * d, 1 + r() * 2, 0, 6.283); g.fill(); }
+      g.strokeStyle = 'rgba(156,194,255,0.55)'; g.lineWidth = 5;                                      // an orbit
+      g.beginPath(); g.ellipse(c, c + 36, c * 0.58, c * 0.18, -0.3, 0, Math.PI * 2); g.stroke();
+      const star = (x, y, R, k) => { g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 - Math.PI / 2, rr = i % 2 ? R * k : R; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.closePath(); g.fill(); };
+      g.shadowColor = 'rgba(170,205,255,0.9)'; g.shadowBlur = 30; g.fillStyle = '#ffffff'; star(c, c + 20, 84, 0.22); g.shadowBlur = 0;
+      g.fillStyle = '#f7c66b'; star(c + 128, c + 66, 18, 0.3);
+      // the name round the top, letter by letter
+      g.font = 'bold 66px "DejaVu Sans", Arial, sans-serif'; g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      const word = 'НЕБОЗВІД', R0 = c - 78, span = 2.0;
+      const ws = [...word].map(ch => g.measureText(ch).width + 6), tot = ws.reduce((x, y) => x + y, 0); let acc = 0;
+      [...word].forEach((ch, i) => { const a = -Math.PI / 2 - span / 2 + span * (acc + ws[i] / 2) / tot; acc += ws[i]; g.save(); g.translate(c + Math.cos(a) * R0, c + Math.sin(a) * R0); g.rotate(a + Math.PI / 2); g.fillText(ch, 0, 0); g.restore(); });
+      const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t;
+    }
+    const emblemMat = M({ map: emblemTexture(), roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2 });
+    // a disc bent to lie on a surface: z pushed back by the surface's curvature (k) over x
+    const patch = (rad, k) => { const g = new THREE.CircleGeometry(rad, 48), p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, -k * p.getX(i) * p.getX(i)); g.computeVertexNormals(); return g; };
+    const chest = mesh(patch(0.06, 2.6), emblemMat, -0.11, 0.47, -0.2); chest.rotation.set(0, Math.PI + 0.45, 0); chest.rotation.x = -0.12; body.add(chest);   // on the left of the chest
+    const back = mesh(patch(0.085, 0.35), emblemMat, 0, 0.03, 0.127); pack.add(back);                                                // on the backpack flap
 
     shadowed(group);
 
@@ -236,8 +273,8 @@
         J['shoulder' + L].rotation.set(0.35 + 0.08 * a + 0.09 * w(t, 5.3, ph), 0.1 * s, s * (0.8 + 0.12 * a + 0.1 * w(t, 6.1, ph + 1)));
         J['elbow' + L].rotation.set(0.75 + 0.12 * w(t, 4.4, ph + 2), 0, 0);
         J['wrist' + L].rotation.set(0.2 + 0.12 * w(t, 3.7, ph), 0.3 * s, s * 0.15);
-        J['hip' + L].rotation.set(0.14 + 0.06 * a + 0.05 * w(t, 6.7, ph + 0.5), 0, s * (0.08 + 0.03 * w(t, 7.3, ph)));
-        J['knee' + L].rotation.set(-0.55 - 0.2 * a + 0.1 * w(t, 5.9, ph + 2.6), 0, 0);
+        J['hip' + L].rotation.set(0.32 + 0.14 * a + 0.06 * w(t, 6.7, ph + 0.5), 0, s * (0.1 + 0.03 * w(t, 7.3, ph)));
+        J['knee' + L].rotation.set(-0.75 - 0.3 * a + 0.1 * w(t, 5.9, ph + 2.6), 0, 0);
         J['ankle' + L].rotation.set(0.3 + 0.05 * w(t, 4.9, ph), 0, 0);
       }
       J.head.rotation.set(-0.1 + 0.04 * w(t, 8.1, 0.3), 0.05 * w(t, 9.7, 1), 0);
