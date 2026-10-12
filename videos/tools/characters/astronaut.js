@@ -72,7 +72,18 @@
     const dark = M({ color: 0x26282c, roughness: 0.75, metalness: 0.1 });
     const visor = M({ color: 0xe0a640, roughness: 0.08, metalness: 1.0 });
     const lens = M({ color: 0x111316, roughness: 0.1, metalness: 0.6 });
-    const blue = M({ color: 0x0057b7, roughness: 0.85 }), yellow = M({ color: 0xffd500, roughness: 0.85 });
+    const blue = M({ color: 0x0057b7, roughness: 0.85 }), yellow = M({ color: 0xffd500, roughness: 0.85 }), white = M({ color: 0xf4f2ec, roughness: 0.85 });
+    // the colour details (after the Apollo-era suits): silver-grey gloves with blue rubber fingertips, beige straps,
+    // blue and red hose connectors, striped hoses
+    const glove = M({ color: 0x98a2b2, roughness: 0.55, metalness: 0.3, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
+    const rubber = M({ color: 0x1d3f86, roughness: 0.5 }), strap = M({ color: 0xc8b088, roughness: 0.85 });
+    const connBlue = M({ color: 0x1f4c9e, roughness: 0.4, metalness: 0.3 }), connRed = M({ color: 0xb02a22, roughness: 0.4, metalness: 0.3 });
+    const hoseMat = (() => {
+      const cv = document.createElement('canvas'); cv.width = 64; cv.height = 8; const g = cv.getContext('2d');
+      g.fillStyle = '#efece6'; g.fillRect(0, 0, 64, 8); g.fillStyle = '#3a3d44'; g.fillRect(40, 0, 14, 8);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(26, 1); t.encoding = THREE.sRGBEncoding;
+      return M({ map: t, roughness: 0.6 });
+    })();
 
     const at = (m, x, y, z) => { m.position.set(x, y, z); return m; };
     const mesh = (geo, mat, x = 0, y = 0, z = 0) => at(new THREE.Mesh(geo, mat), x, y, z);
@@ -133,13 +144,21 @@
     const brief = mesh(lumpy(lathe([[0, -0.27], [0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12], [0, 0.13]], 64), 0.006, 10, (x, y) => Math.min(1, Math.max(0, (0.04 - y) / 0.12))), fabric);   // one piece down to the top of the thighs: the legs come out of it
     brief.scale.set(1.26, 1, 0.9); body.add(brief);   // the same cross-section as the torso where they meet: one garment
     // the waist: a soft band of the suit's own cloth over the bearing (no bare metal), the torso narrowing into it
-    const waist = at(ringY(0.174, 0.013, fabric2), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
+    const waist = at(ringY(0.175, 0.015, strap), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
     // chest control box with two hoses to the backpack
     const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), shell, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
     for (const [x, y] of [[-0.08, 0.02], [0.02, 0.02], [0.1, 0.0]]) { const k = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), metal, x, 0.33 + y, -0.31); k.rotation.x = Math.PI / 2 + 0.2; body.add(k); }
     for (const s of [-1, 1]) {
       const c = new THREE.CatmullRomCurve3([new THREE.Vector3(s * 0.14, 0.31, -0.28), new THREE.Vector3(s * 0.27, 0.29, -0.22), new THREE.Vector3(s * 0.325, 0.3, -0.04), new THREE.Vector3(s * 0.3, 0.31, 0.12), new THREE.Vector3(s * 0.25, 0.32, 0.2)]);
-      body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.016, 10, false), s < 0 ? grey : dark));
+      body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, 0.019, 12, false), hoseMat));
+    }
+
+    // the hose connectors on the chest: two blue, one red, each in a metal collar
+    for (const [x, y, m] of [[-0.09, 0.2, connBlue], [0.09, 0.2, connBlue], [0, 0.155, connRed]]) {
+      const zc = -0.9 * 0.2 * Math.sqrt(Math.max(0, 1 - (x / (1.26 * 0.2)) ** 2)) - 0.006;
+      const g = joint(body, x, y, zc); g.lookAt(x * 3, y, zc * 3);
+      g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.032, 0.022, 28), metal), 0, 0, 0).rotateX(Math.PI / 2));
+      g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.03, 28), m), 0, 0, 0.004).rotateX(Math.PI / 2));
     }
 
     /* life-support backpack (+z side) */
@@ -189,25 +208,37 @@
       sh.add(mesh(lumpy(lathe(sleeve.reverse(), 64), 0.007, 12, (x, y) => Math.min(1, Math.max(0, -y / 0.2))), fabric));   // smooth over the shoulder, cloth wrinkles further down
       sh.add(at(ringY(0.088, 0.006, grey), 0, -0.2, 0));                                     // a seam / restraint line
       if (s < 0) {   // the flag on the outside of the left upper arm
-        const f = joint(sh, -0.094, -0.13, 0); f.rotation.y = -Math.PI / 2;
-        f.add(mesh(new THREE.PlaneGeometry(0.075, 0.025), blue, 0, 0.0125, 0), mesh(new THREE.PlaneGeometry(0.075, 0.025), yellow, 0, -0.0125, 0));
+        const f = joint(sh, -0.097, -0.15, 0); f.rotation.y = -Math.PI / 2;
+        f.add(mesh(new THREE.PlaneGeometry(0.112, 0.08), white, 0, 0, -0.001));
+        f.add(mesh(new THREE.PlaneGeometry(0.1, 0.034), blue, 0, 0.017, 0), mesh(new THREE.PlaneGeometry(0.1, 0.034), yellow, 0, -0.017, 0));
       }
       const el = joint(sh, 0, -0.37, 0);
       el.add(mesh(bellows(0.1, 0.08, 3), fabric2));
       const epad = mesh(new THREE.SphereGeometry(0.082, 32, 20, Math.PI * 0.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), fabric2, 0, -0.01, 0); epad.scale.set(1.08, 1.2, 1.12); el.add(epad);   // and over the back of the elbow
       el.add(mesh(limb(0.23, 0.078, 0.066, 0.05, 2 + s), fabric, 0, -0.055, 0));
       const wr = joint(el, 0, -0.33, 0);
-      wr.add(at(ringY(0.07, 0.017, metal), 0, 0.012, 0));
-      wr.add(mesh(new THREE.CylinderGeometry(0.072, 0.066, 0.055, 24), dark, 0, -0.02, 0));     // gauntlet cuff
-      const hand = joint(wr, 0, -0.05, 0);
-      hand.add(mesh(rbox(0.095, 0.1, 0.048, 0.022), dark, 0, -0.045, 0));                         // palm
+      // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
+      wr.add(at(ringY(0.07, 0.016, dark), 0, 0.012, 0));
+      wr.add(at(ringY(0.072, 0.006, s < 0 ? connBlue : connRed), 0, -0.004, 0));
+      // the glove: a flared gauntlet, a full palm with a plate on the back, jointed fingers with blue rubber tips
+      wr.add(mesh(lumpy(lathe([[0, -0.085], [0.07, -0.085], [0.08, -0.06], [0.078, -0.03], [0.068, 0.0], [0, 0.005]], 40), 0.003, 16), glove));
+      const hand = joint(wr, 0, -0.08, 0);
+      hand.add(mesh(lumpy(rbox(0.11, 0.1, 0.066, 0.03), 0.002, 20), glove, 0, -0.048, 0));                     // a full, padded palm
+      hand.add(mesh(lumpy(rbox(0.104, 0.026, 0.024, 0.011), 0.002, 20), fabric2, 0, -0.085, 0.024));         // a padded bar over the knuckles
       for (let i = 0; i < 4; i++) {
-        const fg = joint(hand, (i - 1.5) * 0.023 * -s, -0.095, 0);
-        fg.rotation.x = 0.35 + 0.1 * i;
-        fg.add(mesh(new THREE.CapsuleGeometry(0.0115, 0.04 + (i === 1 || i === 2 ? 0.008 : 0), 6, 12), dark, 0, -0.03, 0));
+        const fg = joint(hand, (i - 1.5) * 0.027 * -s, -0.098, 0.004);
+        fg.rotation.set(0.55 + 0.1 * i, 0, -s * (i - 1.5) * 0.05);                                    // a relaxed, half-closed hand
+        const len = i === 1 || i === 2 ? 0.036 : 0.03;
+        fg.add(mesh(new THREE.CapsuleGeometry(0.0145, len, 6, 14), glove, 0, -len / 2 - 0.006, 0));
+        const tip = joint(fg, 0, -len - 0.012, 0); tip.rotation.x = 0.7;
+        tip.add(mesh(new THREE.CapsuleGeometry(0.0138, 0.02, 6, 14), glove, 0, -0.012, 0));
+        tip.add(mesh(new THREE.SphereGeometry(0.0146, 16, 12, 0, Math.PI * 2, Math.PI * 0.25, Math.PI * 0.75), rubber, 0, -0.024, 0));   // blue rubber tip
       }
-      const th = joint(hand, s * 0.05, -0.04, -0.01); th.rotation.set(0.3, 0, -s * 0.7);
-      th.add(mesh(new THREE.CapsuleGeometry(0.013, 0.035, 6, 12), dark, 0, -0.03, 0));
+      const th = joint(hand, s * 0.058, -0.03, -0.014); th.rotation.set(0.5, 0, -s * 0.8);
+      th.add(mesh(new THREE.CapsuleGeometry(0.016, 0.03, 6, 14), glove, 0, -0.026, 0));
+      const tt = joint(th, 0, -0.05, 0); tt.rotation.x = 0.5;
+      tt.add(mesh(new THREE.CapsuleGeometry(0.015, 0.016, 6, 14), glove, 0, -0.012, 0));
+      tt.add(mesh(new THREE.SphereGeometry(0.0158, 16, 12, 0, Math.PI * 2, Math.PI * 0.25, Math.PI * 0.75), rubber, 0, -0.022, 0));
       J['shoulder' + L] = sh; J['elbow' + L] = el; J['wrist' + L] = wr;
     }
 
@@ -225,6 +256,12 @@
       const hp = joint(body, s * 0.105, -0.13, -0.035);
       // thigh: full at the top (it starts inside the briefs), narrowing to the knee
       hp.add(mesh(limb(0.37, 0.116, 0.096, 0.06, 3 * s), fabric, 0, -0.09, 0));
+      if (s < 0) {   // a pocket with a flap on the outside of the left thigh
+        const pk = joint(hp, -0.112, -0.26, -0.005); pk.rotation.set(0, -Math.PI / 2, 0.06);
+        pk.add(mesh(lumpy(rbox(0.1, 0.12, 0.022, 0.012), 0.002, 20), fabric2));
+        pk.add(mesh(rbox(0.104, 0.038, 0.026, 0.01), cover, 0, 0.05, 0.004));
+        pk.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 12), metal, 0, 0.045, 0.02).rotateX(Math.PI / 2));
+      }
       // the seat: cloth from inside the briefs narrowing into the thigh. It hangs from the torso (not the leg), turned
       // the way the thigh rests, so it never pokes out in front when the leg moves; the thigh slides inside it.
       const seat = mesh(lumpy(lathe([[0, -0.26], [0.122, -0.26], [0.126, -0.19], [0.136, -0.1], [0.148, -0.02], [0.15, 0.04], [0.13, 0.09], [0, 0.1]], 64), 0.005, 10), fabric, s * 0.105 - s * 0.01, -0.13, -0.035);
