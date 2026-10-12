@@ -74,8 +74,8 @@
     const lens = M({ color: 0x111316, roughness: 0.1, metalness: 0.6 });
     const blue = M({ color: 0x0057b7, roughness: 0.85 }), yellow = M({ color: 0xffd500, roughness: 0.85 }), white = M({ color: 0xf4f2ec, roughness: 0.85 });
     // the colour details (after the Apollo-era suits): silver-grey gloves with blue rubber fingertips, beige straps,
-    // blue and red hose connectors, striped hoses
-    const glove = M({ color: 0x98a2b2, roughness: 0.55, metalness: 0.3, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
+    // blue and red wrist stripes, striped hoses
+    const glove = M({ color: 0xa3acba, roughness: 0.72, metalness: 0.08, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
     const rubber = M({ color: 0x1d3f86, roughness: 0.5 }), strap = M({ color: 0xc8b088, roughness: 0.85 });
     const connBlue = M({ color: 0x1f4c9e, roughness: 0.4, metalness: 0.3 }), connRed = M({ color: 0xb02a22, roughness: 0.4, metalness: 0.3 });
     const hoseMat = (() => {
@@ -153,14 +153,6 @@
       body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, 0.019, 12, false), hoseMat));
     }
 
-    // the hose connectors on the chest: two blue, one red, each in a metal collar
-    for (const [x, y, m] of [[-0.09, 0.2, connBlue], [0.09, 0.2, connBlue], [0, 0.155, connRed]]) {
-      const zc = -0.9 * 0.2 * Math.sqrt(Math.max(0, 1 - (x / (1.26 * 0.2)) ** 2)) - 0.006;
-      const g = joint(body, x, y, zc); g.lookAt(x * 3, y, zc * 3);
-      g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.032, 0.022, 28), metal), 0, 0, 0).rotateX(Math.PI / 2));
-      g.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.03, 28), m), 0, 0, 0.004).rotateX(Math.PI / 2));
-    }
-
     /* life-support backpack (+z side) */
     const pack = joint(body, 0, 0.37, 0.25);
     const bend = (g, k) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - k * p.getX(i) * p.getX(i) - 0.3 * k * p.getY(i) * p.getY(i)); g.computeVertexNormals(); return g; };
@@ -221,24 +213,25 @@
       wr.add(at(ringY(0.07, 0.016, dark), 0, 0.012, 0));
       wr.add(at(ringY(0.072, 0.006, s < 0 ? connBlue : connRed), 0, -0.004, 0));
       // the glove: a flared gauntlet, a full palm with a plate on the back, jointed fingers with blue rubber tips
-      wr.add(mesh(lumpy(lathe([[0, -0.085], [0.07, -0.085], [0.08, -0.06], [0.078, -0.03], [0.068, 0.0], [0, 0.005]], 40), 0.003, 16), glove));
-      const hand = joint(wr, 0, -0.08, 0);
-      hand.add(mesh(lumpy(rbox(0.11, 0.1, 0.066, 0.03), 0.002, 20), glove, 0, -0.048, 0));                     // a full, padded palm
-      hand.add(mesh(lumpy(rbox(0.104, 0.026, 0.024, 0.011), 0.002, 20), fabric2, 0, -0.085, 0.024));         // a padded bar over the knuckles
+      wr.add(mesh(lumpy(lathe([[0, -0.1], [0.06, -0.1], [0.07, -0.085], [0.074, -0.05], [0.072, -0.015], [0.066, 0.005], [0, 0.008]], 40), 0.003, 16), glove));   // the gauntlet: a cuff, not a plate
+      const hand = joint(wr, 0, -0.085, 0);
+      // a rounded, padded hand: an ellipsoid palm with a fuller back, not a flat box
+      const palm = mesh(lumpy(new THREE.SphereGeometry(1, 40, 30), 0.012, 3), glove, 0, -0.052, 0); palm.scale.set(0.058, 0.064, 0.04); hand.add(palm);
+      const backH = mesh(new THREE.SphereGeometry(1, 32, 24), glove, 0, -0.06, 0.012); backH.scale.set(0.052, 0.05, 0.03); hand.add(backH);
       for (let i = 0; i < 4; i++) {
-        const fg = joint(hand, (i - 1.5) * 0.027 * -s, -0.098, 0.004);
-        fg.rotation.set(0.55 + 0.1 * i, 0, -s * (i - 1.5) * 0.05);                                    // a relaxed, half-closed hand
-        const len = i === 1 || i === 2 ? 0.036 : 0.03;
-        fg.add(mesh(new THREE.CapsuleGeometry(0.0145, len, 6, 14), glove, 0, -len / 2 - 0.006, 0));
-        const tip = joint(fg, 0, -len - 0.012, 0); tip.rotation.x = 0.7;
-        tip.add(mesh(new THREE.CapsuleGeometry(0.0138, 0.02, 6, 14), glove, 0, -0.012, 0));
-        tip.add(mesh(new THREE.SphereGeometry(0.0146, 16, 12, 0, Math.PI * 2, Math.PI * 0.25, Math.PI * 0.75), rubber, 0, -0.024, 0));   // blue rubber tip
+        const fg = joint(hand, (i - 1.5) * 0.025 * -s, -0.1, 0.004);
+        fg.rotation.set(0.55 + 0.1 * i, 0, -s * (i - 1.5) * 0.06);                                    // a relaxed, half-closed hand
+        const len = i === 1 || i === 2 ? 0.034 : 0.028, r = i === 3 ? 0.0145 : 0.0165;
+        fg.add(mesh(new THREE.CapsuleGeometry(r, len, 8, 16), glove, 0, -len / 2 - 0.006, 0));
+        const tip = joint(fg, 0, -len - 0.013, 0); tip.rotation.x = 0.7;
+        tip.add(mesh(new THREE.CapsuleGeometry(r * 0.95, 0.018, 8, 16), glove, 0, -0.012, 0));
+        tip.add(mesh(new THREE.SphereGeometry(r * 1.02, 16, 12, 0, Math.PI * 2, Math.PI * 0.25, Math.PI * 0.75), rubber, 0, -0.023, 0));   // blue rubber tip
       }
-      const th = joint(hand, s * 0.058, -0.03, -0.014); th.rotation.set(0.5, 0, -s * 0.8);
-      th.add(mesh(new THREE.CapsuleGeometry(0.016, 0.03, 6, 14), glove, 0, -0.026, 0));
+      const th = joint(hand, s * 0.052, -0.035, -0.016); th.rotation.set(0.5, 0, -s * 0.8);
+      th.add(mesh(new THREE.CapsuleGeometry(0.018, 0.028, 8, 16), glove, 0, -0.026, 0));
       const tt = joint(th, 0, -0.05, 0); tt.rotation.x = 0.5;
-      tt.add(mesh(new THREE.CapsuleGeometry(0.015, 0.016, 6, 14), glove, 0, -0.012, 0));
-      tt.add(mesh(new THREE.SphereGeometry(0.0158, 16, 12, 0, Math.PI * 2, Math.PI * 0.25, Math.PI * 0.75), rubber, 0, -0.022, 0));
+      tt.add(mesh(new THREE.CapsuleGeometry(0.017, 0.014, 8, 16), glove, 0, -0.012, 0));
+      tt.add(mesh(new THREE.SphereGeometry(0.0175, 16, 12, 0, Math.PI * 2, Math.PI * 0.25, Math.PI * 0.75), rubber, 0, -0.022, 0));
       J['shoulder' + L] = sh; J['elbow' + L] = el; J['wrist' + L] = wr;
     }
 
