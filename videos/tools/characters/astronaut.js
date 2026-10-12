@@ -153,20 +153,26 @@
       body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, 0.019, 12, false), hoseMat));
     }
 
-    // two more striped hoses from the control box down to the waist
+    // two more striped hoses from the control box down into connector boxes on the belt
     for (const sd of [-1, 1]) {
-      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.08, 0.29, -0.28), new THREE.Vector3(sd * 0.12, 0.2, -0.235), new THREE.Vector3(sd * 0.17, 0.12, -0.195), new THREE.Vector3(sd * 0.2, 0.075, -0.16)]);
+      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.08, 0.29, -0.28), new THREE.Vector3(sd * 0.115, 0.21, -0.24), new THREE.Vector3(sd * 0.15, 0.135, -0.205), new THREE.Vector3(sd * 0.165, 0.095, -0.19)]);
       body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.014, 10, false), hoseMat));
+      const box = joint(body, sd * 0.168, 0.066, -0.17); box.rotation.y = -sd * 0.55;            // the box sits on the belt, the hose plugs into its top
+      box.add(mesh(rbox(0.05, 0.05, 0.03, 0.008), grey));
+      box.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.014, 18), metal), 0, 0.03, 0));
     }
     // the backpack's harness: beige straps over the shoulders down to the control box
     for (const sd of [-1, 1]) {
       const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.13, 0.5, 0.22), new THREE.Vector3(sd * 0.155, 0.6, 0.1), new THREE.Vector3(sd * 0.16, 0.6, -0.08), new THREE.Vector3(sd * 0.145, 0.5, -0.2), new THREE.Vector3(sd * 0.13, 0.4, -0.235)]);
       const st = new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.012, 8, false), strap); st.scale.set(1, 1, 1); body.add(st);
     }
-    // a coiled safety tether hanging from the belt on the right
-    { const pts = []; for (let k = 0; k <= 220; k++) { const a = k / 220 * Math.PI * 2 * 7; pts.push(new THREE.Vector3(0.27 + Math.cos(a) * 0.028, 0.06 - k / 220 * 0.16, -0.04 + Math.sin(a) * 0.028)); }
-      body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 600, 0.0055, 6, false), dark));
-      body.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.005, 8, 20), metal), 0.27, -0.11, -0.04)); }
+    // a coiled safety tether on the right of the belt: it hangs from a D-ring on the belt, its hook clipped to a loop below
+    { const X = 0.262, Z = -0.07;
+      const dr = at(new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0045, 8, 20), metal), X, 0.045, Z); dr.rotation.y = Math.PI / 2 - 0.5; body.add(dr);
+      const pts = []; for (let k = 0; k <= 160; k++) { const a = k / 160 * Math.PI * 2 * 5; pts.push(new THREE.Vector3(X + Math.cos(a) * 0.022, 0.03 - k / 160 * 0.1, Z + Math.sin(a) * 0.022)); }
+      body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 480, 0.0052, 6, false), dark));
+      const hook = at(new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0042, 8, 20, Math.PI * 1.6), metal), X, -0.085, Z); hook.rotation.y = Math.PI / 2 - 0.5; body.add(hook);
+      const tab = mesh(rbox(0.03, 0.04, 0.008, 0.004), strap, 0.243, -0.1, Z); tab.rotation.y = Math.PI / 2; body.add(tab); }   // a cloth loop sewn on the suit
 
     /* life-support backpack (+z side) */
     const pack = joint(body, 0, 0.37, 0.25);
