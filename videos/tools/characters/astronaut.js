@@ -236,7 +236,6 @@
         const ck = joint(el, 0, -0.17, -0.072); ck.rotation.y = Math.PI;
         ck.add(mesh(rbox(0.085, 0.062, 0.018, 0.006), grey));
         for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
-        ck.add(at(ringY(0.073, 0.006, strap), 0, 0.0, 0.072));
       }
       const wr = joint(el, 0, -0.33, 0);
       // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
