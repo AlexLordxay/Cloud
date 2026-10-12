@@ -76,7 +76,7 @@
     // the colour details (after the Apollo-era suits): silver-grey gloves with blue rubber fingertips, beige straps,
     // blue and red wrist stripes, striped hoses
     const glove = M({ color: 0xa3acba, roughness: 0.72, metalness: 0.08, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
-    const rubber = M({ color: 0x1d3f86, roughness: 0.5 }), strap = M({ color: 0xc8b088, roughness: 0.85 });
+    const rubber = M({ color: 0x1d3f86, roughness: 0.5 }), strap = M({ color: 0xb4955f, roughness: 0.85 });
     const connBlue = M({ color: 0x1f4c9e, roughness: 0.4, metalness: 0.3 }), connRed = M({ color: 0xb02a22, roughness: 0.4, metalness: 0.3 });
     const hoseMat = (() => {
       const cv = document.createElement('canvas'); cv.width = 64; cv.height = 8; const g = cv.getContext('2d');
@@ -153,6 +153,21 @@
       body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, 0.019, 12, false), hoseMat));
     }
 
+    // two more striped hoses from the control box down to the waist
+    for (const sd of [-1, 1]) {
+      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.08, 0.29, -0.28), new THREE.Vector3(sd * 0.12, 0.2, -0.235), new THREE.Vector3(sd * 0.17, 0.12, -0.195), new THREE.Vector3(sd * 0.2, 0.075, -0.16)]);
+      body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.014, 10, false), hoseMat));
+    }
+    // the backpack's harness: beige straps over the shoulders down to the control box
+    for (const sd of [-1, 1]) {
+      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.13, 0.5, 0.22), new THREE.Vector3(sd * 0.155, 0.6, 0.1), new THREE.Vector3(sd * 0.16, 0.6, -0.08), new THREE.Vector3(sd * 0.145, 0.5, -0.2), new THREE.Vector3(sd * 0.13, 0.4, -0.235)]);
+      const st = new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.012, 8, false), strap); st.scale.set(1, 1, 1); body.add(st);
+    }
+    // a coiled safety tether hanging from the belt on the right
+    { const pts = []; for (let k = 0; k <= 220; k++) { const a = k / 220 * Math.PI * 2 * 7; pts.push(new THREE.Vector3(0.27 + Math.cos(a) * 0.028, 0.06 - k / 220 * 0.16, -0.04 + Math.sin(a) * 0.028)); }
+      body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 600, 0.0055, 6, false), dark));
+      body.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.005, 8, 20), metal), 0.27, -0.11, -0.04)); }
+
     /* life-support backpack (+z side) */
     const pack = joint(body, 0, 0.37, 0.25);
     const bend = (g, k) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - k * p.getX(i) * p.getX(i) - 0.3 * k * p.getY(i) * p.getY(i)); g.computeVertexNormals(); return g; };
@@ -185,6 +200,15 @@
       lamp.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.05, 8), grey, 0, -0.04, 0.03));
     }
 
+    // a cloth pocket with a flap and a press stud, lying on a limb's outside (local +z of the joint faces out)
+    function pocket(parent, x, y, z, rotY, w, h, tilt = 0) {
+      const pk = joint(parent, x, y, z); pk.rotation.set(tilt, rotY, 0);
+      pk.add(mesh(lumpy(rbox(w, h, 0.022, 0.012), 0.002, 20), fabric2));
+      pk.add(mesh(rbox(w + 0.004, h * 0.32, 0.026, 0.01), cover, 0, h * 0.4, 0.004));
+      pk.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 12), metal, 0, h * 0.37, 0.02).rotateX(Math.PI / 2));
+      return pk;
+    }
+
     /* arms */
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
@@ -198,7 +222,7 @@
       for (let i = 1; i <= 34; i++) { const u = i / 34; sleeve.push([sr(u), -u * 0.37]); }
       sleeve.push([0, -0.34]);
       sh.add(mesh(lumpy(lathe(sleeve.reverse(), 64), 0.007, 12, (x, y) => Math.min(1, Math.max(0, -y / 0.2))), fabric));   // smooth over the shoulder, cloth wrinkles further down
-      sh.add(at(ringY(0.088, 0.006, grey), 0, -0.2, 0));                                     // a seam / restraint line
+      sh.add(at(ringY(0.0825, 0.005, grey), 0, -0.2, 0));                                     // a seam / restraint line
       if (s < 0) {   // the flag on the outside of the left upper arm
         const f = joint(sh, -0.097, -0.15, 0); f.rotation.y = -Math.PI / 2;
         f.add(mesh(new THREE.PlaneGeometry(0.112, 0.08), white, 0, 0, -0.001));
@@ -208,6 +232,12 @@
       el.add(mesh(bellows(0.1, 0.08, 3), fabric2));
       const epad = mesh(new THREE.SphereGeometry(0.082, 32, 20, Math.PI * 0.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), fabric2, 0, -0.01, 0); epad.scale.set(1.08, 1.2, 1.12); el.add(epad);   // and over the back of the elbow
       el.add(mesh(limb(0.265, 0.078, 0.062, 0.05, 2 + s), fabric, 0, -0.055, 0));   // reaches into the wrist ring
+      if (s < 0) {   // the cuff checklist on the left forearm: a little book of cards on a strap
+        const ck = joint(el, 0, -0.17, -0.072); ck.rotation.y = Math.PI;
+        ck.add(mesh(rbox(0.085, 0.062, 0.018, 0.006), grey));
+        for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
+        ck.add(at(ringY(0.073, 0.006, strap), 0, 0.0, 0.072));
+      }
       const wr = joint(el, 0, -0.33, 0);
       // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
       wr.add(at(ringY(0.064, 0.0105, metal), 0, 0.004, 0));                                    // a slim wrist ring, the sleeve's own width
@@ -249,12 +279,7 @@
       const hp = joint(body, s * 0.105, -0.13, -0.035);
       // thigh: full at the top (it starts inside the briefs), narrowing to the knee
       hp.add(mesh(limb(0.37, 0.116, 0.096, 0.06, 3 * s), fabric, 0, -0.09, 0));
-      if (s < 0) {   // a pocket with a flap on the outside of the left thigh
-        const pk = joint(hp, -0.112, -0.26, -0.005); pk.rotation.set(0, -Math.PI / 2, 0.06);
-        pk.add(mesh(lumpy(rbox(0.1, 0.12, 0.022, 0.012), 0.002, 20), fabric2));
-        pk.add(mesh(rbox(0.104, 0.038, 0.026, 0.01), cover, 0, 0.05, 0.004));
-        pk.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 12), metal, 0, 0.045, 0.02).rotateX(Math.PI / 2));
-      }
+      pocket(hp, s * 0.112, -0.26, -0.005, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
       // the seat: cloth from inside the briefs narrowing into the thigh. It hangs from the torso (not the leg), turned
       // the way the thigh rests, so it never pokes out in front when the leg moves; the thigh slides inside it.
       const seat = mesh(lumpy(lathe([[0, -0.26], [0.122, -0.26], [0.126, -0.19], [0.136, -0.1], [0.148, -0.02], [0.15, 0.04], [0.13, 0.09], [0, 0.1]], 64), 0.005, 10), fabric, s * 0.105 - s * 0.01, -0.13, -0.035);
@@ -264,6 +289,7 @@
       const pad = mesh(lumpy(new THREE.SphereGeometry(0.104, 40, 24, Math.PI * 1.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), 0.004), fabric2, 0, -0.02, 0); pad.scale.set(1.08, 1.25, 1.12); kn.add(pad);   // a padded patch over the knee
       // shin with a calf: fuller just below the knee at the back, slimmer to the ankle
       const shin = mesh(limb(0.38, 0.098, 0.08, 0.1, 1 - s), fabric, 0, -0.06, 0.008); shin.scale.set(1, 1, 1.06); kn.add(shin);
+      pocket(kn, s * 0.092, -0.2, 0.0, s * Math.PI / 2, 0.075, 0.1);                               // and a smaller one on each shin
       const an = joint(kn, 0, -0.5, 0);
       an.add(mesh(lumpy(lathe([[0, -0.02], [0.094, -0.02], [0.1, 0.03], [0.092, 0.08], [0, 0.085]], 48), 0.004), fabric2, 0, 0.02, 0));   // a cloth cuff over the boot top
       an.add(at(ringY(0.096, 0.015, metal), 0, 0.03, 0));
@@ -286,6 +312,9 @@
     // this height), turned to its normal and bent to its curve
     const cx = -0.1, ca = 0.297, cb = 0.209, cz = -cb * Math.sqrt(1 - (cx / ca) ** 2), slope = Math.atan(cb * cx / (ca * ca * Math.sqrt(1 - (cx / ca) ** 2)));
     const chest = mesh(patch(0.055, cb / (ca * ca) * 0.9), emblemMat, cx, 0.49, cz - 0.006); chest.rotation.set(-0.08, Math.PI - slope, 0, 'YXZ'); body.add(chest);
+    { const tx = 0.11, tz = -cb * Math.sqrt(1 - (tx / ca) ** 2), ts = Math.atan(cb * tx / (ca * ca * Math.sqrt(1 - (tx / ca) ** 2)));
+      const tag = joint(body, tx, 0.5, tz - 0.004); tag.rotation.set(-0.08, Math.PI - ts, 0, 'YXZ');   // a name tag on the right of the chest
+      tag.add(mesh(rbox(0.1, 0.032, 0.006, 0.004), grey)); tag.add(mesh(new THREE.PlaneGeometry(0.084, 0.012), white, 0, 0, 0.0035)); }
     const back = mesh(patch(0.085, 0.35), emblemMat, 0, 0.03, 0.127); pack.add(back);                                                // on the backpack flap
 
     shadowed(group);
