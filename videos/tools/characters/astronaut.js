@@ -178,11 +178,13 @@
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
       // the hard torso reaches over the shoulder (a shell cap), with the shoulder bearing set into its side opening
-      const sh = joint(body, s * 0.265, 0.455, 0);   // inside the torso's side, so the sleeve grows out of it
+      const sh = joint(body, s * 0.25, 0.44, 0);   // inside the torso's side, so the sleeve grows out of it
       // the shoulder and upper sleeve as one smooth surface: full at the shoulder, narrowing to the elbow (moves with the arm)
       const sleeve = [];
-      for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI / 2; sleeve.push([0.11 * Math.sin(a), 0.035 + 0.05 * Math.cos(a)]); }
-      for (let i = 1; i <= 34; i++) { const u = i / 34, y = 0.035 - u * 0.37; sleeve.push([0.11 - 0.028 * Math.pow(u, 0.8) + 0.008 * Math.sin(Math.PI * u) - 0.004 * Math.pow(Math.abs(Math.sin(u * 9 + s)), 6), y]); }
+      // narrow at the very top (hidden inside the torso), fullest just where it leaves the torso, narrowing to the elbow
+      const sr = u => 0.082 + 0.02 * Math.exp(-(((u - 0.2) / 0.18) ** 2)) - 0.004 * Math.pow(Math.abs(Math.sin(u * 9 + s)), 6);
+      for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI / 2; sleeve.push([sr(0) * Math.sin(a), 0.035 * Math.cos(a)]); }
+      for (let i = 1; i <= 34; i++) { const u = i / 34; sleeve.push([sr(u), -u * 0.37]); }
       sleeve.push([0, -0.34]);
       sh.add(mesh(lumpy(lathe(sleeve.reverse(), 64), 0.007, 12, (x, y) => Math.min(1, Math.max(0, -y / 0.2))), fabric));   // smooth over the shoulder, cloth wrinkles further down
       sh.add(at(ringY(0.088, 0.006, grey), 0, -0.2, 0));                                     // a seam / restraint line
