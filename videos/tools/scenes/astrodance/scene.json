@@ -6,8 +6,15 @@
   "fps": 30,
   "width": 720,
   "height": 1280,
-  "include": ["characters/emblem.js", "characters/astronaut.js"],
-  "audio": { "music": "scene" },
+  "include": [
+    "characters/emblem.js",
+    "characters/astronaut.js"
+  ],
+  "audio": {
+    "music": "scene",
+    "fadeIn": 0.15,
+    "fadeOut": 0.9
+  },
   "patches": [
     [
       "  renderer.render(scene, camera);\n  requestAnimationFrame(tick);",

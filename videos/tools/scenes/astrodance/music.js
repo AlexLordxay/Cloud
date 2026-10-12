@@ -1,6 +1,6 @@
-// "The Nebozvid astronaut dances" — a short bright tune at 120 beats a minute, no drums, no bass (see MUSIC.md): the
-// organ plays staccato off-beat chords and a bouncing arpeggio in C major (C G Am F, a chord a bar), a flute-like line
-// on top, swelling into the spin and settling for the wave.
+// "The Nebozvid astronaut dances" — a short catchy tune at 120 beats a minute, no drums, no bass (see MUSIC.md): a
+// flute-like hook in G major that asks and answers (G D Em C), light piano chords on the off-beats, a soft bell
+// arpeggio, the last chord ringing under the wave.
 function createSceneMusic(ctx, dest) {
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
   const rnd = (a, b) => a + Math.random() * (b - a);
@@ -177,22 +177,24 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const B = 0.5, BAR = 4 * B, FL = [[1, 1], [2, 0.35]];
-    const CH = [[48, 52, 55], [43, 47, 50], [45, 48, 52], [41, 45, 48]];   // C G Am F
-    const END = 7.4;
-    for (let t = 0, i = 0; t < END - 0.2; t += B / 2, i++) {
-      const bar = Math.floor(t / BAR) % 4, ch = CH[bar], dyn = t < 4 ? 0.5 + 0.1 * (t / 4) : t < 6 ? 0.7 : 0.5;
-      // the bouncing arpeggio: root, fifth, octave, third up, an eighth note each
-      const seq = [ch[0] + 12, ch[2] + 12, ch[0] + 24, ch[1] + 24];
-      organ(t, t + B / 2 * 0.55, seq[i % 4], FL, 0.12 + 0.12 * dyn, 2600, 0.008, 0.1);
-      // off-beat chord stabs
-      if (i % 2 === 1) for (const m of ch) organ(t, t + B * 0.28, m + 24, REG_MID, 0.07 + 0.06 * dyn, 3200, 0.006, 0.12);
+    const B = 0.5, END = 7.45, FL = [[1, 1], [2, 0.35]];
+    // G D Em C, a bar (four beats) each
+    const CH = [[55, 59, 62], [50, 54, 57], [52, 55, 59], [48, 52, 55]];
+    // the tune: a little hook that asks (bars 1-2) and answers (bars 3-4); [beat, note, beats long]
+    const MEL = [[0, 74, 0.5], [0.5, 79, 0.5], [1, 83, 0.75], [1.75, 81, 0.25], [2, 79, 0.5], [2.5, 83, 0.5], [3, 86, 1],
+                 [4, 81, 0.5], [4.5, 78, 0.5], [5, 81, 0.5], [5.5, 86, 0.5], [6, 83, 0.5], [6.5, 81, 0.5], [7, 78, 1],
+                 [8, 76, 0.5], [8.5, 79, 0.5], [9, 83, 0.75], [9.75, 81, 0.25], [10, 79, 0.5], [10.5, 76, 0.5], [11, 83, 1],
+                 [12, 84, 0.5], [12.5, 83, 0.5], [13, 81, 0.5], [13.5, 78, 0.5], [14, 79, 0.9]];
+    for (const [b, m, len] of MEL) organ(b * B, (b + len) * B * 0.98, m, FL, 0.16, 3600, 0.02, 0.18);
+    // light piano-like chords on the off-beats (2 and 4), a soft bell arpeggio in eighths
+    for (let k = 0; k < 15; k++) {
+      const t = k * B, ch = CH[Math.floor(k / 4) % 4];
+      if (k % 2 === 1) for (const m of ch) piano(t, m + 12, 0.28);
+      const arp = [ch[0] + 12, ch[1] + 12, ch[2] + 12, ch[1] + 12];
+      bell(t, arp[k % 4] + 12, 0.05); bell(t + B / 2, arp[(k + 2) % 4] + 12, 0.035);
     }
-    // a flute-like line on top, a note a beat, rising into the spin
-    const MEL = [76, 79, 81, 79, 74, 76, 77, 79, 81, 83, 84, 83, 81, 79, 77, 76];
-    MEL.forEach((m, k) => { const t = k * B; if (t < END - 0.6) organ(t, t + B * 0.85, m, FL, 0.11, 3400, 0.03, 0.2); });
-    // the last chord, held and fading under the wave
-    for (const m of [60, 64, 67, 72]) organ(6.0, END, m, FL, 0.12, 2500, 0.3, 1.0);
+    // the last chord rings under the wave
+    for (const m of [55, 59, 62, 67]) organ(7.0, END, m + 12, FL, 0.1, 2400, 0.2, 0.8);
   }
   return {
     output: master,

@@ -1,6 +1,6 @@
 // "The Nebozvid astronaut dances": the character (characters/astronaut.js) in orbit over the Earth, dancing at
-// 120 beats a minute in four parts — a groove (bounce, nodding head, pumping arms), disco (arms up on the diagonal, one
-// beat each), a slow spin with arms spread, and a wave to the camera. Its own scene, rendered in place of the site's.
+// 120 beats a minute in four parts — a groove (bounce, nodding head, pumping arms), disco (arms swinging up on the
+// diagonal in turn), a slow spin with arms spread, and a wave to the camera. Its own scene, rendered in place of the site's.
 (() => {
   const D = Math.PI / 180, smooth = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
   let S = null;
@@ -40,8 +40,7 @@
 
   // ---- the dance: each part gives the joint angles at time t; parts cross-fade over 0.3 s ----
   const beatOf = t => t * 2;                                 // 120 bpm
-  const bounce = t => Math.abs(Math.sin(Math.PI * beatOf(t)));
-  const ease = (b, k = 0.35) => smooth((b % 1) / k);         // a snappy move at the start of each beat
+  const bounce = t => 0.5 - 0.5 * Math.cos(2 * Math.PI * beatOf(t));   // a soft, round bounce each beat (no kink)
   function groove(t) {
     const bo = bounce(t), sw = Math.sin(Math.PI * beatOf(t) / 2);
     return { bodyY: -0.035 * bo, body: [0.05, 0, 0.1 * sw], head: [0.18 * bo - 0.08, 0.15 * sw, 0],
@@ -49,7 +48,7 @@
       hipL: [0.25 + 0.15 * bo, 0, -0.12], hipR: [0.25 + 0.15 * bo, 0, 0.12], knL: [-0.4 - 0.35 * bo, 0, 0], knR: [-0.4 - 0.35 * bo, 0, 0] };
   }
   function disco(t) {
-    const b = beatOf(t), k = Math.floor(b) % 2, e = ease(b), up = k === 0 ? e : 1 - e;    // up: 1 = right arm up
+    const up = 0.5 - 0.5 * Math.cos(Math.PI * beatOf(t));   // a smooth swing: right arm up, then left, over two beats
     const bo = bounce(t);
     return { bodyY: -0.025 * bo, body: [0.02, 0.15 * (up - 0.5), 0.12 * (0.5 - up)], head: [0.1 * bo - 0.1, 0.3 * (up - 0.5), 0],
       shR: [0.2 + 0.4 * (1 - up), 0, 0.35 + 2.15 * up], elR: [0.25 + 0.6 * (1 - up), 0, 0],
@@ -63,7 +62,7 @@
       hipL: [0.2, 0, -0.06], hipR: [0.45, 0, 0.06], knL: [-0.35, 0, 0], knR: [-0.9, 0, 0] };
   }
   function wave(t) {
-    const w = Math.sin(2 * Math.PI * 2.2 * t);
+    const w = Math.sin(2 * Math.PI * 1.6 * t);
     return { bodyY: 0, body: [0.0, 0.0, -0.08], head: [-0.05, 0, 0.12],
       shR: [0.5, 0, 1.95], elR: [0.55 + 0.45 * w, 0, 0], shL: [0.35, 0, -0.55], elL: [1.7, 0, 0],
       hipL: [0.15, 0, -0.08], hipR: [0.3, 0, 0.1], knL: [-0.3, 0, 0], knR: [-0.55, 0, 0] };
@@ -71,7 +70,7 @@
   const PARTS = [[0, groove], [2.0, disco], [4.0, spin], [6.0, wave]];
   function poseAt(t) {
     let i = 0; while (i < PARTS.length - 1 && t >= PARTS[i + 1][0]) i++;
-    const cur = PARTS[i][1](t), nxt = i < PARTS.length - 1 ? PARTS[i + 1][1](t) : null, k = nxt ? smooth((t - PARTS[i + 1][0] + 0.3) / 0.3) : 0;
+    const cur = PARTS[i][1](t), nxt = i < PARTS.length - 1 ? PARTS[i + 1][1](t) : null, k = nxt ? smooth((t - PARTS[i + 1][0] + 0.7) / 0.7) : 0;
     if (!nxt || k <= 0) return cur;
     const out = {};
     for (const key in cur) out[key] = Array.isArray(cur[key]) ? cur[key].map((v, j) => v + (nxt[key][j] - v) * k) : cur[key] + (nxt[key] - cur[key]) * k;

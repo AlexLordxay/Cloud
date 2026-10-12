@@ -33,8 +33,10 @@ function fnSource(src, fname) {
     const SR = 44100;
     const ctx = new OfflineAudioContext(2, Math.ceil(SR * T), SR);
     const g = ctx.createGain(); g.connect(ctx.destination);
-    g.gain.setValueAtTime(0, 0); g.gain.linearRampToValueAtTime(0.9, 2.0);
-    g.gain.setValueAtTime(0.9, T - 4); g.gain.linearRampToValueAtTime(0, T - 0.3);
+    // fade in and out (scene.json "audio": {"fadeIn": s, "fadeOut": s} for short clips; defaults 2 s and 3.7 s)
+    const fi = (a && a.fadeIn) || 2.0, fo = (a && a.fadeOut) || 3.7;
+    g.gain.setValueAtTime(0, 0); g.gain.linearRampToValueAtTime(0.9, fi);
+    g.gain.setValueAtTime(0.9, T - 0.3 - fo); g.gain.linearRampToValueAtTime(0, T - 0.3);
     const piece = window.__mk(ctx, g);
     piece.start(0.05, (a && a.fromChord) || 0); piece.scheduleUntil(T);
     if (a && a.voice) {
