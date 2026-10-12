@@ -127,13 +127,13 @@
 
     /* torso */
     // hard upper torso: a shell wider than deep, from the waist bearing to the neck ring
-    const hut = mesh(lathe([[0, 0.1], [0.165, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]], 64), torsoCloth);
+    const hut = mesh(lathe([[0, 0.06], [0.172, 0.06], [0.176, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]], 64), torsoCloth);
     hut.scale.set(1.26, 1, 0.9); body.add(hut);
     // lower torso / briefs: soft fabric, the waist bearing on top
-    const brief = mesh(lumpy(lathe([[0, -0.25], [0.1, -0.25], [0.15, -0.23], [0.178, -0.17], [0.19, -0.08], [0.192, 0.04], [0.178, 0.1], [0, 0.11]], 64), 0.008, 10), fabric);   // one piece down to the top of the thighs: the legs come out of it
-    brief.scale.set(1.32, 1, 1.0); body.add(brief);
-    const waist = at(ringY(0.183, 0.022, metal), 0, 0.105, 0); waist.scale.set(1.33, 0.97, 1); body.add(waist);
-    const waist2 = at(ringY(0.18, 0.014, grey), 0, 0.075, 0); waist2.scale.set(1.32, 0.97, 1); body.add(waist2);
+    const brief = mesh(lumpy(lathe([[0, -0.25], [0.1, -0.25], [0.15, -0.23], [0.178, -0.17], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12], [0, 0.13]], 64), 0.006, 10, (x, y) => Math.min(1, Math.max(0, (0.04 - y) / 0.12))), fabric);   // one piece down to the top of the thighs: the legs come out of it
+    brief.scale.set(1.26, 1, 0.9); body.add(brief);   // the same cross-section as the torso where they meet: one garment
+    // the waist: a soft band of the suit's own cloth over the bearing (no bare metal), the torso narrowing into it
+    const waist = at(ringY(0.174, 0.013, fabric2), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
     // chest control box with two hoses to the backpack
     const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), shell, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
     for (const [x, y] of [[-0.08, 0.02], [0.02, 0.02], [0.1, 0.0]]) { const k = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), metal, x, 0.33 + y, -0.31); k.rotation.x = Math.PI / 2 + 0.2; body.add(k); }
