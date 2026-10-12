@@ -64,6 +64,7 @@
     const [plainMap, plainBump] = clothTexture([]);
     const fabric = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05 });
     const fabric2 = M({ color: 0xdedad0, roughness: 0.95, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.07 });      // a shade darker: bellows, gaskets
+    const torsoCloth = M({ color: 0xf2eee6, roughness: 0.93, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.035 });   // the cloth over the hard torso: the same as the sleeves
     const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.04 });        // the cloth cover over the backpack
     const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 });          // hard parts
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
@@ -126,7 +127,7 @@
 
     /* torso */
     // hard upper torso: a shell wider than deep, from the waist bearing to the neck ring
-    const hut = mesh(lathe([[0, 0.1], [0.165, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]]), shell);
+    const hut = mesh(lathe([[0, 0.1], [0.165, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]], 64), torsoCloth);
     hut.scale.set(1.26, 1, 0.9); body.add(hut);
     // lower torso / briefs: soft fabric, the waist bearing on top
     const brief = mesh(lumpy(lathe([[0, -0.25], [0.1, -0.25], [0.15, -0.23], [0.178, -0.17], [0.19, -0.08], [0.192, 0.04], [0.178, 0.1], [0, 0.11]], 64), 0.008, 10), fabric);   // one piece down to the top of the thighs: the legs come out of it
