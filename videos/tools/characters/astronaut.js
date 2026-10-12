@@ -125,11 +125,11 @@
 
     /* torso */
     // hard upper torso: a shell wider than deep, from the waist bearing to the neck ring
-    const hut = mesh(lathe([[0, 0.1], [0.165, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]].reverse()), shell);
+    const hut = mesh(lathe([[0, 0.1], [0.165, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]]), shell);
     hut.scale.set(1.26, 1, 0.9); body.add(hut);
     // lower torso / briefs: soft fabric, the waist bearing on top
-    const brief = mesh(lumpy(lathe([[0, -0.25], [0.13, -0.25], [0.175, -0.21], [0.192, -0.1], [0.192, 0.04], [0.178, 0.1], [0, 0.11]].reverse(), 64), 0.008, 10), fabric);   // flat-bottomed: the legs come out of it
-    brief.scale.set(1.3, 1, 1.05); body.add(brief);
+    const brief = mesh(lumpy(lathe([[0, -0.28], [0.12, -0.28], [0.165, -0.26], [0.182, -0.21], [0.19, -0.12], [0.192, 0.04], [0.178, 0.1], [0, 0.11]], 64), 0.008, 10), fabric);   // one piece down to the top of the thighs: the legs come out of it
+    brief.scale.set(1.32, 1, 1.0); body.add(brief);
     const waist = at(ringY(0.183, 0.022, metal), 0, 0.105, 0); waist.scale.set(1.33, 0.97, 1); body.add(waist);
     const waist2 = at(ringY(0.18, 0.014, grey), 0, 0.075, 0); waist2.scale.set(1.32, 0.97, 1); body.add(waist2);
     // chest control box with two hoses to the backpack
@@ -212,8 +212,7 @@
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
       const hp = joint(body, s * 0.105, -0.13, -0.035);
-      hp.add(at(ringY(0.118, 0.014, grey), 0, -0.06, 0));                                    // the hip bearing
-      hp.add(mesh(limb(0.36, 0.108, 0.098, 0.07, 3 * s), fabric, 0, -0.07, 0));
+      hp.add(mesh(limb(0.34, 0.1, 0.098, 0.1, 3 * s), fabric, 0, -0.1, 0));   // starts inside the briefs   // starts inside the briefs
       hp.add(at(ringY(0.116, 0.006, grey), 0, -0.2, 0));
       const kn = joint(hp, 0, -0.48, 0);
       kn.add(mesh(bellows(0.12, 0.098, 3), fabric2));
@@ -237,8 +236,8 @@
         J['shoulder' + L].rotation.set(0.35 + 0.08 * a + 0.09 * w(t, 5.3, ph), 0.1 * s, s * (0.8 + 0.12 * a + 0.1 * w(t, 6.1, ph + 1)));
         J['elbow' + L].rotation.set(0.75 + 0.12 * w(t, 4.4, ph + 2), 0, 0);
         J['wrist' + L].rotation.set(0.2 + 0.12 * w(t, 3.7, ph), 0.3 * s, s * 0.15);
-        J['hip' + L].rotation.set(0.38 + 0.12 * a + 0.08 * w(t, 6.7, ph + 0.5), 0, s * (0.14 + 0.04 * w(t, 7.3, ph)));
-        J['knee' + L].rotation.set(-0.7 - 0.15 * a + 0.1 * w(t, 5.9, ph + 2.6), 0, 0);
+        J['hip' + L].rotation.set(0.14 + 0.06 * a + 0.05 * w(t, 6.7, ph + 0.5), 0, s * (0.08 + 0.03 * w(t, 7.3, ph)));
+        J['knee' + L].rotation.set(-0.55 - 0.2 * a + 0.1 * w(t, 5.9, ph + 2.6), 0, 0);
         J['ankle' + L].rotation.set(0.3 + 0.05 * w(t, 4.9, ph), 0, 0);
       }
       J.head.rotation.set(-0.1 + 0.04 * w(t, 8.1, 0.3), 0.05 * w(t, 9.7, 1), 0);
