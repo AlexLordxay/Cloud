@@ -11,6 +11,7 @@ const t = +(process.argv[3] || 0);
 
 const page = `<!doctype html><html><body style="margin:0;background:#000">
 <script>${fs.readFileSync(path.join(TOOLS, 'node_modules/three/build/three.min.js'), 'utf8')}</script>
+<script>${fs.readFileSync(path.join(__dirname, 'emblem.js'), 'utf8')}</script>
 <script>${fs.readFileSync(path.join(__dirname, 'astronaut.js'), 'utf8')}</script>
 <script>
   const W = 1600, H = 760, ren = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -30,12 +31,14 @@ const page = `<!doctype html><html><body style="margin:0;background:#000">
   a.pose(${t});
   const cam = new THREE.PerspectiveCamera(30, (W / 4) / H, 0.05, 100);
   const views = [[0, 0.9, 5.2], [3.6, 1.0, 3.6], [5.2, 0.3, 0], [-2.0, 0.5, -4.8]];
+  a.ready.then(() => {
   ren.setScissorTest(true);
   views.forEach(([x, y, z], i) => {
     ren.setViewport(i * W / 4, 0, W / 4, H); ren.setScissor(i * W / 4, 0, W / 4, H);
     cam.position.set(x, y, z); cam.lookAt(0, 0.05, 0); ren.render(scene, cam);
   });
   window.done = true;
+  });
 </script></body></html>`;
 
 (async () => {

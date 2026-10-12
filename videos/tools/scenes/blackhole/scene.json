@@ -24,6 +24,7 @@
     ]
   ],
   "include": [
+    "characters/emblem.js",
     "characters/astronaut.js"
   ]
 }

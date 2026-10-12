@@ -6,6 +6,7 @@
 // stitched texture (a canvas drawn in code); metal and the visor reflect an environment map; the figure shades itself (shadow map).
 //
 //   const a = window.__makeAstronaut(THREE);         // a.group: ~1.9 units tall, pelvis at the origin, facing -z
+//   await a.ready;                                    // the emblem picture has loaded
 //   a.pose(t);                                        // the free-fall idle at time t (s): limbs drift slowly
 //   a.setTint(r, g, b); a.setOpacity(x);              // colour and fade for the whole figure
 //   a.rim.color.value.set(…)                          // rim light on the edges (light from behind the figure)
@@ -236,34 +237,18 @@
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
 
-    /* the Nebozvid emblem: a round patch drawn on a canvas (the site's dawn-to-night gradient, its four-point star) */
-    function emblemTexture() {
-      const N = 512, cv = document.createElement('canvas'); cv.width = cv.height = N;
-      const g = cv.getContext('2d'), c = N / 2;
-      const grad = g.createLinearGradient(0, 0, N, 0);
-      grad.addColorStop(0, '#f7c66b'); grad.addColorStop(0.52, '#f39a8b'); grad.addColorStop(1, '#9cc2ff');
-      g.fillStyle = grad; g.beginPath(); g.arc(c, c, c - 4, 0, Math.PI * 2); g.fill();                  // gradient rim
-      const bg = g.createRadialGradient(c, c * 0.8, 10, c, c, c);
-      bg.addColorStop(0, '#1b2a55'); bg.addColorStop(1, '#070b1c');
-      g.fillStyle = bg; g.beginPath(); g.arc(c, c, c - 30, 0, Math.PI * 2); g.fill();                  // night-sky field
-      let sd = 5; const r = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
-      for (let i = 0; i < 40; i++) { const a = r() * 6.283, d = r() * (c - 60); g.fillStyle = `rgba(255,255,255,${0.3 + 0.6 * r()})`; g.beginPath(); g.arc(c + Math.cos(a) * d, c + Math.sin(a) * d, 1 + r() * 2, 0, 6.283); g.fill(); }
-      g.strokeStyle = 'rgba(156,194,255,0.55)'; g.lineWidth = 5;                                      // an orbit
-      g.beginPath(); g.ellipse(c, c + 36, c * 0.58, c * 0.18, -0.3, 0, Math.PI * 2); g.stroke();
-      const star = (x, y, R, k) => { g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 - Math.PI / 2, rr = i % 2 ? R * k : R; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.closePath(); g.fill(); };
-      g.shadowColor = 'rgba(170,205,255,0.9)'; g.shadowBlur = 30; g.fillStyle = '#ffffff'; star(c, c + 20, 84, 0.22); g.shadowBlur = 0;
-      g.fillStyle = '#f7c66b'; star(c + 128, c + 66, 18, 0.3);
-      // the name round the top, letter by letter
-      g.font = 'bold 66px "DejaVu Sans", Arial, sans-serif'; g.fillStyle = '#ffffff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      const word = 'НЕБОЗВІД', R0 = c - 78, span = 2.0;
-      const ws = [...word].map(ch => g.measureText(ch).width + 6), tot = ws.reduce((x, y) => x + y, 0); let acc = 0;
-      [...word].forEach((ch, i) => { const a = -Math.PI / 2 - span / 2 + span * (acc + ws[i] / 2) / tot; acc += ws[i]; g.save(); g.translate(c + Math.cos(a) * R0, c + Math.sin(a) * R0); g.rotate(a + Math.PI / 2); g.fillText(ch, 0, 0); g.restore(); });
-      const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t;
-    }
-    const emblemMat = M({ map: emblemTexture(), roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2 });
+    /* the Nebozvid emblem: a round patch with the site's wordmark (characters/emblem.js, made by emblem.py) */
+    const emblemImg = new Image(), emblemTex = new THREE.Texture(emblemImg);
+    emblemTex.encoding = THREE.sRGBEncoding; emblemTex.anisotropy = 8;
+    const ready = new Promise(ok => { emblemImg.onload = () => { emblemTex.needsUpdate = true; ok(); }; emblemImg.onerror = () => ok(); });
+    if (window.__astronautEmblem) emblemImg.src = window.__astronautEmblem; else emblemImg.onerror();
+    const emblemMat = M({ map: emblemTex, transparent: true, roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2 });
     // a disc bent to lie on a surface: z pushed back by the surface's curvature (k) over x
     const patch = (rad, k) => { const g = new THREE.CircleGeometry(rad, 48), p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, -k * p.getX(i) * p.getX(i)); g.computeVertexNormals(); return g; };
-    const chest = mesh(patch(0.06, 2.6), emblemMat, -0.11, 0.47, -0.2); chest.rotation.set(0, Math.PI + 0.45, 0); chest.rotation.x = -0.12; body.add(chest);   // on the left of the chest
+    // on the left of the chest, above the control box: set on the torso's surface there (an ellipse 0.297 × 0.209 at
+    // this height), turned to its normal and bent to its curve
+    const cx = -0.1, ca = 0.297, cb = 0.209, cz = -cb * Math.sqrt(1 - (cx / ca) ** 2), slope = Math.atan(cb * cx / (ca * ca * Math.sqrt(1 - (cx / ca) ** 2)));
+    const chest = mesh(patch(0.055, cb / (ca * ca) * 0.9), emblemMat, cx, 0.49, cz - 0.006); chest.rotation.set(-0.08, Math.PI - slope, 0, 'YXZ'); body.add(chest);
     const back = mesh(patch(0.085, 0.35), emblemMat, 0, 0.03, 0.127); pack.add(back);                                                // on the backpack flap
 
     shadowed(group);
@@ -301,7 +286,7 @@
       for (const l of lights) { l.position.copy(c).addScaledVector(l.userData.dir, 4); l.target.position.copy(c); l.target.updateMatrixWorld(); }
     }
     return {
-      group, joints: J, materials: mats, pose, rim, light, aim, lights,
+      group, joints: J, materials: mats, pose, rim, light, aim, lights, ready,
       setTint(r, g, b) { const c = new THREE.Color(r, g, b); for (const m of mats) m.color.copy(m.userData.base).multiply(c); },
       // opaque until it fades: a transparent material lets the parts behind show through
       setOpacity(x) { const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
