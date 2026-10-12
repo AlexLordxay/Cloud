@@ -206,11 +206,35 @@
     const vis = mesh(new THREE.SphereGeometry(0.192, 56, 40, Math.PI * 1.13, Math.PI * 0.74, Math.PI * 0.2, Math.PI * 0.46), visor, 0, 0.16, 0.0);
     vis.scale.set(1, 1.03, 1.06); head.add(vis);
     const brow = mesh(new THREE.SphereGeometry(0.195, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.16, Math.PI * 0.05), shell, 0, 0.16, 0); brow.scale.set(1, 1.03, 1.06); head.add(brow);
-    for (const s of [-1, 1]) {
-      const lamp = joint(head, s * 0.184, 0.19, -0.04); lamp.scale.setScalar(0.85);
-      lamp.add(mesh(rbox(0.05, 0.06, 0.13, 0.015), shell));
-      const ln = mesh(new THREE.CircleGeometry(0.019, 20), lens, 0, 0.004, -0.0661); ln.rotation.y = Math.PI; lamp.add(ln);
-      lamp.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.05, 8), grey, 0, -0.04, 0.03));
+    // Left of the helmet: a lamp — a cylinder on a bracket, a glowing lens with a soft halo, a row of small LEDs under it.
+    // Right: a sensor/camera pod — a dark body, a big glass lens in a metal ring, a red indicator, a thin antenna.
+    const glows = [];
+    const glowTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
+      const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,244,215,1)'); gr.addColorStop(0.25, 'rgba(255,236,200,0.45)'); gr.addColorStop(1, 'rgba(255,230,190,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(cv); })();
+    const lampLight = M({ color: 0xfff6e6, emissive: 0xfff0d2, emissiveIntensity: 2.2, roughness: 0.2 });
+    const ledMat = M({ color: 0xdff0ff, emissive: 0xcfe8ff, emissiveIntensity: 1.6, roughness: 0.3 });
+    const redLed = M({ color: 0xff3a2a, emissive: 0xff2a1a, emissiveIntensity: 2.0, roughness: 0.3 });
+    {
+      const lamp = joint(head, -0.196, 0.19, -0.035);
+      lamp.add(mesh(rbox(0.03, 0.05, 0.05, 0.008), grey, 0.012, -0.005, 0.02));                                         // bracket
+      const body1 = mesh(new THREE.CylinderGeometry(0.03, 0.026, 0.12, 28), shell, -0.012, 0.0, -0.02); body1.rotation.x = Math.PI / 2; lamp.add(body1);
+      const bezel = mesh(new THREE.TorusGeometry(0.029, 0.0055, 10, 28), metal, -0.012, 0.0, -0.081); lamp.add(bezel);
+      const lensL = mesh(new THREE.CircleGeometry(0.025, 28), lampLight, -0.012, 0.0, -0.0815); lensL.rotation.y = Math.PI; lamp.add(lensL);
+      for (let k = 0; k < 4; k++) lamp.add(mesh(new THREE.SphereGeometry(0.0045, 10, 8), ledMat, -0.012, -0.045, -0.05 + k * 0.016));   // LED row
+      lamp.add(mesh(rbox(0.02, 0.014, 0.075, 0.004), grey, -0.012, -0.045, -0.026));
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 }));
+      halo.scale.setScalar(0.13); halo.position.set(-0.012, 0, -0.09); lamp.add(halo); glows.push(halo);
+    }
+    {
+      const pod = joint(head, 0.192, 0.2, -0.03);
+      pod.add(mesh(rbox(0.03, 0.05, 0.05, 0.008), grey, -0.012, -0.008, 0.02));                                         // bracket
+      pod.add(mesh(rbox(0.05, 0.055, 0.09, 0.014), dcmMat, 0.01, 0, -0.01));                                              // dark body
+      const ring = mesh(new THREE.TorusGeometry(0.019, 0.005, 10, 24), metal, 0.01, 0.002, -0.056); pod.add(ring);
+      const glass = mesh(new THREE.SphereGeometry(0.017, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2), lens, 0.01, 0.002, -0.056); glass.rotation.x = -Math.PI / 2; pod.add(glass);
+      pod.add(mesh(new THREE.SphereGeometry(0.004, 10, 8), redLed, 0.03, 0.02, -0.055));                                    // a red "recording" light
+      const ant = mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.11, 6), metal, 0.022, 0.08, 0.02); pod.add(ant);
+      pod.add(mesh(new THREE.SphereGeometry(0.0055, 10, 8), dark, 0.022, 0.136, 0.02));
     }
 
     // a cloth pocket with a flap and a press stud, lying on a limb's outside (local +z of the joint faces out)
@@ -367,7 +391,7 @@
       group, joints: J, materials: mats, pose, rim, light, aim, lights, ready,
       setTint(r, g, b) { const c = new THREE.Color(r, g, b); for (const m of mats) m.color.copy(m.userData.base).multiply(c); },
       // opaque until it fades: a transparent material lets the parts behind show through
-      setOpacity(x) { const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
+      setOpacity(x) { for (const g of glows) g.material.opacity = 0.85 * x; const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
     };
   };
 
