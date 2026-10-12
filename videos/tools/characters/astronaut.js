@@ -70,7 +70,10 @@
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
     const grey = M({ color: 0x6d7076, roughness: 0.6, metalness: 0.2 });
     const dark = M({ color: 0x26282c, roughness: 0.75, metalness: 0.1 });
-    const visor = M({ color: 0xe0a640, roughness: 0.08, metalness: 1.0 });
+    // the visor: gold film under a clear glossy coat (physical material), so it mirrors the light like real glass
+    const visor = new THREE.MeshPhysicalMaterial({ color: 0xd9a043, metalness: 1.0, roughness: 0.06, clearcoat: 1.0, clearcoatRoughness: 0.02, envMapIntensity: 1.4 });
+    visor.userData.base = visor.color.clone(); mats.push(visor);
+    const gasket = M({ color: 0x2c2e33, roughness: 0.7, metalness: 0.1 });
     const lens = M({ color: 0x111316, roughness: 0.1, metalness: 0.6 });
     const blue = M({ color: 0x0057b7, roughness: 0.85 }), yellow = M({ color: 0xffd500, roughness: 0.85 }), white = M({ color: 0xf4f2ec, roughness: 0.85 });
     // the colour details (after the Apollo-era suits): silver-grey gloves with blue rubber fingertips, beige straps,
@@ -203,8 +206,21 @@
     head.add(at(ringY(0.16, 0.012, grey), 0, -0.03, 0));
     const helmet = mesh(new THREE.SphereGeometry(0.188, 56, 40), shell, 0, 0.16, 0.0); helmet.scale.set(1, 1.03, 1.06); head.add(helmet);
     // the visor covers the front (-z) of the helmet: phi centred on 1.5π in three's sphere parametrisation
-    const vis = mesh(new THREE.SphereGeometry(0.192, 56, 40, Math.PI * 1.13, Math.PI * 0.74, Math.PI * 0.2, Math.PI * 0.46), visor, 0, 0.16, 0.0);
+    // The visor bulges: a slightly larger sphere centred a little forward, so it stands out in the middle and its
+    // edges run under the helmet shell; a dark rubber gasket round the window seats it in the shell.
+    const P0 = Math.PI * 1.13, PL = Math.PI * 0.74, T0 = Math.PI * 0.2, TL = Math.PI * 0.46;
+    const vis = mesh(new THREE.SphereGeometry(0.191, 72, 48, P0, PL, T0, TL), visor, 0, 0.16, -0.011);
     vis.scale.set(1, 1.03, 1.06); head.add(vis);
+    {
+      const pts = [], r = 0.1915, sp = (ph, th) => new THREE.Vector3(-r * Math.cos(ph) * Math.sin(th), r * Math.cos(th), r * Math.sin(ph) * Math.sin(th));
+      const n = 24, e = 0.01;   // walk round the window's edge (a rectangle in angles), corners rounded by the curve
+      for (let k = 0; k < n; k++) pts.push(sp(P0 + e + (PL - 2 * e) * k / n, T0 + e));
+      for (let k = 0; k < n; k++) pts.push(sp(P0 + PL - e, T0 + e + (TL - 2 * e) * k / n));
+      for (let k = 0; k < n; k++) pts.push(sp(P0 + PL - e - (PL - 2 * e) * k / n, T0 + TL - e));
+      for (let k = 0; k < n; k++) pts.push(sp(P0 + e, T0 + TL - e - (TL - 2 * e) * k / n));
+      const rim = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 200, 0.0065, 10, true), gasket, 0, 0.16, 0);
+      rim.scale.set(1, 1.03, 1.06); head.add(rim);
+    }
     const brow = mesh(new THREE.SphereGeometry(0.195, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.16, Math.PI * 0.05), shell, 0, 0.16, 0); brow.scale.set(1, 1.03, 1.06); head.add(brow);
     // Left of the helmet: a lamp — a cylinder on a bracket, a glowing lens with a soft halo, a row of small LEDs under it.
     // Right: a sensor/camera pod — a dark body, a big glass lens in a metal ring, a red indicator, a thin antenna.
