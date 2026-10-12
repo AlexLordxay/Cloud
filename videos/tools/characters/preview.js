@@ -15,6 +15,7 @@ const page = `<!doctype html><html><body style="margin:0;background:#000">
 <script>
   const W = 1600, H = 760, ren = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   ren.setSize(W, H); ren.outputEncoding = THREE.sRGBEncoding; ren.shadowMap.enabled = true; ren.shadowMap.type = THREE.PCFSoftShadowMap;
+  ren.toneMapping = THREE.ACESFilmicToneMapping; ren.toneMappingExposure = 1.15;
   document.body.appendChild(ren.domElement);
   const scene = new THREE.Scene(), a = window.__makeAstronaut(THREE);
   scene.background = new THREE.Color(0x05070c);
@@ -24,7 +25,7 @@ const page = `<!doctype html><html><body style="margin:0;background:#000">
   const fill = new THREE.DirectionalLight(0x8fa4d0, 0.45); fill.position.set(-0.5, 0.5, 1); scene.add(fill);
   const under = new THREE.DirectionalLight(0xffb070, 0.7); under.position.set(-0.3, -0.8, -0.8); scene.add(under);
   scene.add(new THREE.HemisphereLight(0x6070a0, 0x3a2414, 0.18));
-  a.rim.color.value.setRGB(1.6, 1.05, 0.55);
+  a.rim.color.value.setRGB(0.9, 0.6, 0.32);
   a.pose(${t});
   const cam = new THREE.PerspectiveCamera(30, (W / 4) / H, 0.05, 100);
   const views = [[0, 0.9, 5.2], [3.6, 1.0, 3.6], [5.2, 0.3, 0], [-2.0, 0.5, -4.8]];

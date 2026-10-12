@@ -317,17 +317,18 @@
   function buildAstro(r) {
     const THREE = r.THREE, a = window.__makeAstronaut(THREE), scene = new THREE.Scene();
     scene.add(a.group);
-    const key = new THREE.DirectionalLight(0xffd2a0, 2.2); key.position.set(0.6, 0.7, -0.6);
-    const under = new THREE.DirectionalLight(0xffb070, 0.9); under.position.set(-0.3, -0.8, -0.8);
-    const fill = new THREE.DirectionalLight(0x8fa4d0, 0.4); fill.position.set(-0.5, 0.5, 1);
+    scene.environment = window.__astronautEnv(THREE, r.renderer, { warm: new THREE.Vector3(0.1, 0.25, -1) });
+    const key = a.keyLight(0xffd2a0, 1.8); a.aimKey(new THREE.Vector3(0.6, 0.7, -0.6));
+    const under = new THREE.DirectionalLight(0xffb070, 0.7); under.position.set(-0.3, -0.8, -0.8);
+    const fill = new THREE.DirectionalLight(0x8fa4d0, 0.45); fill.position.set(-0.5, 0.5, 1);
     const amb = new THREE.HemisphereLight(0x6070a0, 0x3a2414, 0.18);
-    scene.add(key, under, fill, amb);
+    scene.add(key, key.target, under, fill, amb);
     const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 500);
-    return { a, scene, cam, lights: [key, under, fill, amb], base: [2.2, 0.9, 0.4, 0.18] };
+    return { a, scene, cam, lights: [key, under, fill, amb], base: [1.8, 0.7, 0.45, 0.18] };
   }
   function drawAstro(ren, t) {
     if (t > A_END) return;
-    const A = G.astro, k = 1 - Math.exp(-t / 5.5);              // goes away, slower and slower: it freezes
+    const THREE_ = window.__rec.THREE, A = G.astro, k = 1 - Math.exp(-t / 5.5);              // goes away, slower and slower: it freezes
     const aspect = ren.domElement.width / ren.domElement.height, cam = A.cam;
     if (cam.aspect !== aspect) { cam.aspect = aspect; cam.updateProjectionMatrix(); }
     const tanH = Math.tan(cam.fov * D / 2);
@@ -343,8 +344,14 @@
     const op = 1 - smooth((t - 10.5) / 3.2);                    // dimmer and dimmer, then gone
     A.a.setOpacity(op);
     A.lights.forEach((l, i) => { l.intensity = A.base[i] * (1 - 0.6 * red); });
-    A.a.rim.color.value.setRGB(2.0, 1.35 - 0.8 * red, 0.75 - 0.6 * red);   // the disc's warm glow round its edges
-    const ac = ren.autoClear; ren.autoClear = false; ren.clearDepth(); ren.render(A.scene, cam); ren.autoClear = ac;
+    A.a.rim.color.value.setRGB(0.9, 0.6 - 0.35 * red, 0.32 - 0.25 * red);   // the disc's warm glow round its edges
+    A.a.aimKey();
+    // filmic tone mapping and soft shadows for the figure only (the site renders without them)
+    const ac = ren.autoClear, tm = ren.toneMapping, te = ren.toneMappingExposure, sm = ren.shadowMap.enabled, st = ren.shadowMap.type;
+    ren.autoClear = false; ren.toneMapping = THREE_.ACESFilmicToneMapping; ren.toneMappingExposure = 1.15;
+    ren.shadowMap.enabled = true; ren.shadowMap.type = THREE_.PCFSoftShadowMap;
+    ren.clearDepth(); ren.render(A.scene, cam);
+    ren.autoClear = ac; ren.toneMapping = tm; ren.toneMappingExposure = te; ren.shadowMap.enabled = sm; ren.shadowMap.type = st;
   }
 
   window.__sceneSetup = async (r) => {

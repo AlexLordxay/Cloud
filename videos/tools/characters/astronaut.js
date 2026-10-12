@@ -35,7 +35,7 @@
 
   window.__makeAstronaut = (THREE) => {
     const mats = [];
-    const rim = { color: { value: new THREE.Color(0, 0, 0) }, power: { value: 2.2 } };
+    const rim = { color: { value: new THREE.Color(0, 0, 0) }, power: { value: 3.0 } };
     const M = (o, fold = 0) => {
       const m = new THREE.MeshStandardMaterial(Object.assign({ transparent: true }, o));
       m.onBeforeCompile = sh => {
@@ -43,7 +43,7 @@
         if (fold) {
           sh.vertexShader = 'varying vec3 vObj;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObj = position;');
           sh.fragmentShader = FOLDS + sh.fragmentShader.replace('#include <normal_fragment_maps>',
-            '#include <normal_fragment_maps>\n  float hgt = folds(vObj);\n  normal = foldNormal(-vViewPosition, normal, hgt);\n  diffuseColor.rgb *= 0.9 + 0.1 * hgt;');
+            '#include <normal_fragment_maps>\n  float hgt = folds(vObj);\n  normal = foldNormal(-vViewPosition, normal, hgt);\n  diffuseColor.rgb *= (0.9 + 0.1 * hgt) * (0.93 + 0.07 * fn(vObj * 6.0));');
         }
         sh.fragmentShader = 'uniform vec3 rimColor; uniform float rimPower;\n' + sh.fragmentShader.replace('#include <dithering_fragment>',
           '#include <dithering_fragment>\n  float fr = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), rimPower);\n  gl_FragColor.rgb += rimColor * diffuseColor.rgb * fr;');
@@ -53,7 +53,7 @@
     const fabric = M({ color: 0xebe7dd, roughness: 0.93, metalness: 0 }, 1.0);
     const fabric2 = M({ color: 0xd9d5cb, roughness: 0.95, metalness: 0 }, 1.4);      // a shade darker: bellows, gaskets
     const cover = M({ color: 0xe6e2d8, roughness: 0.9, metalness: 0 }, 0.45);        // the cloth cover over the backpack
-    const shell = M({ color: 0xeeebe4, roughness: 0.58, metalness: 0.0 });          // hard parts
+    const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 }, 0.12);          // hard parts
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
     const grey = M({ color: 0x6d7076, roughness: 0.6, metalness: 0.2 });
     const dark = M({ color: 0x26282c, roughness: 0.75, metalness: 0.1 });
@@ -86,14 +86,33 @@
         p.push([r, -u * len]);
       }
       for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; p.push([r1 * Math.cos(a), -len - r1 * 0.45 * Math.sin(a)]); }
-      return lathe(p.reverse());
+      return lumpy(lathe(p.reverse(), 64), r0 * 0.07);
     }
     // bellows at a bend: n soft ridges
     function bellows(len, r, n) {
       const p = [[1e-4, len / 2 + r * 0.3]];
       for (let i = 0; i <= 40; i++) { const u = i / 40; p.push([r * (0.93 + 0.1 * Math.cos(2 * Math.PI * n * u)), len / 2 - u * len]); }
       p.push([1e-4, -len / 2 - r * 0.3]);
-      return lathe(p.reverse());
+      return lumpy(lathe(p.reverse(), 64), r * 0.06, 20);
+    }
+    // real cloth is never a perfect solid of revolution: push the surface in and out along its normal with smooth noise
+    const vh = (x, y, z) => { const v = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return v - Math.floor(v); };
+    function vnoise(x, y, z) {
+      const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z), fx = x - X, fy = y - Y, fz = z - Z;
+      const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = fz * fz * (3 - 2 * fz), L = (a, b, k) => a + (b - a) * k;
+      return L(L(L(vh(X, Y, Z), vh(X + 1, Y, Z), u), L(vh(X, Y + 1, Z), vh(X + 1, Y + 1, Z), u), v),
+               L(L(vh(X, Y, Z + 1), vh(X + 1, Y, Z + 1), u), L(vh(X, Y + 1, Z + 1), vh(X + 1, Y + 1, Z + 1), u), v), w);
+    }
+    let seed = 0;
+    function lumpy(geo, amp, f = 14) {
+      geo.computeVertexNormals();
+      const p = geo.attributes.position, n = geo.attributes.normal, o = (seed += 3.7);
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+        const d = amp * ((vnoise(x * f + o, y * f * 2.2, z * f) - 0.5) * 1.4 + (vnoise(x * f * 2.6, y * f * 5 + o, z * f * 2.6) - 0.5) * 0.6);
+        p.setXYZ(i, x + n.getX(i) * d, y + n.getY(i) * d, z + n.getZ(i) * d);
+      }
+      geo.computeVertexNormals(); return geo;
     }
     const shadowed = o => o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
 
@@ -104,7 +123,7 @@
     /* torso */
     // hard upper torso: a shell wider than deep, from the waist bearing to the neck ring
     const hut = mesh(lathe([[0, 0.1], [0.165, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]].reverse()), shell);
-    hut.scale.set(1.36, 1, 0.94); body.add(hut);
+    hut.scale.set(1.26, 1, 0.9); body.add(hut);
     // lower torso / briefs: soft fabric, the waist bearing on top
     const brief = mesh(lathe([[0, -0.2], [0.11, -0.2], [0.16, -0.15], [0.185, -0.05], [0.188, 0.04], [0.178, 0.1], [0, 0.11]].reverse()), fabric);
     brief.scale.set(1.3, 1, 0.98); body.add(brief);
@@ -119,31 +138,31 @@
     }
 
     /* life-support backpack (+z side) */
-    const pack = joint(body, 0, 0.36, 0.29);
-    pack.add(mesh(rbox(0.56, 0.68, 0.24, 0.085), cover));
-    pack.add(mesh(rbox(0.5, 0.15, 0.2, 0.05), shell, 0, 0.36, -0.01));                  // top cover, a little set apart
-    pack.add(mesh(new THREE.BoxGeometry(0.52, 0.012, 0.21), grey, 0, 0.285, 0));        // the seam under it
-    pack.add(mesh(rbox(0.42, 0.34, 0.03, 0.03), cover, 0, 0.02, 0.115));                 // a padded flap on the back
-    for (const s of [-1, 1]) pack.add(mesh(new THREE.BoxGeometry(0.035, 0.6, 0.012), grey, s * 0.17, -0.02, 0.124));   // straps over it
-        pack.add(mesh(rbox(0.1, 0.06, 0.02, 0.008), grey, 0, -0.24, 0.13));
+    const pack = joint(body, 0, 0.37, 0.25);
+    pack.add(mesh(lumpy(rbox(0.46, 0.56, 0.18, 0.06), 0.004, 9), cover));
+    pack.add(mesh(rbox(0.42, 0.11, 0.16, 0.04), shell, 0, 0.3, -0.005));                // top cover, a little set apart
+    pack.add(mesh(new THREE.BoxGeometry(0.43, 0.01, 0.165), grey, 0, 0.245, 0));       // the seam under it
+    pack.add(mesh(lumpy(rbox(0.34, 0.28, 0.03, 0.03), 0.003, 12), cover, 0, 0.0, 0.09));   // a padded flap on the back
+    for (const s of [-1, 1]) pack.add(mesh(new THREE.BoxGeometry(0.028, 0.48, 0.01), grey, s * 0.14, -0.01, 0.106));   // straps over it
+        pack.add(mesh(rbox(0.08, 0.05, 0.02, 0.008), grey, 0, -0.2, 0.1));
     for (const s of [-1, 1]) {
       const h = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.011, 10, 24, Math.PI), grey);   // handles on the top edges
-      h.position.set(s * 0.19, 0.44, 0.0); pack.add(h);
-      pack.add(mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.04, 16), metal, s * 0.2, -0.36, 0.0));    // valves underneath
-      pack.add(mesh(new THREE.BoxGeometry(0.02, 0.5, 0.2), grey, s * 0.285, 0.0, 0.0));                  // side rails
+      h.position.set(s * 0.15, 0.36, 0.0); h.scale.setScalar(0.85); pack.add(h);
+      pack.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.035, 16), metal, s * 0.16, -0.3, 0.0));    // valves underneath
+      pack.add(mesh(new THREE.BoxGeometry(0.016, 0.4, 0.15), grey, s * 0.234, 0.0, 0.0));                  // side rails
     }
 
     /* neck ring, helmet with side lamps and the gold visor */
     const head = joint(body, 0, 0.625, -0.01); J.head = head;
-    head.add(at(ringY(0.155, 0.03, metal), 0, 0, 0));
+    head.add(at(ringY(0.148, 0.026, metal), 0, 0, 0));
     head.add(at(ringY(0.16, 0.012, grey), 0, -0.03, 0));
-    const helmet = mesh(new THREE.SphereGeometry(0.205, 56, 40), shell, 0, 0.16, 0.0); helmet.scale.set(1, 1.03, 1.06); head.add(helmet);
+    const helmet = mesh(new THREE.SphereGeometry(0.188, 56, 40), shell, 0, 0.16, 0.0); helmet.scale.set(1, 1.03, 1.06); head.add(helmet);
     // the visor covers the front (-z) of the helmet: phi centred on 1.5π in three's sphere parametrisation
-    const vis = mesh(new THREE.SphereGeometry(0.209, 56, 40, Math.PI * 1.13, Math.PI * 0.74, Math.PI * 0.2, Math.PI * 0.46), visor, 0, 0.16, 0.0);
+    const vis = mesh(new THREE.SphereGeometry(0.192, 56, 40, Math.PI * 1.13, Math.PI * 0.74, Math.PI * 0.2, Math.PI * 0.46), visor, 0, 0.16, 0.0);
     vis.scale.set(1, 1.03, 1.06); head.add(vis);
-    const brow = mesh(new THREE.SphereGeometry(0.212, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.16, Math.PI * 0.05), shell, 0, 0.16, 0); brow.scale.set(1, 1.03, 1.06); head.add(brow);
+    const brow = mesh(new THREE.SphereGeometry(0.195, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.16, Math.PI * 0.05), shell, 0, 0.16, 0); brow.scale.set(1, 1.03, 1.06); head.add(brow);
     for (const s of [-1, 1]) {
-      const lamp = joint(head, s * 0.2, 0.2, -0.04);
+      const lamp = joint(head, s * 0.184, 0.19, -0.04); lamp.scale.setScalar(0.85);
       lamp.add(mesh(rbox(0.05, 0.06, 0.13, 0.015), shell));
       const ln = mesh(new THREE.CircleGeometry(0.019, 20), lens, 0, 0.004, -0.0661); ln.rotation.y = Math.PI; lamp.add(ln);
       lamp.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.05, 8), grey, 0, -0.04, 0.03));
@@ -152,18 +171,19 @@
     /* arms */
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
-      const sh = joint(body, s * 0.34, 0.49, 0);
-      const bulb = mesh(new THREE.SphereGeometry(0.11, 32, 24), fabric); bulb.scale.set(1, 1.05, 1.05); sh.add(bulb);
-      sh.add(at(ringX(0.1, 0.022, metal), -s * 0.035, 0, 0));
-      const upper = mesh(limb(0.24, 0.1, 0.088, 0.07, s), fabric, 0, -0.06, 0); sh.add(upper);
+      const sh = joint(body, s * 0.31, 0.49, 0);
+      const bulb = mesh(lumpy(new THREE.SphereGeometry(0.1, 40, 30), 0.006), fabric); bulb.scale.set(1, 1.05, 1.05); sh.add(bulb);
+      sh.add(at(ringX(0.092, 0.02, metal), -s * 0.035, 0, 0));
+      const upper = mesh(limb(0.27, 0.09, 0.08, 0.06, s), fabric, 0, -0.06, 0); sh.add(upper);
+      sh.add(at(ringY(0.088, 0.006, grey), 0, -0.2, 0));                                     // a seam / restraint line
       if (s < 0) {   // the flag on the outside of the left upper arm
-        const f = joint(sh, -0.103, -0.13, 0); f.rotation.y = -Math.PI / 2;
+        const f = joint(sh, -0.094, -0.13, 0); f.rotation.y = -Math.PI / 2;
         f.add(mesh(new THREE.PlaneGeometry(0.075, 0.025), blue, 0, 0.0125, 0), mesh(new THREE.PlaneGeometry(0.075, 0.025), yellow, 0, -0.0125, 0));
       }
-      const el = joint(sh, 0, -0.34, 0);
-      el.add(mesh(bellows(0.11, 0.088, 3), fabric2));
-      el.add(mesh(limb(0.2, 0.086, 0.074, 0.05, 2 + s), fabric, 0, -0.06, 0));
-      const wr = joint(el, 0, -0.3, 0);
+      const el = joint(sh, 0, -0.37, 0);
+      el.add(mesh(bellows(0.1, 0.08, 3), fabric2));
+      el.add(mesh(limb(0.23, 0.078, 0.066, 0.05, 2 + s), fabric, 0, -0.055, 0));
+      const wr = joint(el, 0, -0.33, 0);
       wr.add(at(ringY(0.07, 0.017, metal), 0, 0.012, 0));
       wr.add(mesh(new THREE.CylinderGeometry(0.072, 0.066, 0.055, 24), dark, 0, -0.02, 0));     // gauntlet cuff
       const hand = joint(wr, 0, -0.05, 0);
@@ -183,19 +203,20 @@
     [[0.065, 0.0], [-0.17, 0.0], [-0.215, 0.02], [-0.215, 0.055], [-0.17, 0.095], [-0.075, 0.13], [-0.07, 0.2], [0.075, 0.2], [0.08, 0.03]]
       .forEach(([z, y], i) => i ? bootShape.lineTo(z, y) : bootShape.moveTo(z, y));
     const bootGeo = new THREE.ExtrudeGeometry(bootShape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.022, bevelSegments: 5, curveSegments: 8 });
-    bootGeo.translate(0, -0.2, -0.05); bootGeo.rotateY(-Math.PI / 2); bootGeo.scale(1.25, 1.15, 1.12); bootGeo.computeVertexNormals();
+    bootGeo.translate(0, -0.2, -0.05); bootGeo.rotateY(-Math.PI / 2); bootGeo.scale(1.12, 1.05, 1.05); bootGeo.computeVertexNormals();
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
-      const hp = joint(body, s * 0.115, -0.12, 0);
-      hp.add(mesh(limb(0.34, 0.13, 0.108, 0.07, 3 * s), fabric, 0, -0.03, 0));
-      const kn = joint(hp, 0, -0.44, 0);
-      kn.add(mesh(bellows(0.13, 0.108, 3), fabric2));
-      kn.add(mesh(limb(0.3, 0.106, 0.094, 0.06, 1 - s), fabric, 0, -0.07, 0));
-      const an = joint(kn, 0, -0.42, 0);
-      an.add(at(ringY(0.094, 0.018, metal), 0, 0.02, 0));
+      const hp = joint(body, s * 0.105, -0.12, 0);
+      hp.add(mesh(limb(0.38, 0.118, 0.098, 0.06, 3 * s), fabric, 0, -0.03, 0));
+      hp.add(at(ringY(0.116, 0.006, grey), 0, -0.2, 0));
+      const kn = joint(hp, 0, -0.48, 0);
+      kn.add(mesh(bellows(0.12, 0.098, 3), fabric2));
+      kn.add(mesh(limb(0.34, 0.096, 0.084, 0.05, 1 - s), fabric, 0, -0.065, 0));
+      const an = joint(kn, 0, -0.46, 0);
+      an.add(at(ringY(0.086, 0.017, metal), 0, 0.02, 0));
       an.add(mesh(bootGeo, shell, 0, 0.02, 0));
-      an.add(mesh(rbox(0.19, 0.035, 0.35, 0.014), dark, 0, -0.215, -0.08));                      // sole
-      an.add(mesh(new THREE.BoxGeometry(0.2, 0.025, 0.07), grey, 0, -0.1, 0.02));               // strap
+      an.add(mesh(rbox(0.17, 0.032, 0.33, 0.013), dark, 0, -0.2, -0.075));                      // sole
+      an.add(mesh(new THREE.BoxGeometry(0.18, 0.022, 0.065), grey, 0, -0.09, 0.02));               // strap
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
 
@@ -206,7 +227,7 @@
     function pose(t) {
       for (const s of [-1, 1]) {
         const L = s < 0 ? 'L' : 'R', ph = s < 0 ? 0 : 1.9, a = s < 0 ? 1 : -1;
-        J['shoulder' + L].rotation.set(0.35 + 0.08 * a + 0.09 * w(t, 5.3, ph), 0.1 * s, s * (1.05 + 0.1 * a + 0.1 * w(t, 6.1, ph + 1)));
+        J['shoulder' + L].rotation.set(0.35 + 0.08 * a + 0.09 * w(t, 5.3, ph), 0.1 * s, s * (0.8 + 0.12 * a + 0.1 * w(t, 6.1, ph + 1)));
         J['elbow' + L].rotation.set(0.75 + 0.12 * w(t, 4.4, ph + 2), 0, 0);
         J['wrist' + L].rotation.set(0.2 + 0.12 * w(t, 3.7, ph), 0.3 * s, s * 0.15);
         J['hip' + L].rotation.set(0.38 + 0.12 * a + 0.08 * w(t, 6.7, ph + 0.5), 0, s * (0.14 + 0.04 * w(t, 7.3, ph)));
