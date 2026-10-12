@@ -153,13 +153,18 @@
       body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, 0.019, 12, false), hoseMat));
     }
 
-    // two more striped hoses from the control box down into connector boxes on the belt
+    // two more striped hoses from the control box down into connector boxes sewn onto the torso just above the belt:
+    // each box sits on a cloth patch that lies on the surface (the torso there is an ellipse 0.219 × 0.157)
     for (const sd of [-1, 1]) {
-      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.08, 0.29, -0.28), new THREE.Vector3(sd * 0.115, 0.21, -0.24), new THREE.Vector3(sd * 0.15, 0.135, -0.205), new THREE.Vector3(sd * 0.165, 0.095, -0.19)]);
+      const x = sd * 0.15, A = 0.219, B = 0.157, q = Math.sqrt(1 - (x / A) ** 2), zs = -B * q, ang = Math.atan(B * x / (A * A * q));
+      const mount = joint(body, x, 0.11, zs); mount.rotation.y = Math.PI - ang;                       // local +z = out of the suit
+      mount.add(mesh(lumpy(rbox(0.07, 0.07, 0.01, 0.012), 0.0015, 20), cover, 0, 0, 0.002));          // the sewn-on patch
+      mount.add(mesh(rbox(0.05, 0.05, 0.028, 0.008), grey, 0, 0, 0.018));                             // the connector box
+      const nip = at(new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.016, 18), metal), 0, 0.03, 0.018); mount.add(nip);
+      mount.updateMatrixWorld(true);
+      const top = new THREE.Vector3(0, 0.04, 0.018).applyMatrix4(new THREE.Matrix4().compose(mount.position, mount.quaternion, new THREE.Vector3(1, 1, 1)));
+      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.08, 0.29, -0.28), new THREE.Vector3(sd * 0.11, 0.22, -0.24), new THREE.Vector3(top.x * 0.97, top.y + 0.05, top.z - 0.025), top]);
       body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.014, 10, false), hoseMat));
-      const box = joint(body, sd * 0.168, 0.066, -0.17); box.rotation.y = -sd * 0.55;            // the box sits on the belt, the hose plugs into its top
-      box.add(mesh(rbox(0.05, 0.05, 0.03, 0.008), grey));
-      box.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.014, 18), metal), 0, 0.03, 0));
     }
     // the backpack's harness: beige straps over the shoulders down to the control box
     for (const sd of [-1, 1]) {
@@ -167,12 +172,12 @@
       const st = new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.012, 8, false), strap); st.scale.set(1, 1, 1); body.add(st);
     }
     // a coiled safety tether on the right of the belt: it hangs from a D-ring on the belt, its hook clipped to a loop below
-    { const X = 0.262, Z = -0.07;
-      const dr = at(new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0045, 8, 20), metal), X, 0.045, Z); dr.rotation.y = Math.PI / 2 - 0.5; body.add(dr);
+    { const X = 0.266, Z = -0.005;   // on the belt's side (the belt is 0.22 out there): the ring sits on it, the coil hangs just outside the suit
+      const dr = at(new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0048, 8, 20), metal), 0.24, 0.05, Z); body.add(dr);
       const pts = []; for (let k = 0; k <= 160; k++) { const a = k / 160 * Math.PI * 2 * 5; pts.push(new THREE.Vector3(X + Math.cos(a) * 0.022, 0.03 - k / 160 * 0.1, Z + Math.sin(a) * 0.022)); }
       body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 480, 0.0052, 6, false), dark));
-      const hook = at(new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0042, 8, 20, Math.PI * 1.6), metal), X, -0.085, Z); hook.rotation.y = Math.PI / 2 - 0.5; body.add(hook);
-      const tab = mesh(rbox(0.03, 0.04, 0.008, 0.004), strap, 0.243, -0.1, Z); tab.rotation.y = Math.PI / 2; body.add(tab); }   // a cloth loop sewn on the suit
+      const hook = at(new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0042, 8, 20, Math.PI * 1.6), metal), X, -0.085, Z); hook.rotation.y = 0; body.add(hook);
+      const tab = mesh(rbox(0.03, 0.04, 0.03, 0.006), strap, 0.248, -0.1, Z); tab.rotation.y = Math.PI / 2; body.add(tab); }   // a cloth loop sewn on the suit
 
     /* life-support backpack (+z side) */
     const pack = joint(body, 0, 0.37, 0.25);
