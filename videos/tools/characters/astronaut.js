@@ -147,7 +147,7 @@
     const brief = mesh(lumpy(lathe([[0, -0.27], [0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12], [0, 0.13]], 64), 0.006, 10, (x, y) => Math.min(1, Math.max(0, (0.04 - y) / 0.12))), fabric);   // one piece down to the top of the thighs: the legs come out of it
     brief.scale.set(1.26, 1, 0.9); body.add(brief);   // the same cross-section as the torso where they meet: one garment
     // the waist: a soft band of the suit's own cloth over the bearing (no bare metal), the torso narrowing into it
-    const waist = at(ringY(0.175, 0.015, strap), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
+    const waist = at(ringY(0.175, 0.015, grey), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
     // chest control box with two hoses to the backpack
     const dcmMat = M({ color: 0x41464e, roughness: 0.45, metalness: 0.35 });                      // dark anthracite, so it reads as a device
     const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), dcmMat, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
