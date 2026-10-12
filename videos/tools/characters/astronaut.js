@@ -2,8 +2,8 @@
 // "include": ["characters/astronaut.js"]). Modelled after real spacewalk suits: a hard upper torso, a big life-support
 // backpack with rounded edges, puffy fabric arms and legs with bellows at the elbows and knees, bearings at the
 // shoulders, waist and wrists, gloves with fingers, heavy boots, a helmet with side lamps and a gold visor, hoses to a
-// control box on the chest, and a small Ukrainian flag on the left shoulder. The fabric has fine folds (a procedural
-// bump in the shader); metal and the visor reflect an environment map; the figure shades itself (shadow map).
+// control box on the chest, and a small Ukrainian flag on the left shoulder. The fabric has folds in its shape and a woven,
+// stitched texture (a canvas drawn in code); metal and the visor reflect an environment map; the figure shades itself (shadow map).
 //
 //   const a = window.__makeAstronaut(THREE);         // a.group: ~1.9 units tall, pelvis at the origin, facing -z
 //   a.pose(t);                                        // the free-fall idle at time t (s): limbs drift slowly
@@ -14,46 +14,57 @@
 //
 // Joints are plain groups (a.joints.shoulderL, elbowL, wristL, hipL, kneeL, ankleL, … head, body).
 (() => {
-  // value-noise folds for the fabric, and a bump that tilts the normal by the height's screen-space slope
-  const FOLDS = `
-    varying vec3 vObj;
-    uniform float foldK;
-    float fh(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-    float fn(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-      return mix(mix(mix(fh(i), fh(i + vec3(1,0,0)), f.x), mix(fh(i + vec3(0,1,0)), fh(i + vec3(1,1,0)), f.x), f.y),
-                 mix(mix(fh(i + vec3(0,0,1)), fh(i + vec3(1,0,1)), f.x), mix(fh(i + vec3(0,1,1)), fh(i + vec3(1,1,1)), f.x), f.y), f.z); }
-    float folds(vec3 p){
-      // folds run round the limbs (the limb axis is local y): stretched noise, plus fine weave
-      float a = fn(vec3(p.x * 9.0, p.y * 34.0, p.z * 9.0)) * 0.65 + fn(vec3(p.x * 18.0, p.y * 70.0, p.z * 18.0)) * 0.35;
-      return a * a;
-    }
-    vec3 foldNormal(vec3 pos, vec3 n, float h){
-      vec3 sx = dFdx(pos), sy = dFdy(pos); vec2 d = vec2(dFdx(h), dFdy(h)) * foldK;
-      vec3 r1 = cross(sy, n), r2 = cross(n, sx); float det = dot(sx, r1);
-      return normalize(abs(det) * n - sign(det) * (d.x * r1 + d.y * r2));
-    }`;
-
   window.__makeAstronaut = (THREE) => {
     const mats = [];
     const rim = { color: { value: new THREE.Color(0, 0, 0) }, power: { value: 3.0 } };
-    const M = (o, fold = 0) => {
-      const m = new THREE.MeshStandardMaterial(Object.assign({ transparent: true }, o));
+    const M = (o) => {
+      const m = new THREE.MeshStandardMaterial(o);
       m.onBeforeCompile = sh => {
-        Object.assign(sh.uniforms, { rimColor: rim.color, rimPower: rim.power, foldK: { value: fold } });
-        if (fold) {
-          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vObj;').replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObj = position;');
-          sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + FOLDS).replace('#include <normal_fragment_maps>',
-            '#include <normal_fragment_maps>\n  float hgt = folds(vObj);\n  normal = foldNormal(-vViewPosition, normal, hgt);\n  diffuseColor.rgb *= (0.9 + 0.1 * hgt) * (0.93 + 0.07 * fn(vObj * 6.0));');
-        }
+        Object.assign(sh.uniforms, { rimColor: rim.color, rimPower: rim.power });
         sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 rimColor; uniform float rimPower;').replace('#include <dithering_fragment>',
           '#include <dithering_fragment>\n  float fr = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), rimPower);\n  gl_FragColor.rgb += rimColor * diffuseColor.rgb * fr;');
       };
       m.userData.base = m.color.clone(); mats.push(m); return m;
     };
-    const fabric = M({ color: 0xe9e5db, roughness: 0.95, metalness: 0 }, 0.7);
-    const fabric2 = M({ color: 0xd6d2c7, roughness: 0.95, metalness: 0 }, 0.9);      // a shade darker: bellows, gaskets
-    const cover = M({ color: 0xe4e0d6, roughness: 0.92, metalness: 0 }, 0.3);        // the cloth cover over the backpack
-    const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 }, 0.12);          // hard parts
+    // real cloth is never a perfect solid of revolution: push the surface in and out along its normal with smooth noise
+    const vh = (x, y, z) => { const v = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return v - Math.floor(v); };
+    function vnoise(x, y, z) {
+      const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z), fx = x - X, fy = y - Y, fz = z - Z;
+      const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = fz * fz * (3 - 2 * fz), L = (a, b, k) => a + (b - a) * k;
+      return L(L(L(vh(X, Y, Z), vh(X + 1, Y, Z), u), L(vh(X, Y + 1, Z), vh(X + 1, Y + 1, Z), u), v),
+               L(L(vh(X, Y, Z + 1), vh(X + 1, Y, Z + 1), u), L(vh(X, Y + 1, Z + 1), vh(X + 1, Y + 1, Z + 1), u), v), w);
+    }
+    // Cloth texture, drawn once on a canvas: a fine weave, faint blotches of wear, and seams with stitches running along
+    // the limbs (on lathe-made parts u goes round the limb and v along it, so a seam is a vertical line on the canvas).
+    // The same picture, greyed, is the bump map: the weave and the seams catch the light.
+    function clothTexture(seams) {
+      const N = 1024, cv = document.createElement('canvas'); cv.width = cv.height = N;
+      const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+      for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const weave = ((x >> 1) + (y >> 1)) % 2 ? 6 : -6, grain = (vh(x, y, 1) - 0.5) * 14;
+        const wear = (vnoise(x / 90, y / 90, 3) - 0.5) * 22 + (vnoise(x / 23, y / 23, 7) - 0.5) * 8;
+        const v = 236 + weave + grain + wear, i = (y * N + x) * 4;
+        d[i] = v; d[i + 1] = v - 3; d[i + 2] = v - 9; d[i + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      for (const u of seams) {
+        const x = u * N;
+        g.fillStyle = 'rgba(120,115,105,0.55)'; g.fillRect(x - 2, 0, 4, N);                         // the seam groove
+        g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x + 2, 0, 2, N);                         // its raised edge
+        g.fillStyle = 'rgba(95,90,82,0.7)';
+        for (let y = 0; y < N; y += 14) { g.fillRect(x - 9, y, 2, 7); g.fillRect(x + 8, y + 5, 2, 7); }   // stitches
+      }
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.encoding = THREE.sRGBEncoding;
+      const bc = document.createElement('canvas'); bc.width = bc.height = N; const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(cv, 0, 0);
+      const b = new THREE.CanvasTexture(bc); b.wrapS = b.wrapT = THREE.RepeatWrapping; b.anisotropy = 8;
+      return [t, b];
+    }
+    const [clothMap, clothBump] = clothTexture([0.25, 0.75]);
+    const [plainMap, plainBump] = clothTexture([]);
+    const fabric = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05 });
+    const fabric2 = M({ color: 0xdedad0, roughness: 0.95, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.07 });      // a shade darker: bellows, gaskets
+    const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.04 });        // the cloth cover over the backpack
+    const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 });          // hard parts
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
     const grey = M({ color: 0x6d7076, roughness: 0.6, metalness: 0.2 });
     const dark = M({ color: 0x26282c, roughness: 0.75, metalness: 0.1 });
@@ -95,14 +106,6 @@
       p.push([1e-4, -len / 2 - r * 0.3]);
       return lumpy(lathe(p.reverse(), 64), r * 0.08, 20);
     }
-    // real cloth is never a perfect solid of revolution: push the surface in and out along its normal with smooth noise
-    const vh = (x, y, z) => { const v = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return v - Math.floor(v); };
-    function vnoise(x, y, z) {
-      const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z), fx = x - X, fy = y - Y, fz = z - Z;
-      const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = fz * fz * (3 - 2 * fz), L = (a, b, k) => a + (b - a) * k;
-      return L(L(L(vh(X, Y, Z), vh(X + 1, Y, Z), u), L(vh(X, Y + 1, Z), vh(X + 1, Y + 1, Z), u), v),
-               L(L(vh(X, Y, Z + 1), vh(X + 1, Y, Z + 1), u), L(vh(X, Y + 1, Z + 1), vh(X + 1, Y + 1, Z + 1), u), v), w);
-    }
     let seed = 0;
     function lumpy(geo, amp, f = 14) {
       geo.computeVertexNormals();
@@ -125,8 +128,8 @@
     const hut = mesh(lathe([[0, 0.1], [0.165, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]].reverse()), shell);
     hut.scale.set(1.26, 1, 0.9); body.add(hut);
     // lower torso / briefs: soft fabric, the waist bearing on top
-    const brief = mesh(lumpy(lathe([[0, -0.2], [0.15, -0.2], [0.18, -0.17], [0.19, -0.05], [0.19, 0.04], [0.178, 0.1], [0, 0.11]].reverse(), 64), 0.008, 10), fabric);   // flat-bottomed: the legs come out of it
-    brief.scale.set(1.3, 1, 0.98); body.add(brief);
+    const brief = mesh(lumpy(lathe([[0, -0.25], [0.13, -0.25], [0.175, -0.21], [0.192, -0.1], [0.192, 0.04], [0.178, 0.1], [0, 0.11]].reverse(), 64), 0.008, 10), fabric);   // flat-bottomed: the legs come out of it
+    brief.scale.set(1.3, 1, 1.05); body.add(brief);
     const waist = at(ringY(0.183, 0.022, metal), 0, 0.105, 0); waist.scale.set(1.33, 0.97, 1); body.add(waist);
     const waist2 = at(ringY(0.18, 0.014, grey), 0, 0.075, 0); waist2.scale.set(1.32, 0.97, 1); body.add(waist2);
     // chest control box with two hoses to the backpack
@@ -183,6 +186,7 @@
       }
       const el = joint(sh, 0, -0.37, 0);
       el.add(mesh(bellows(0.1, 0.08, 3), fabric2));
+      const epad = mesh(new THREE.SphereGeometry(0.082, 32, 20, Math.PI * 0.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), fabric2, 0, -0.01, 0); epad.scale.set(1.08, 1.2, 1.12); el.add(epad);   // and over the back of the elbow
       el.add(mesh(limb(0.23, 0.078, 0.066, 0.05, 2 + s), fabric, 0, -0.055, 0));
       const wr = joint(el, 0, -0.33, 0);
       wr.add(at(ringY(0.07, 0.017, metal), 0, 0.012, 0));
@@ -209,10 +213,11 @@
       const L = s < 0 ? 'L' : 'R';
       const hp = joint(body, s * 0.105, -0.13, -0.035);
       hp.add(at(ringY(0.118, 0.014, grey), 0, -0.06, 0));                                    // the hip bearing
-      hp.add(mesh(limb(0.38, 0.108, 0.098, 0.07, 3 * s), fabric, 0, -0.03, 0));
+      hp.add(mesh(limb(0.36, 0.108, 0.098, 0.07, 3 * s), fabric, 0, -0.07, 0));
       hp.add(at(ringY(0.116, 0.006, grey), 0, -0.2, 0));
       const kn = joint(hp, 0, -0.48, 0);
       kn.add(mesh(bellows(0.12, 0.098, 3), fabric2));
+      const pad = mesh(lumpy(new THREE.SphereGeometry(0.1, 40, 24, Math.PI * 1.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), 0.004), fabric2, 0, -0.02, 0); pad.scale.set(1.08, 1.25, 1.12); kn.add(pad);   // a padded patch over the knee
       kn.add(mesh(limb(0.34, 0.096, 0.084, 0.05, 1 - s), fabric, 0, -0.065, 0));
       const an = joint(kn, 0, -0.46, 0);
       an.add(at(ringY(0.086, 0.017, metal), 0, 0.02, 0));
@@ -245,7 +250,7 @@
     const lights = [];
     function light(color, intensity, dir) {
       const l = new THREE.DirectionalLight(color, intensity);
-      l.castShadow = true; l.shadow.mapSize.set(2048, 2048); l.shadow.bias = -0.0004; l.shadow.normalBias = 0.012;
+      l.castShadow = true; l.shadow.mapSize.set(2048, 2048); l.shadow.bias = -0.0015; l.shadow.normalBias = 0.035;
       Object.assign(l.shadow.camera, { left: -1.3, right: 1.3, top: 1.3, bottom: -1.3, near: 0.1, far: 10 });
       l.shadow.radius = 4;
       l.userData.dir = (dir || new THREE.Vector3(0, 0.6, -1)).clone().normalize();
@@ -259,7 +264,8 @@
     return {
       group, joints: J, materials: mats, pose, rim, light, aim, lights,
       setTint(r, g, b) { const c = new THREE.Color(r, g, b); for (const m of mats) m.color.copy(m.userData.base).multiply(c); },
-      setOpacity(x) { for (const m of mats) { m.opacity = x; m.depthWrite = x > 0.99; } },
+      // opaque until it fades: a transparent material lets the parts behind show through
+      setOpacity(x) { const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
     };
   };
 
