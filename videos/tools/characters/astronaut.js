@@ -207,13 +207,13 @@
       const el = joint(sh, 0, -0.37, 0);
       el.add(mesh(bellows(0.1, 0.08, 3), fabric2));
       const epad = mesh(new THREE.SphereGeometry(0.082, 32, 20, Math.PI * 0.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), fabric2, 0, -0.01, 0); epad.scale.set(1.08, 1.2, 1.12); el.add(epad);   // and over the back of the elbow
-      el.add(mesh(limb(0.23, 0.078, 0.066, 0.05, 2 + s), fabric, 0, -0.055, 0));
+      el.add(mesh(limb(0.265, 0.078, 0.062, 0.05, 2 + s), fabric, 0, -0.055, 0));   // reaches into the wrist ring
       const wr = joint(el, 0, -0.33, 0);
       // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
-      wr.add(at(ringY(0.07, 0.016, dark), 0, 0.012, 0));
-      wr.add(at(ringY(0.072, 0.006, s < 0 ? connBlue : connRed), 0, -0.004, 0));
+      wr.add(at(ringY(0.064, 0.0105, metal), 0, 0.004, 0));                                    // a slim wrist ring, the sleeve's own width
+      wr.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -0.007, 0));
       // the glove: a flared gauntlet, a full palm with a plate on the back, jointed fingers with blue rubber tips
-      wr.add(mesh(lumpy(lathe([[0, -0.1], [0.06, -0.1], [0.07, -0.085], [0.074, -0.05], [0.072, -0.015], [0.066, 0.005], [0, 0.008]], 40), 0.003, 16), glove));   // the gauntlet: a cuff, not a plate
+      wr.add(mesh(lumpy(lathe([[0, -0.1], [0.06, -0.1], [0.07, -0.085], [0.074, -0.05], [0.07, -0.025], [0.062, -0.008], [0.058, 0.01], [0, 0.012]], 40), 0.003, 16), glove));   // the gauntlet: a cuff, not a plate
       const hand = joint(wr, 0, -0.085, 0);
       // a rounded, padded hand: an ellipsoid palm with a fuller back, not a flat box
       const palm = mesh(lumpy(new THREE.SphereGeometry(1, 40, 30), 0.012, 3), glove, 0, -0.052, 0); palm.scale.set(0.058, 0.064, 0.04); hand.add(palm);
