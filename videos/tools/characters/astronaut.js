@@ -151,8 +151,21 @@
     // chest control box with two hoses to the backpack
     const dcmMat = M({ color: 0x41464e, roughness: 0.45, metalness: 0.35 });                      // dark anthracite, so it reads as a device
     const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), dcmMat, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
-    const scr = mesh(rbox(0.09, 0.045, 0.004, 0.006), lens, 0.07, 0.345, -0.307); scr.rotation.x = 0.2; body.add(scr);   // a small dark display
-    for (const [x, y] of [[-0.1, 0.02], [-0.04, 0.02], [0.02, -0.02]]) { const k = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), metal, x, 0.33 + y, -0.31); k.rotation.x = Math.PI / 2 + 0.2; body.add(k); }
+    // its display: oxygen and suit pressure in small green digits on a dark screen (a canvas, self-lit)
+    const screenTex = (() => {
+      const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const g = cv.getContext('2d');
+      g.fillStyle = '#05100c'; g.fillRect(0, 0, 256, 128);
+      g.fillStyle = '#7dffb4'; g.font = 'bold 44px "DejaVu Sans Mono", monospace'; g.textBaseline = 'middle';
+      g.fillText('O\u2082 98%', 14, 38);
+      g.font = 'bold 34px "DejaVu Sans Mono", monospace'; g.fillStyle = '#6fe6ff'; g.fillText('4.3 PSI', 14, 92);
+      g.fillStyle = 'rgba(125,255,180,0.35)'; for (let k = 0; k < 6; k++) g.fillRect(200, 104 - k * 13, 40, 9);            // a little level bar
+      g.fillStyle = '#7dffb4'; for (let k = 0; k < 5; k++) g.fillRect(200, 104 - k * 13, 40, 9);
+      const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t;
+    })();
+    const scrMat = M({ color: 0x000000, emissive: 0xffffff, emissiveMap: screenTex, emissiveIntensity: 1.1, roughness: 0.15, metalness: 0 });
+    dcm.add(mesh(rbox(0.1, 0.052, 0.004, 0.006), lens, 0.065, 0.012, -0.056));                          // the screen's dark frame
+    const scr = mesh(new THREE.PlaneGeometry(0.09, 0.045), scrMat, 0.065, 0.012, -0.0585); scr.rotation.y = Math.PI; dcm.add(scr);
+    for (const [x, y] of [[-0.11, 0.015], [-0.065, 0.015], [-0.02, 0.015]]) { const k = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), metal, x, 0.33 + y, -0.31); k.rotation.x = Math.PI / 2 + 0.2; body.add(k); }
     for (const s of [-1, 1]) {
       const c = new THREE.CatmullRomCurve3([new THREE.Vector3(s * 0.14, 0.31, -0.28), new THREE.Vector3(s * 0.27, 0.29, -0.22), new THREE.Vector3(s * 0.325, 0.3, -0.04), new THREE.Vector3(s * 0.3, 0.31, 0.12), new THREE.Vector3(s * 0.25, 0.32, 0.2)]);
       body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, 0.019, 12, false), hoseMat));
