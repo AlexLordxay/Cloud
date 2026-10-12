@@ -146,8 +146,10 @@
     // the waist: a soft band of the suit's own cloth over the bearing (no bare metal), the torso narrowing into it
     const waist = at(ringY(0.175, 0.015, strap), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
     // chest control box with two hoses to the backpack
-    const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), shell, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
-    for (const [x, y] of [[-0.08, 0.02], [0.02, 0.02], [0.1, 0.0]]) { const k = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), metal, x, 0.33 + y, -0.31); k.rotation.x = Math.PI / 2 + 0.2; body.add(k); }
+    const dcmMat = M({ color: 0x41464e, roughness: 0.45, metalness: 0.35 });                      // dark anthracite, so it reads as a device
+    const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), dcmMat, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
+    const scr = mesh(rbox(0.09, 0.045, 0.004, 0.006), lens, 0.07, 0.345, -0.307); scr.rotation.x = 0.2; body.add(scr);   // a small dark display
+    for (const [x, y] of [[-0.1, 0.02], [-0.04, 0.02], [0.02, -0.02]]) { const k = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), metal, x, 0.33 + y, -0.31); k.rotation.x = Math.PI / 2 + 0.2; body.add(k); }
     for (const s of [-1, 1]) {
       const c = new THREE.CatmullRomCurve3([new THREE.Vector3(s * 0.14, 0.31, -0.28), new THREE.Vector3(s * 0.27, 0.29, -0.22), new THREE.Vector3(s * 0.325, 0.3, -0.04), new THREE.Vector3(s * 0.3, 0.31, 0.12), new THREE.Vector3(s * 0.25, 0.32, 0.2)]);
       body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, 0.019, 12, false), hoseMat));
