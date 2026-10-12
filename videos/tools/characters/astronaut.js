@@ -177,12 +177,15 @@
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
       // the hard torso reaches over the shoulder (a shell cap), with the shoulder bearing set into its side opening
-      const cap = mesh(new THREE.SphereGeometry(0.15, 48, 32), shell, s * 0.24, 0.5, 0); cap.scale.set(1.05, 0.72, 0.95); body.add(cap);
-      const brg = at(ringX(0.098, 0.014, metal), s * 0.325, 0.485, 0); brg.rotation.z = -s * 0.25; body.add(brg);
+      // the shoulder: the torso's cloth cover runs over it, and the sleeve grows out of that in one piece
+      const cap = mesh(lumpy(new THREE.SphereGeometry(0.15, 48, 32), 0.004, 9), fabric, s * 0.24, 0.5, 0); cap.scale.set(1.05, 0.72, 0.95); body.add(cap);
       const sh = joint(body, s * 0.33, 0.48, 0);
-      // the sleeve: cloth that flares out of the bearing and narrows into the upper arm, moving with the arm
-      sh.add(mesh(lumpy(lathe([[0, -0.15], [0.092, -0.15], [0.1, -0.09], [0.11, -0.03], [0.112, 0.02], [0.1, 0.05], [0, 0.06]], 64), 0.005, 10), fabric));
-      const upper = mesh(limb(0.27, 0.09, 0.08, 0.06, s), fabric, 0, -0.06, 0); sh.add(upper);
+      // the whole upper sleeve as one surface: full at the shoulder, narrowing to the elbow (moves with the arm)
+      const sleeve = [];
+      for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI / 2; sleeve.push([0.11 * Math.sin(a), 0.035 + 0.05 * Math.cos(a)]); }
+      for (let i = 1; i <= 34; i++) { const u = i / 34, y = 0.035 - u * 0.37; sleeve.push([0.11 - 0.028 * Math.pow(u, 0.8) + 0.008 * Math.sin(Math.PI * u) - 0.004 * Math.pow(Math.abs(Math.sin(u * 9 + s)), 6), y]); }
+      sleeve.push([0, -0.34]);
+      sh.add(mesh(lumpy(lathe(sleeve.reverse(), 64), 0.008, 12), fabric));
       sh.add(at(ringY(0.088, 0.006, grey), 0, -0.2, 0));                                     // a seam / restraint line
       if (s < 0) {   // the flag on the outside of the left upper arm
         const f = joint(sh, -0.094, -0.13, 0); f.rotation.y = -Math.PI / 2;
