@@ -60,6 +60,8 @@ function serve(page) {
   await p.route('**/fonts.g*/**', r => r.abort());
   await p.addInitScript(() => { try { localStorage.setItem('planetarium.quality', 'high'); } catch (e) {} });
   await p.addInitScript({ path: path.join(TOOLS, 'clock.js') });
+  // shared pieces a scene asks for (e.g. "include": ["characters/astronaut.js"])
+  for (const f of cfg.include || []) await p.addInitScript({ path: path.join(TOOLS, f) });
   await p.addInitScript({ path: path.join(SCENE, 'cam.js') });
   await p.goto(`http://127.0.0.1:${srv.address().port}/rec.html`);
   await p.addStyleTag({ content: '.topbar,.info,.dock,.tags,.toast,.catalog{display:none!important}' });

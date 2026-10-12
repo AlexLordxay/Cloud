@@ -310,33 +310,41 @@
     return { scene, mat, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
   }
 
-  // The astronaut (a cut-out picture, AI-generated) drawn over the finished frame: it falls towards the hole, shrinks,
-  // slows down, reddens and dims, and freezes just outside the shadow -- what a far-away observer would see.
-  function buildAstro(r, img) {
-    const THREE = r.THREE, tex = new THREE.Texture(img); tex.needsUpdate = true;
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { map: { value: tex }, tint: { value: new THREE.Vector3(1, 1, 1) }, op: { value: 1 } },
-      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `uniform sampler2D map; uniform vec3 tint; uniform float op; varying vec2 vUv;
-        void main() { vec4 c = texture2D(map, vUv); gl_FragColor = vec4(c.rgb * tint, c.a * op); }`,
-      transparent: true, depthTest: false, depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(img.width / img.height, 1), mat);
-    const scene = new THREE.Scene(); scene.add(mesh);
-    return { scene, mesh, mat, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, -1, 1) };
+  // The astronaut (the Nebozvid character, characters/astronaut.js), seen from behind, drawn over the finished frame:
+  // it floats towards the hole, shrinks, slows down (its own drifting limbs too), reddens and dims, and freezes just
+  // outside the shadow -- what a far-away observer would see. The hole lights it from the front: a warm rim round the
+  // edges; faint starlight from our side shows the backpack.
+  function buildAstro(r) {
+    const THREE = r.THREE, a = window.__makeAstronaut(THREE), scene = new THREE.Scene();
+    scene.add(a.group);
+    const key = new THREE.DirectionalLight(0xffd2a0, 2.2); key.position.set(0.6, 0.7, -0.6);
+    const under = new THREE.DirectionalLight(0xffb070, 0.9); under.position.set(-0.3, -0.8, -0.8);
+    const fill = new THREE.DirectionalLight(0x8fa4d0, 0.4); fill.position.set(-0.5, 0.5, 1);
+    const amb = new THREE.HemisphereLight(0x6070a0, 0x3a2414, 0.18);
+    scene.add(key, under, fill, amb);
+    const cam = new THREE.PerspectiveCamera(30, 1, 0.05, 500);
+    return { a, scene, cam, lights: [key, under, fill, amb], base: [2.2, 0.9, 0.4, 0.18] };
   }
   function drawAstro(ren, t) {
     if (t > A_END) return;
     const A = G.astro, k = 1 - Math.exp(-t / 5.5);              // goes away, slower and slower: it freezes
-    const aspect = ren.domElement.width / ren.domElement.height;
-    const size = lerpLog(1.3, 0.03, Math.pow(k, 1.6));          // height in screen halves
-    A.mesh.position.set(lerp(0.3, 0.17, k), lerp(-0.62, 0.17, k), 0);   // ends at the upper right edge of the shadow
-    A.mesh.scale.set(size / aspect, size, 1);
-    A.mesh.rotation.z = 0.35 + 1.1 * k;                          // its tumble slows down with it
+    const aspect = ren.domElement.width / ren.domElement.height, cam = A.cam;
+    if (cam.aspect !== aspect) { cam.aspect = aspect; cam.updateProjectionMatrix(); }
+    const tanH = Math.tan(cam.fov * D / 2);
+    const size = lerpLog(1.1, 0.03, Math.pow(k, 1.6));         // height in screen halves
+    const x = lerp(0.1, 0.17, k), y = lerp(-0.5, 0.17, k);      // ends at the upper right edge of the shadow
+    const dist = 1.85 / (size * tanH);
+    A.a.group.position.set(x * dist * tanH * aspect, y * dist * tanH, -dist);
+    // its back to us, turned a little to the side; the slow tumble slows down with it
+    A.a.group.rotation.set(0.3, 0.25 - 0.2 * k, -0.15 + 0.8 * k, 'YXZ');
+    A.a.pose(5.5 * k + 0.6);                                     // its own clock, as seen from far away
     const red = k * k;
-    A.mat.uniforms.tint.value.set(1, 1 - 0.7 * red, 1 - 0.92 * red);
-    A.mat.uniforms.op.value = 1 - smooth((t - 10.5) / 3.2);       // dimmer and dimmer, then gone
-    const ac = ren.autoClear; ren.autoClear = false; ren.render(A.scene, A.cam); ren.autoClear = ac;
+    A.a.setTint(1, 1 - 0.7 * red, 1 - 0.92 * red);
+    const op = 1 - smooth((t - 10.5) / 3.2);                    // dimmer and dimmer, then gone
+    A.a.setOpacity(op);
+    A.lights.forEach((l, i) => { l.intensity = A.base[i] * (1 - 0.6 * red); });
+    A.a.rim.color.value.setRGB(2.0, 1.35 - 0.8 * red, 0.75 - 0.6 * red);   // the disc's warm glow round its edges
+    const ac = ren.autoClear; ren.autoClear = false; ren.clearDepth(); ren.render(A.scene, cam); ren.autoClear = ac;
   }
 
   window.__sceneSetup = async (r) => {
@@ -353,7 +361,7 @@
       rtSite: new THREE.WebGLRenderTarget(W, H, rtOpts), rtGal: new THREE.WebGLRenderTarget(W, H, rtOpts), rtHole: new THREE.WebGLRenderTarget(W, H, rtOpts),
       starfield: r.scene.children.find(o => o.isPoints && o.geometry.attributes.position.count === 7000),
     };
-    G.astro = buildAstro(r, await new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = '/scene/astronaut.png'; }));
+    G.astro = buildAstro(r);
     console.log('[scene] galaxy stars', G.scene.userData.galStars.geometry.attributes.position.count);
     ready = true;
   };

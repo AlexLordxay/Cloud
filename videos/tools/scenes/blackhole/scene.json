@@ -22,5 +22,8 @@
       "  renderer.render(scene, camera);\n  requestAnimationFrame(tick);",
       "  if (window.__recRender) window.__recRender(); else renderer.render(scene, camera);\n  requestAnimationFrame(tick);"
     ]
+  ],
+  "include": [
+    "characters/astronaut.js"
   ]
 }
