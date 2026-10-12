@@ -130,7 +130,7 @@
     const hut = mesh(lathe([[0, 0.06], [0.172, 0.06], [0.176, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]], 64), torsoCloth);
     hut.scale.set(1.26, 1, 0.9); body.add(hut);
     // lower torso / briefs: soft fabric, the waist bearing on top
-    const brief = mesh(lumpy(lathe([[0, -0.25], [0.1, -0.25], [0.15, -0.23], [0.178, -0.17], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12], [0, 0.13]], 64), 0.006, 10, (x, y) => Math.min(1, Math.max(0, (0.04 - y) / 0.12))), fabric);   // one piece down to the top of the thighs: the legs come out of it
+    const brief = mesh(lumpy(lathe([[0, -0.27], [0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12], [0, 0.13]], 64), 0.006, 10, (x, y) => Math.min(1, Math.max(0, (0.04 - y) / 0.12))), fabric);   // one piece down to the top of the thighs: the legs come out of it
     brief.scale.set(1.26, 1, 0.9); body.add(brief);   // the same cross-section as the torso where they meet: one garment
     // the waist: a soft band of the suit's own cloth over the bearing (no bare metal), the torso narrowing into it
     const waist = at(ringY(0.174, 0.013, fabric2), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
@@ -224,11 +224,11 @@
       const L = s < 0 ? 'L' : 'R';
       const hp = joint(body, s * 0.105, -0.13, -0.035);
       // thigh: full at the top (it starts inside the briefs), narrowing to the knee
-      // the seat: cloth flaring from inside the briefs and narrowing into the thigh, so the leg grows out of the torso
-      const seat = mesh(lumpy(lathe([[0, -0.24], [0.124, -0.24], [0.132, -0.17], [0.15, -0.09], [0.168, -0.02], [0.17, 0.04], [0.15, 0.09], [0, 0.1]], 64), 0.006, 10), fabric, -s * 0.02, 0, 0.01);
-      seat.scale.set(1.0, 1, 1.05); hp.add(seat);
-      hp.add(mesh(limb(0.37, 0.124, 0.096, 0.06, 3 * s), fabric, 0, -0.09, 0));
-      hp.add(at(ringY(0.116, 0.006, grey), 0, -0.24, 0));                                     // a seam / restraint line
+      hp.add(mesh(limb(0.37, 0.116, 0.096, 0.06, 3 * s), fabric, 0, -0.09, 0));
+      // the seat: cloth from inside the briefs narrowing into the thigh. It hangs from the torso (not the leg), turned
+      // the way the thigh rests, so it never pokes out in front when the leg moves; the thigh slides inside it.
+      const seat = mesh(lumpy(lathe([[0, -0.26], [0.122, -0.26], [0.126, -0.19], [0.136, -0.1], [0.148, -0.02], [0.15, 0.04], [0.13, 0.09], [0, 0.1]], 64), 0.005, 10), fabric, s * 0.105 - s * 0.01, -0.13, -0.035);
+      seat.scale.set(1, 1, 0.92); seat.rotation.set(0.32 + 0.14 * (s < 0 ? 1 : -1), 0, s * 0.1); body.add(seat);
       const kn = joint(hp, 0, -0.5, 0);
       kn.add(mesh(bellows(0.11, 0.1, 3), fabric2));
       const pad = mesh(lumpy(new THREE.SphereGeometry(0.104, 40, 24, Math.PI * 1.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), 0.004), fabric2, 0, -0.02, 0); pad.scale.set(1.08, 1.25, 1.12); kn.add(pad);   // a padded patch over the knee
