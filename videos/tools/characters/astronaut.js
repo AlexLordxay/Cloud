@@ -176,9 +176,12 @@
     /* arms */
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
-      const sh = joint(body, s * 0.31, 0.49, 0);
-      const bulb = mesh(lumpy(new THREE.SphereGeometry(0.1, 40, 30), 0.006), fabric); bulb.scale.set(1, 1.05, 1.05); sh.add(bulb);
-      sh.add(at(ringX(0.092, 0.02, metal), -s * 0.035, 0, 0));
+      // the hard torso reaches over the shoulder (a shell cap), with the shoulder bearing set into its side opening
+      const cap = mesh(new THREE.SphereGeometry(0.15, 48, 32), shell, s * 0.24, 0.5, 0); cap.scale.set(1.05, 0.72, 0.95); body.add(cap);
+      const brg = at(ringX(0.098, 0.014, metal), s * 0.325, 0.485, 0); brg.rotation.z = -s * 0.25; body.add(brg);
+      const sh = joint(body, s * 0.33, 0.48, 0);
+      // the sleeve: cloth that flares out of the bearing and narrows into the upper arm, moving with the arm
+      sh.add(mesh(lumpy(lathe([[0, -0.15], [0.092, -0.15], [0.1, -0.09], [0.11, -0.03], [0.112, 0.02], [0.1, 0.05], [0, 0.06]], 64), 0.005, 10), fabric));
       const upper = mesh(limb(0.27, 0.09, 0.08, 0.06, s), fabric, 0, -0.06, 0); sh.add(upper);
       sh.add(at(ringY(0.088, 0.006, grey), 0, -0.2, 0));                                     // a seam / restraint line
       if (s < 0) {   // the flag on the outside of the left upper arm
