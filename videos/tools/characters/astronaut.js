@@ -10,7 +10,7 @@
 //   a.setTint(r, g, b); a.setOpacity(x);              // colour and fade for the whole figure
 //   a.rim.color.value.set(…)                          // rim light on the edges (light from behind the figure)
 //   const env = window.__astronautEnv(THREE, renderer, { warm: dirVector });   // reflections: dark space, a warm glow
-//   const key = a.keyLight(color, intensity);         // a shadow-casting light that follows the figure (a.aimKey(dir))
+//   scene.add(a.light(color, intensity, dir)); a.aim();   // shadow-casting lights that follow the figure (aim each frame)
 //
 // Joints are plain groups (a.joints.shoulderL, elbowL, wristL, hipL, kneeL, ankleL, … head, body).
 (() => {
@@ -25,7 +25,7 @@
     float folds(vec3 p){
       // folds run round the limbs (the limb axis is local y): stretched noise, plus fine weave
       float a = fn(vec3(p.x * 9.0, p.y * 34.0, p.z * 9.0)) * 0.65 + fn(vec3(p.x * 18.0, p.y * 70.0, p.z * 18.0)) * 0.35;
-      return a * a + 0.04 * fn(p * 400.0);
+      return a * a;
     }
     vec3 foldNormal(vec3 pos, vec3 n, float h){
       vec3 sx = dFdx(pos), sy = dFdy(pos); vec2 d = vec2(dFdx(h), dFdy(h)) * foldK;
@@ -41,18 +41,18 @@
       m.onBeforeCompile = sh => {
         Object.assign(sh.uniforms, { rimColor: rim.color, rimPower: rim.power, foldK: { value: fold } });
         if (fold) {
-          sh.vertexShader = 'varying vec3 vObj;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObj = position;');
-          sh.fragmentShader = FOLDS + sh.fragmentShader.replace('#include <normal_fragment_maps>',
+          sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vObj;').replace('#include <begin_vertex>', '#include <begin_vertex>\n  vObj = position;');
+          sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + FOLDS).replace('#include <normal_fragment_maps>',
             '#include <normal_fragment_maps>\n  float hgt = folds(vObj);\n  normal = foldNormal(-vViewPosition, normal, hgt);\n  diffuseColor.rgb *= (0.9 + 0.1 * hgt) * (0.93 + 0.07 * fn(vObj * 6.0));');
         }
-        sh.fragmentShader = 'uniform vec3 rimColor; uniform float rimPower;\n' + sh.fragmentShader.replace('#include <dithering_fragment>',
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 rimColor; uniform float rimPower;').replace('#include <dithering_fragment>',
           '#include <dithering_fragment>\n  float fr = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), rimPower);\n  gl_FragColor.rgb += rimColor * diffuseColor.rgb * fr;');
       };
       m.userData.base = m.color.clone(); mats.push(m); return m;
     };
-    const fabric = M({ color: 0xebe7dd, roughness: 0.93, metalness: 0 }, 1.0);
-    const fabric2 = M({ color: 0xd9d5cb, roughness: 0.95, metalness: 0 }, 1.4);      // a shade darker: bellows, gaskets
-    const cover = M({ color: 0xe6e2d8, roughness: 0.9, metalness: 0 }, 0.45);        // the cloth cover over the backpack
+    const fabric = M({ color: 0xe9e5db, roughness: 0.95, metalness: 0 }, 0.7);
+    const fabric2 = M({ color: 0xd6d2c7, roughness: 0.95, metalness: 0 }, 0.9);      // a shade darker: bellows, gaskets
+    const cover = M({ color: 0xe4e0d6, roughness: 0.92, metalness: 0 }, 0.3);        // the cloth cover over the backpack
     const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 }, 0.12);          // hard parts
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
     const grey = M({ color: 0x6d7076, roughness: 0.6, metalness: 0.2 });
@@ -82,18 +82,18 @@
       const p = [];
       for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; p.push([r0 * Math.sin(a), r0 * 0.45 * Math.cos(a)]); }
       for (let i = 1; i < 30; i++) {
-        const u = i / 30, r = (r0 + (r1 - r0) * u) * (1 + bulge * Math.sin(Math.PI * u)) * (1 + 0.018 * Math.sin(u * 23 + ph) * Math.sin(Math.PI * u));
+        const u = i / 30, r = (r0 + (r1 - r0) * u) * (1 + bulge * Math.sin(Math.PI * u)) * (1 - 0.04 * Math.pow(Math.abs(Math.sin(u * 11 + ph)), 6) * Math.sin(Math.PI * u) + 0.012 * Math.sin(u * 29 + 2 * ph));
         p.push([r, -u * len]);
       }
       for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; p.push([r1 * Math.cos(a), -len - r1 * 0.45 * Math.sin(a)]); }
-      return lumpy(lathe(p.reverse(), 64), r0 * 0.07);
+      return lumpy(lathe(p.reverse(), 64), r0 * 0.085);
     }
     // bellows at a bend: n soft ridges
     function bellows(len, r, n) {
       const p = [[1e-4, len / 2 + r * 0.3]];
       for (let i = 0; i <= 40; i++) { const u = i / 40; p.push([r * (0.93 + 0.1 * Math.cos(2 * Math.PI * n * u)), len / 2 - u * len]); }
       p.push([1e-4, -len / 2 - r * 0.3]);
-      return lumpy(lathe(p.reverse(), 64), r * 0.06, 20);
+      return lumpy(lathe(p.reverse(), 64), r * 0.08, 20);
     }
     // real cloth is never a perfect solid of revolution: push the surface in and out along its normal with smooth noise
     const vh = (x, y, z) => { const v = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return v - Math.floor(v); };
@@ -125,7 +125,7 @@
     const hut = mesh(lathe([[0, 0.1], [0.165, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]].reverse()), shell);
     hut.scale.set(1.26, 1, 0.9); body.add(hut);
     // lower torso / briefs: soft fabric, the waist bearing on top
-    const brief = mesh(lathe([[0, -0.2], [0.11, -0.2], [0.16, -0.15], [0.185, -0.05], [0.188, 0.04], [0.178, 0.1], [0, 0.11]].reverse()), fabric);
+    const brief = mesh(lumpy(lathe([[0, -0.2], [0.15, -0.2], [0.18, -0.17], [0.19, -0.05], [0.19, 0.04], [0.178, 0.1], [0, 0.11]].reverse(), 64), 0.008, 10), fabric);   // flat-bottomed: the legs come out of it
     brief.scale.set(1.3, 1, 0.98); body.add(brief);
     const waist = at(ringY(0.183, 0.022, metal), 0, 0.105, 0); waist.scale.set(1.33, 0.97, 1); body.add(waist);
     const waist2 = at(ringY(0.18, 0.014, grey), 0, 0.075, 0); waist2.scale.set(1.32, 0.97, 1); body.add(waist2);
@@ -139,10 +139,11 @@
 
     /* life-support backpack (+z side) */
     const pack = joint(body, 0, 0.37, 0.25);
-    pack.add(mesh(lumpy(rbox(0.46, 0.56, 0.18, 0.06), 0.004, 9), cover));
+    const bend = (g, k) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - k * p.getX(i) * p.getX(i) - 0.3 * k * p.getY(i) * p.getY(i)); g.computeVertexNormals(); return g; };
+    pack.add(mesh(lumpy(bend(rbox(0.46, 0.56, 0.18, 0.06), 0.35), 0.004, 9), cover));
     pack.add(mesh(rbox(0.42, 0.11, 0.16, 0.04), shell, 0, 0.3, -0.005));                // top cover, a little set apart
     pack.add(mesh(new THREE.BoxGeometry(0.43, 0.01, 0.165), grey, 0, 0.245, 0));       // the seam under it
-    pack.add(mesh(lumpy(rbox(0.34, 0.28, 0.03, 0.03), 0.003, 12), cover, 0, 0.0, 0.09));   // a padded flap on the back
+    pack.add(mesh(lumpy(bend(rbox(0.34, 0.28, 0.03, 0.03), 0.35), 0.003, 12), cover, 0, 0.0, 0.09));   // a padded flap on the back
     for (const s of [-1, 1]) pack.add(mesh(new THREE.BoxGeometry(0.028, 0.48, 0.01), grey, s * 0.14, -0.01, 0.106));   // straps over it
         pack.add(mesh(rbox(0.08, 0.05, 0.02, 0.008), grey, 0, -0.2, 0.1));
     for (const s of [-1, 1]) {
@@ -206,8 +207,9 @@
     bootGeo.translate(0, -0.2, -0.05); bootGeo.rotateY(-Math.PI / 2); bootGeo.scale(1.12, 1.05, 1.05); bootGeo.computeVertexNormals();
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
-      const hp = joint(body, s * 0.105, -0.12, 0);
-      hp.add(mesh(limb(0.38, 0.118, 0.098, 0.06, 3 * s), fabric, 0, -0.03, 0));
+      const hp = joint(body, s * 0.105, -0.13, -0.035);
+      hp.add(at(ringY(0.118, 0.014, grey), 0, -0.06, 0));                                    // the hip bearing
+      hp.add(mesh(limb(0.38, 0.108, 0.098, 0.07, 3 * s), fabric, 0, -0.03, 0));
       hp.add(at(ringY(0.116, 0.006, grey), 0, -0.2, 0));
       const kn = joint(hp, 0, -0.48, 0);
       kn.add(mesh(bellows(0.12, 0.098, 3), fabric2));
@@ -239,25 +241,23 @@
     }
     pose(0);
 
-    // a shadow-casting key light that keeps the figure inside its shadow camera
-    let key = null;
-    const keyDir = new THREE.Vector3(0, 0.6, -1).normalize();
-    function keyLight(color, intensity) {
-      key = new THREE.DirectionalLight(color, intensity);
-      key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.01;
-      Object.assign(key.shadow.camera, { left: -1.3, right: 1.3, top: 1.3, bottom: -1.3, near: 0.1, far: 10 });
-      key.shadow.radius = 3;
-      return key;
+    // shadow-casting lights that follow the figure (each keeps it inside its shadow camera): a.light(color, k, dir)
+    const lights = [];
+    function light(color, intensity, dir) {
+      const l = new THREE.DirectionalLight(color, intensity);
+      l.castShadow = true; l.shadow.mapSize.set(2048, 2048); l.shadow.bias = -0.0004; l.shadow.normalBias = 0.012;
+      Object.assign(l.shadow.camera, { left: -1.3, right: 1.3, top: 1.3, bottom: -1.3, near: 0.1, far: 10 });
+      l.shadow.radius = 4;
+      l.userData.dir = (dir || new THREE.Vector3(0, 0.6, -1)).clone().normalize();
+      lights.push(l); return l;
+    }
+    function aim() {
+      group.updateMatrixWorld();
+      const c = group.getWorldPosition(new THREE.Vector3());
+      for (const l of lights) { l.position.copy(c).addScaledVector(l.userData.dir, 4); l.target.position.copy(c); l.target.updateMatrixWorld(); }
     }
     return {
-      group, joints: J, materials: mats, pose, rim, keyLight,
-      aimKey(dir) {
-        if (dir) keyDir.copy(dir).normalize();
-        if (!key) return;
-        group.updateMatrixWorld();
-        const c = group.getWorldPosition(new THREE.Vector3());
-        key.position.copy(c).addScaledVector(keyDir, 4); key.target.position.copy(c); key.target.updateMatrixWorld();
-      },
+      group, joints: J, materials: mats, pose, rim, light, aim, lights,
       setTint(r, g, b) { const c = new THREE.Color(r, g, b); for (const m of mats) m.color.copy(m.userData.base).multiply(c); },
       setOpacity(x) { for (const m of mats) { m.opacity = x; m.depthWrite = x > 0.99; } },
     };

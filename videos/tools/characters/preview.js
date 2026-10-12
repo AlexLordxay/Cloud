@@ -21,10 +21,11 @@ const page = `<!doctype html><html><body style="margin:0;background:#000">
   scene.background = new THREE.Color(0x05070c);
   scene.environment = window.__astronautEnv(THREE, ren);
   scene.add(a.group);
-  const key = a.keyLight(0xffd2a0, 1.8); scene.add(key, key.target); a.aimKey(new THREE.Vector3(0.6, 0.7, -0.6));
-  const fill = new THREE.DirectionalLight(0x8fa4d0, 0.45); fill.position.set(-0.5, 0.5, 1); scene.add(fill);
-  const under = new THREE.DirectionalLight(0xffb070, 0.7); under.position.set(-0.3, -0.8, -0.8); scene.add(under);
-  scene.add(new THREE.HemisphereLight(0x6070a0, 0x3a2414, 0.18));
+  // the disc ahead (warm, from the front, up and to the right) and cold starlight from behind on the left; both cast shadows
+  const key = a.light(0xffd2a0, 1.7, new THREE.Vector3(0.6, 0.7, -0.6)), back = a.light(0xa9bde2, 1.15, new THREE.Vector3(-0.75, 0.55, 0.6));
+  scene.add(key, key.target, back, back.target); a.aim();
+  const under = new THREE.DirectionalLight(0xffb070, 0.45); under.position.set(-0.3, -0.8, -0.8); scene.add(under);
+  scene.add(new THREE.HemisphereLight(0x6070a0, 0x2a1a10, 0.1));
   a.rim.color.value.setRGB(0.9, 0.6, 0.32);
   a.pose(${t});
   const cam = new THREE.PerspectiveCamera(30, (W / 4) / H, 0.05, 100);
