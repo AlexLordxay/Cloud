@@ -175,24 +175,19 @@
     }
 
     /* arms */
-    const skins = [];
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
       // the hard torso reaches over the shoulder (a shell cap), with the shoulder bearing set into its side opening
-      const sh = joint(body, s * 0.265, 0.44, 0);   // inside the torso's side, so the sleeve grows out of it
+      const sh = joint(body, s * 0.265, 0.455, 0);   // inside the torso's side, so the sleeve grows out of it
       // the shoulder and upper sleeve as one smooth surface: full at the shoulder, narrowing to the elbow (moves with the arm)
       const sleeve = [];
       for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI / 2; sleeve.push([0.11 * Math.sin(a), 0.035 + 0.05 * Math.cos(a)]); }
       for (let i = 1; i <= 34; i++) { const u = i / 34, y = 0.035 - u * 0.37; sleeve.push([0.11 - 0.028 * Math.pow(u, 0.8) + 0.008 * Math.sin(Math.PI * u) - 0.004 * Math.pow(Math.abs(Math.sin(u * 9 + s)), 6), y]); }
       sleeve.push([0, -0.34]);
-      // The sleeve is skinned to two "bones": its top follows the torso (as if the arm hung straight down), its lower
-      // part follows the arm, and the cloth between them bends smoothly — so the shoulder stretches and folds like a
-      // real one instead of the arm turning as a separate block. (Smooth over the shoulder, cloth wrinkles further down.)
-      const sGeo = lumpy(lathe(sleeve.reverse(), 64), 0.007, 12, (x, y) => Math.min(1, Math.max(0, -y / 0.2)));
-      const sMesh = mesh(sGeo, fabric); body.add(sMesh);
-      skins.push({ geo: sGeo, rest: Float32Array.from(sGeo.attributes.position.array), joint: sh });
+      sh.add(mesh(lumpy(lathe(sleeve.reverse(), 64), 0.007, 12, (x, y) => Math.min(1, Math.max(0, -y / 0.2))), fabric));   // smooth over the shoulder, cloth wrinkles further down
+      sh.add(at(ringY(0.088, 0.006, grey), 0, -0.2, 0));                                     // a seam / restraint line
       if (s < 0) {   // the flag on the outside of the left upper arm
-        const f = joint(sh, -0.091, -0.24, 0);   // low enough to sit where the sleeve follows the arm fully f.rotation.y = -Math.PI / 2;
+        const f = joint(sh, -0.094, -0.13, 0); f.rotation.y = -Math.PI / 2;
         f.add(mesh(new THREE.PlaneGeometry(0.075, 0.025), blue, 0, 0.0125, 0), mesh(new THREE.PlaneGeometry(0.075, 0.025), yellow, 0, -0.0125, 0));
       }
       const el = joint(sh, 0, -0.37, 0);
@@ -277,24 +272,6 @@
       }
       J.head.rotation.set(-0.1 + 0.04 * w(t, 8.1, 0.3), 0.05 * w(t, 9.7, 1), 0);
       J.body.rotation.set(0.1 + 0.03 * w(t, 7.7, 0), 0, 0.03 * w(t, 11.3, 2));
-      skin();
-    }
-    // two-bone blend for the sleeves: weight 0 at the shoulder top (torso), 1 from the upper arm down (the arm)
-    const va = new THREE.Vector3(), vb = new THREE.Vector3();
-    function skin() {
-      for (const k of skins) {
-        k.joint.updateMatrix();
-        const p = k.geo.attributes.position, r = k.rest, jp = k.joint.position;
-        for (let i = 0; i < p.count; i++) {
-          const x = r[i * 3], y = r[i * 3 + 1], z = r[i * 3 + 2];
-          const u = Math.min(1, Math.max(0, (0.04 - y) / 0.3)), wgt = u * u * (3 - 2 * u);
-          va.set(x + jp.x, y + jp.y, z + jp.z);
-          vb.set(x, y, z).applyMatrix4(k.joint.matrix);
-          va.lerp(vb, wgt);
-          p.setXYZ(i, va.x, va.y, va.z);
-        }
-        p.needsUpdate = true; k.geo.computeVertexNormals(); k.geo.computeBoundingSphere();
-      }
     }
     pose(0);
 
