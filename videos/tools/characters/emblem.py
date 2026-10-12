@@ -1,4 +1,4 @@
-# The astronaut's patch: the site's wordmark (Cormorant Italic, the dawn-to-night gradient, a star over the "і", drawn
+# The astronaut's patch: "МІСІЯ" round the top, a big star in the middle, the site's wordmark (Cormorant Italic, the dawn-to-night gradient, a star over the "і", drawn
 # by compose.py's logo_layer, the same code as the logo in the videos) on a round night-sky patch with a big star.
 #
 #   python3 characters/emblem.py   ->  characters/emblem.js  (window.__astronautEmblem = a PNG data URL)
@@ -43,9 +43,9 @@ def star(draw, x, y, R, k, fill):
         a = i * math.pi / 4 - math.pi / 2; rr = R * k if i % 2 else R
         pts.append((x + math.cos(a) * rr, y + math.sin(a) * rr))
     draw.polygon(pts, fill=fill)
-glow = Image.new('RGBA', (N, N), (0, 0, 0, 0)); star(ImageDraw.Draw(glow), c, 182, 92, 0.24, (170, 205, 255, 255))
+glow = Image.new('RGBA', (N, N), (0, 0, 0, 0)); star(ImageDraw.Draw(glow), c, c - 6, 86, 0.24, (170, 205, 255, 255))
 img.alpha_composite(glow.filter(ImageFilter.GaussianBlur(16)))
-star(dr, c, 182, 84, 0.2, (255, 255, 255, 255))
+star(dr, c, c - 6, 78, 0.2, (255, 255, 255, 255))
 # the wordmark, as on the site
 lay, (sx, sy) = compose.logo_layer(104)
 sf = ImageFont.truetype(compose.F_STAR, int(104 * 0.36))
@@ -53,8 +53,20 @@ st = Image.new('RGBA', lay.size, (0, 0, 0, 0)); ImageDraw.Draw(st).text((sx, sy)
 gl = Image.new('RGBA', lay.size, (0, 0, 0, 0)); ImageDraw.Draw(gl).text((sx, sy), '✦', font=sf, fill=(170, 205, 255, 255), anchor='mm')
 lay.alpha_composite(gl.filter(ImageFilter.GaussianBlur(104 * 0.08))); lay.alpha_composite(st)
 bb = lay.getbbox(); lay = lay.crop(bb)
-w = int(N * 0.74); lay = lay.resize((w, int(lay.height * w / lay.width)), Image.LANCZOS)
-img.alpha_composite(lay, (int(c - lay.width / 2), int(345 - lay.height / 2)))
+w = int(N * 0.52); lay = lay.resize((w, int(lay.height * w / lay.width)), Image.LANCZOS)
+img.alpha_composite(lay, (int(c - lay.width / 2), int(392 - lay.height / 2)))
+# "МІСІЯ" round the top, letter by letter along an arc
+f = ImageFont.truetype(os.path.join(compose.FONTS, 'Commissioner.ttf'), 40)
+try: f.set_variation_by_axes([600 if a['name'] in (b'Weight', 'Weight') else a['default'] for a in f.get_variation_axes()])
+except Exception: pass
+word, R0 = 'МІСІЯ', c - 72
+widths = [ImageDraw.Draw(Image.new('L', (1, 1))).textlength(ch, font=f) + 10 for ch in word]
+total, span, acc = sum(widths), 0.95, 0
+for ch, wd in zip(word, widths):
+    a = -math.pi / 2 - span / 2 + span * (acc + wd / 2) / total; acc += wd
+    t = Image.new('RGBA', (80, 80), (0, 0, 0, 0)); ImageDraw.Draw(t).text((40, 40), ch, font=f, fill=(236, 240, 250, 255), anchor='mm')
+    t = t.rotate(-math.degrees(a + math.pi / 2), resample=Image.BICUBIC)
+    img.alpha_composite(t, (int(c + math.cos(a) * R0 - 40), int(c + math.sin(a) * R0 - 40)))
 img.putalpha(Image.composite(img.getchannel('A'), Image.new('L', (N, N), 0), mask))
 buf = io.BytesIO(); img.save(buf, 'PNG', optimize=True)
 os.makedirs(os.path.join(HERE, '..', 'work'), exist_ok=True); img.save(os.path.join(HERE, '..', 'work', 'emblem_preview.png'))
