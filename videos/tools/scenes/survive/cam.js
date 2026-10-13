@@ -1,4 +1,4 @@
-// "10 seconds on each planet: where would you survive?": the Nebozvid astronaut (characters/astronaut.js) on Mercury
+// "How long would you last on each planet?": the Nebozvid astronaut (characters/astronaut.js) on Mercury
 // (glows red-hot and bursts into sparks), Venus (the visor cracks, it sinks to its knees, the yellow haze swallows it),
 // Mars (survives and waves), Jupiter (no ground: falls through the clouds into the heat and lightning) and Neptune
 // (frost on the visor, then the wind blows it away). The scene is its own, rendered in place of the site's; every

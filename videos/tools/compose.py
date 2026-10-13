@@ -149,12 +149,16 @@ def frame(sc, i, src):
         if al > 0:
             draw_block(img, f"{int(cnt['per_s'] * t):,}".replace(',', '\u202f'), f_tick, 330, al, fill=SUN)
             draw_block(img, cnt['label'], f_end3, 420, al, fill=(200, 208, 224))
-    for a, b, t0, rate, stop, done in getattr(sc, 'TIMERS', []):
-        # a stopwatch: 0:00 from t0, `rate` timer seconds per video second; it stops at `stop` and turns `done` (a colour)
+    for a, b, t0, t1, stop, done in getattr(sc, 'TIMERS', []):
+        # a stopwatch that speeds up from t0 and stops at t1 on `stop` seconds (then it turns `done`, a colour):
+        # 0:07, 12:30, 8:00:00
         al = ease(fade(t, a, b, 0.3))
         if al > 0:
-            v = min(max(0.0, (t - t0) * rate), stop)
-            draw_block(img, f'0:{int(v):02d}', f_tick, 1190, al, fill=done if (t - t0) * rate >= stop else (255, 255, 255))
+            x = min(1.0, max(0.0, (t - t0) / (t1 - t0)))
+            k = math.log(max(stop, 2.0))                      # the longer the time, the harder it accelerates
+            v = int(stop * (math.exp(k * x) - 1) / (math.exp(k) - 1) + 0.5)
+            txt = f'{v // 60}:{v % 60:02d}' if v < 3600 else f'{v // 3600}:{v // 60 % 60:02d}:{v % 60:02d}'
+            draw_block(img, txt, f_tick, 1190, al, fill=done if x >= 1 else (255, 255, 255))
     for a, b, text in getattr(sc, 'NAMES', []):
         # the name of what is on screen, up top in the sun colour
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
