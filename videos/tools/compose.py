@@ -149,6 +149,12 @@ def frame(sc, i, src):
         if al > 0:
             draw_block(img, f"{int(cnt['per_s'] * t):,}".replace(',', '\u202f'), f_tick, 330, al, fill=SUN)
             draw_block(img, cnt['label'], f_end3, 420, al, fill=(200, 208, 224))
+    for a, b, t0, rate, stop, done in getattr(sc, 'TIMERS', []):
+        # a stopwatch: 0:00 from t0, `rate` timer seconds per video second; it stops at `stop` and turns `done` (a colour)
+        al = ease(fade(t, a, b, 0.3))
+        if al > 0:
+            v = min(max(0.0, (t - t0) * rate), stop)
+            draw_block(img, f'0:{int(v):02d}', f_tick, 1190, al, fill=done if (t - t0) * rate >= stop else (255, 255, 255))
     for a, b, text in getattr(sc, 'NAMES', []):
         # the name of what is on screen, up top in the sun colour
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
