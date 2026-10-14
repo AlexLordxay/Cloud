@@ -392,7 +392,8 @@ let lastClock = "", lastDate = "";
 function placeAll(jd, dDays, fine) {
   for (const b of BODIES) {
     if (b.parent || b.id === "sun") continue;
-    helioAU(b.id, jd, b.auVec);
+    if (sandbox.on && b.simAU) b.auVec.copy(b.simAU);   // the sandbox's gravity, not the real orbit
+    else helioAU(b.id, jd, b.auVec);
     b.au = b.auVec.length();
     toScene(b.auVec, tB);
     // Rotation that carries the old Sun-direction to the new one: the follow camera applies it to keep the lighting.
@@ -466,13 +467,15 @@ function tick() {
   const cur = state.index >= 0 ? BODIES[state.index] : null;
 
   // Simulated clock.
-  const rateS = state.paused ? 0 : RATES[state.rate][0];
-  if (!state.paused) state.simMs = state.live ? Date.now() : state.simMs + dt * rateS * 1000;
+  // In the sandbox the real clock stands still; its own gravity clock moves the planets (js/sandbox.js).
+  const rateS = state.paused || sandbox.on ? 0 : RATES[state.rate][0];
+  if (!state.paused && !sandbox.on) state.simMs = state.live ? Date.now() : state.simMs + dt * rateS * 1000;
   if (state.simMs > MAX_MS || state.simMs < MIN_MS) {
     state.simMs = Math.min(MAX_MS, Math.max(MIN_MS, state.simMs));
     if (!state.paused) $("pause").click();
   }
-  const jd = jdOf(state.simMs), dDays = dt * rateS / 86400, fine = rateS <= 86400;
+  let jd = jdOf(state.simMs), dDays = dt * rateS / 86400, fine = rateS <= 86400;
+  if (sandbox.on) ({ jd, dDays, fine } = sandbox.step(dt));
   state.fine = fine;
   placeAll(jd, dDays, fine);
   if (state.jumped) {
@@ -611,7 +614,7 @@ function tick() {
   // Labels: main bodies in the overview; the focused body's family when close.
   const w = innerWidth, h = innerHeight;
   for (const b of BODIES) {
-    const show = !cur ? !b.parent : root.moons && (b === root || b.parent === root) && b !== cur;
+    const show = (!cur ? !b.parent : root.moons && (b === root || b.parent === root) && b !== cur) && b.group.visible && (!b.parent || b.parent.group.visible);
     let vis = false;
     if (show) {
       tmp.copy(b.world); tmp.y += b.radius + (b.parent ? 0.3 : 1.2);
@@ -741,6 +744,8 @@ async function build() {
   if (first) openLink(first); else startFlight(() => ORIGIN, end, 3200, null);
   // nebozvid.com.ua/#tour starts the guided tour (js/tour.js) once the opening flight is done
   if (location.hash === "#tour") setTimeout(startTour, reduceMotion ? 300 : 3300);
+  // nebozvid.com.ua/#sandbox (or #sandbox-two-suns, …) opens the gravity sandbox (js/sandbox.js)
+  else if (location.hash.startsWith("#sandbox")) setTimeout(() => sandbox.open(location.hash.slice(9)), reduceMotion ? 300 : 3300);
   else setTimeout(showWelcome, reduceMotion ? 800 : 3800);
   updateQualityButton();
   tick();

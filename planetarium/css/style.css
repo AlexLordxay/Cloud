@@ -354,3 +354,32 @@ body.touring .info, body.touring .dock, body.touring .catalog, body.touring .wel
   .logo-star::after { animation: none; }
   .chips { scroll-behavior: auto; }
 }
+
+/* The gravity sandbox (js/sandbox.js): a card at the bottom; the real clock, the info panel and the dock step aside. */
+body.sandboxing .clock, body.sandboxing #controls .speed, body.sandboxing .info, body.sandboxing .dock, body.sandboxing .catalog, body.sandboxing .welcome { display: none !important; }
+.sandbox-btn { color: var(--sun); }
+.sandbox {
+  position: fixed; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  width: 380px; max-width: calc(100% - 32px); padding: 14px 18px 14px; border-radius: var(--radius); z-index: 3;
+}
+.sb-head { display: flex; justify-content: space-between; align-items: center; }
+.sb-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--sun); }
+.sb-close { border: 0; background: transparent; color: var(--muted); cursor: pointer; width: 32px; height: 32px; margin: -6px -8px -6px 0; border-radius: 50%; font-size: 15px; }
+.sb-close:hover { background: rgba(255,255,255,0.08); color: var(--fg); }
+.sandbox h2 { margin: 4px 0 6px; font: 600 21px/1.15 var(--font-display); }
+.sandbox p { margin: 0; color: #c9d0e0; font-size: 14px; line-height: 1.45; }
+.sb-scenes { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 10px; }
+.sb-scenes button, .sb-reset {
+  border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px;
+  padding: 7px 12px; font: 500 13px/1 var(--font-body); cursor: pointer;
+}
+.sb-scenes button:hover, .sb-reset:hover { background: rgba(255,255,255,0.07); }
+.sb-scenes button[aria-pressed="true"] { border-color: rgba(243,185,100,0.6); background: rgba(243,185,100,0.16); color: var(--sun); }
+.sandbox .sb-read { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; min-height: 1.4em; }
+.sb-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 10px; }
+@media (max-width: 720px) {
+  .sandbox { left: 12px; right: 12px; width: auto; max-width: none; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); padding: 12px 14px; }
+  .sandbox h2 { font-size: 18px; }
+  .sandbox p { font-size: 13px; }
+  .sb-scenes button { padding: 6px 10px; font-size: 12px; }
+}
