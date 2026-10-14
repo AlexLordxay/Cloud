@@ -391,3 +391,13 @@ body.sandboxing .clock, body.sandboxing #controls .speed, body.sandboxing .info,
 .sandbox.min > :not(.sb-head) { display: none; }
 .sandbox.min .sb-kicker::after { content: " · " attr(data-title); color: var(--fg); text-transform: none; letter-spacing: 0; }
 .sb-row { flex-wrap: wrap; }
+/* Sandbox time: ❚❚ / ▶, − speed + (a step per tap) */
+.sb-time { display: inline-flex; align-items: center; gap: 4px; }
+.sb-time button {
+  width: 36px; height: 34px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--fg);
+  font: 600 16px/1 var(--font-body); cursor: pointer; touch-action: manipulation;
+}
+.sb-time button:hover:not(:disabled) { background: rgba(255,255,255,0.07); }
+.sb-time button:disabled { opacity: 0.3; cursor: default; }
+#sbPlay { color: var(--sun); font-size: 12px; letter-spacing: -0.1em; }
+.sb-time output { min-width: 82px; text-align: center; font: 500 12.5px var(--font-mono); color: var(--fg); }

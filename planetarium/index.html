@@ -152,7 +152,12 @@
   </div>
   <p class="sb-read" id="sbRead"></p>
   <div class="sb-row">
-    <label class="speed" for="sbSpeed">Час <input id="sbSpeed" type="range" min="0" max="6" step="1" value="5"><output id="sbSpeedOut"></output></label>
+    <div class="sb-time" role="group" aria-label="Швидкість часу">
+      <button type="button" id="sbPlay" aria-label="Пауза">❚❚</button>
+      <button type="button" id="sbSlower" aria-label="Повільніше">−</button>
+      <output id="sbSpeedOut"></output>
+      <button type="button" id="sbFaster" aria-label="Швидше">+</button>
+    </div>
     <span class="sb-btns"><button type="button" class="sb-reset" id="sbOverview">Огляд</button><button type="button" class="sb-reset" id="sbReset">↺ Спочатку</button></span>
   </div>
 </section>

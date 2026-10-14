@@ -471,7 +471,10 @@ const sandbox = (() => {
     document.querySelector("#sandbox .sb-kicker").dataset.title = sc ? sc.title : "без змін";
     el("sbText").textContent = sc ? sc.text : "Тепер планети рухаються за законом тяжіння. Обери, що змінити, — і дивись, що станеться з усіма іншими.";
     document.querySelectorAll("#sbScenes button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.s === S.scenario)));
-    el("sbSpeed").value = S.speed; el("sbSpeedOut").textContent = SPEEDS[S.speed][1];
+    el("sbSpeedOut").textContent = SPEEDS[S.speed][1];
+    el("sbSlower").disabled = S.speed <= 1; el("sbFaster").disabled = S.speed >= SPEEDS.length - 1;
+    el("sbPlay").textContent = S.speed === 0 ? "▶" : "❚❚";
+    el("sbPlay").setAttribute("aria-label", S.speed === 0 ? "Пуск" : "Пауза");
   }
   let lastRead = "";
   function readout() {
@@ -540,7 +543,13 @@ const sandbox = (() => {
       setup(k);
       try { history.replaceState(null, "", "#sandbox" + (k ? "-" + k : "")); } catch (e) { /* not allowed here */ }
     }));
-    el("sbSpeed").addEventListener("input", e => { S.speed = +e.target.value; renderPanel(); });
+    // Time: one step per tap (no slider to overshoot); ❚❚ stops it and ▶ goes on at the speed it had.
+    el("sbSlower").addEventListener("click", () => { S.speed = Math.max(1, (S.speed || S.resume || 2) - 1); renderPanel(); });
+    el("sbFaster").addEventListener("click", () => { S.speed = Math.min(SPEEDS.length - 1, (S.speed || S.resume || 1) + 1); renderPanel(); });
+    el("sbPlay").addEventListener("click", () => {
+      if (S.speed) { S.resume = S.speed; S.speed = 0; } else S.speed = S.resume || 2;
+      renderPanel();
+    });
     el("sbOverview").addEventListener("click", () => showOverview());
     el("sbFold").addEventListener("click", () => {
       const min = el("sandbox").classList.toggle("min");
