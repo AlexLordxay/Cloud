@@ -516,12 +516,14 @@ const sandbox = (() => {
         consider(b, o, "meet", Math.max(d / Math.max(Math.abs(vr), 1e-6), 0.01), 1.5 / d);
       }
       // torn loose: unbound from every star and heading out — follow it for a moment (no slow motion)
+      // (free = bound neither to any one star nor to all of them together, and already away from them)
       const stars = S.bodies.filter(x => isStar(x) && x.alive && x.m > 0);
       if (stars.length && !S.events.has("free-" + b.id)) {
+        const bound = x => { const r = b.p.distanceTo(x.p), v = b.v.distanceTo(x.v); return r < 3 || v * v < 2 * G * x.m / r; };
         const M = stars.reduce((a, x) => a + x.m, 0), c = V(), cv = V();
         for (const x of stars) { c.addScaledVector(x.p, x.m / M); cv.addScaledVector(x.v, x.m / M); }
         const r = b.p.distanceTo(c), v = b.v.distanceTo(cv);
-        if (r > 2 && v * v > 2 * G * M / r) {
+        if (!stars.some(bound) && r > 3 && v * v > 2 * G * M / r) {
           note("free-" + b.id, `${NAME[b.id]} ${verb(b.id, "зірвався", "зірвалася")} з орбіти й летить геть — через ${years(S.days)}.`);
           consider(b, null, "escape", 1, 0.5, false);
           S.cool[b.id] = 0;
