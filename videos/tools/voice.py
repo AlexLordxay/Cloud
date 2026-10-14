@@ -2,8 +2,9 @@
 #
 #   python3 voice.py <scene>      reads scenes/<scene>/<narration.file>, writes work/<scene>/voice.wav
 #
-# scene.json "narration": {"file": ..., "level": gain, "parts": [[from, to, at], ...]} — seconds in the recording
-# (from, to) and on the video timeline (at). Phrase edges get a few ms of fade so the cuts don't click.
+# scene.json "narration": {"file": ..., "level": gain, "tempo": speed, "parts": [[from, to, at], ...]} — seconds in the
+# recording (from, to) and on the video timeline (at). Phrase edges get a few ms of fade so the cuts don't click.
+# "tempo" (optional, e.g. 1.1) speeds the speech up without changing the pitch, when the recording is longer than the video.
 import json, os, subprocess, sys
 import imageio_ffmpeg
 
@@ -17,8 +18,9 @@ os.makedirs(work, exist_ok=True)
 
 chains, labels = [], []
 for i, (a, b, at) in enumerate(nar['parts']):
-    d = b - a
-    chains.append(f'[0:a]atrim={a}:{b},asetpts=PTS-STARTPTS,afade=t=in:d=0.02,afade=t=out:st={d - 0.04:.3f}:d=0.04,'
+    tempo = nar.get('tempo', 1.0)
+    d = (b - a) / tempo
+    chains.append(f'[0:a]atrim={a}:{b},asetpts=PTS-STARTPTS,atempo={tempo},afade=t=in:d=0.02,afade=t=out:st={d - 0.04:.3f}:d=0.04,'
                   f'adelay={int(at * 1000)}:all=1[p{i}]')
     labels.append(f'[p{i}]')
 graph = ';'.join(chains) + f';{"".join(labels)}amix=inputs={len(labels)}:normalize=0,' \
