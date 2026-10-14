@@ -136,7 +136,10 @@
 <section class="sandbox glass" id="sandbox" aria-label="Пісочниця" aria-live="polite" hidden>
   <div class="sb-head">
     <span class="sb-kicker">Пісочниця · що, якби…</span>
-    <button type="button" class="sb-close" id="sbClose" aria-label="Вийти з пісочниці">✕</button>
+    <span class="sb-tools">
+      <button type="button" class="sb-close" id="sbFold" aria-expanded="true" aria-label="Згорнути панель">▾</button>
+      <button type="button" class="sb-close" id="sbClose" aria-label="Вийти з пісочниці">✕</button>
+    </span>
   </div>
   <h2 id="sbTitle"></h2>
   <p id="sbText"></p>
@@ -149,8 +152,8 @@
   </div>
   <p class="sb-read" id="sbRead"></p>
   <div class="sb-row">
-    <label class="speed" for="sbSpeed">Час <input id="sbSpeed" type="range" min="0" max="4" step="1" value="3"><output id="sbSpeedOut"></output></label>
-    <button type="button" class="sb-reset" id="sbReset">↺ Спочатку</button>
+    <label class="speed" for="sbSpeed">Час <input id="sbSpeed" type="range" min="0" max="6" step="1" value="5"><output id="sbSpeedOut"></output></label>
+    <span class="sb-btns"><button type="button" class="sb-reset" id="sbOverview">Огляд</button><button type="button" class="sb-reset" id="sbReset">↺ Спочатку</button></span>
   </div>
 </section>
 

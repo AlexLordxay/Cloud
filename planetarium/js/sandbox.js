@@ -14,20 +14,20 @@ const sandbox = (() => {
   const fem = id => id === "earth" || id === "venus";
   const verb = (id, m, f) => fem(id) ? f : m;
   // Simulated days per real second.
-  const SPEEDS = [[2, "2 доби/с"], [10, "10 діб/с"], [60, "2 міс/с"], [365, "1 рік/с"], [3650, "10 років/с"]];
+  const SPEEDS = [[0, "стоп"], [0.25, "6 год/с"], [2, "2 доби/с"], [10, "10 діб/с"], [60, "2 міс/с"], [365, "1 рік/с"], [3650, "10 років/с"]];
   const SCENARIOS = {
-    "two-suns": { title: "Друге Сонце", speed: 3,
+    "two-suns": { title: "Друге Сонце", speed: 5,
       text: "Ще одна така сама зоря на відстані Сатурна — і дві зорі кружляють одна навколо одної. Близькі планети ще тримаються свого Сонця, а дальні гіганти не мають шансів." },
-    "jupiter-earth": { title: "Юпітер замість Землі", speed: 3,
+    "jupiter-earth": { title: "Юпітер замість Землі", speed: 5,
       text: "Юпітер і Земля помінялися місцями. Велетень у 318 разів важчий за Землю тепер тягне сусідів — дивись на Марс і Венеру." },
-    "heavy-sun": { title: "Сонце вдвічі важче", speed: 2,
+    "heavy-sun": { title: "Сонце вдвічі важче", speed: 4,
       text: "Сонце раптом стало вдвічі масивнішим — і в 11 разів яскравішим. Планети рухаються надто повільно для нової сили тяжіння й падають на витягнуті орбіти." },
-    "no-sun": { title: "Сонце зникло", speed: 3,
+    "no-sun": { title: "Сонце зникло", speed: 5,
       text: "Сонця більше немає. Ніщо не тримає планети — вони летять по прямих, кожна туди, куди рухалася тієї миті. Світло зникне через 8 хвилин." },
-    "stop-earth": { title: "Земля зупинилася", speed: 0,
+    "stop-earth": { title: "Земля зупинилася", speed: 2,
       text: "Земля раптом зупинилася на своїй орбіті. Ніщо більше не відводить її вбік — і вона падає прямо на Сонце." },
   };
-  const S = { on: false, bodies: [], days: 0, speed: 3, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], shells: {} };
+  const S = { on: false, bodies: [], days: 0, speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {} };
   const V = () => new THREE.Vector3();
 
   function body(id, m, pos, vel) { return { id, m, p: pos, v: vel, a: V(), alive: true, trail: [] }; }
@@ -147,7 +147,7 @@ const sandbox = (() => {
     }
     accel();
     for (const b of S.bodies) b.trail.length = 0;
-    S.speed = SCENARIOS[key] ? SCENARIOS[key].speed : 3;
+    S.speed = SCENARIOS[key] ? SCENARIOS[key].speed : 5;
     if (S.sun2) S.sun2.visible = key === "two-suns";
     renderPanel();
   }
@@ -256,7 +256,7 @@ const sandbox = (() => {
   function hideShells() { for (const id in S.shells) { S.shells[id].m.visible = false; S.shells[id].glow.visible = false; S.shells[id].flash = 0; } }
 
   // An explosion: a flash, a ring of shock running out, and debris that flies apart, slows and cools.
-  let ringTex = null;
+  let ringTex = null, softTex = null;
   function boom(pos, size, hot) {
     if (!ringTex) {
       const cv = document.createElement("canvas"); cv.width = cv.height = 256;
@@ -272,7 +272,8 @@ const sandbox = (() => {
       vel.push(new THREE.Vector3(r * Math.cos(th), u * 0.6, r * Math.sin(th)).multiplyScalar(sp));
     }
     const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos3, 3));
-    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: hot ? 0xffa050 : 0xffd090, size: size * 0.35, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    if (!softTex) softTex = glowSprite("255,255,255", 1, 1).material.map;
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: hot ? 0xffa050 : 0xffd090, size: size * 0.5, map: softTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     const g = new THREE.Group(); g.position.copy(pos); g.add(flash, ring, pts); scene.add(g);
     S.booms.push({ g, flash, ring, pts, vel, t: 0, size });
   }
@@ -292,7 +293,81 @@ const sandbox = (() => {
       if (t > 3.6) { scene.remove(e.g); e.pts.geometry.dispose(); e.pts.material.dispose(); e.flash.material.dispose(); e.ring.material.dispose(); S.booms.splice(k, 1); }
     }
   }
-  function clearBooms() { for (const e of S.booms) scene.remove(e.g); S.booms.length = 0; }
+  function clearBooms() {
+    for (const e of S.booms) scene.remove(e.g);
+    for (const e of S.splashes) scene.remove(e.g);
+    S.booms.length = 0; S.splashes.length = 0;
+  }
+
+  // A planet falling into a star: the surface takes the blow like a flare. Arcs of glowing plasma leap out of the spot,
+  // hang and fall back as they fade (drawn like the Sun's own prominences), a bright wave runs out over the surface,
+  // and the spot flashes. c: the star's centre in the scene, dir: towards the impact, R: the star's radius on screen.
+  function splash(c, dir, R) {
+    const g = new THREE.Group(); g.position.copy(c); scene.add(g);
+    const A = dir.clone().normalize();
+    const arcs = [];
+    for (let i = 0; i < 9; i++) {
+      const side = new THREE.Vector3().crossVectors(A, Math.abs(A.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
+      side.applyAxisAngle(A, Math.random() * TAU);
+      const start = A.clone().applyAxisAngle(side, (Math.random() - 0.5) * 0.12);
+      const sep = 0.12 + Math.random() * 0.35, height = 0.18 + Math.random() * 0.55, twist = (Math.random() - 0.5) * 0.3;
+      const end = start.clone().applyAxisAngle(side, sep), normal = new THREE.Vector3().crossVectors(start, end).normalize();
+      const pts = [];
+      for (let k = 0; k <= 28; k++) {
+        const t = k / 28, d = new THREE.Vector3().lerpVectors(start, end, t).normalize().addScaledVector(normal, Math.sin(PI * t) * twist).normalize();
+        pts.push(d.multiplyScalar(R * (0.99 + height * Math.sin(PI * t))));
+      }
+      const u = { time: { value: Math.random() * 10 }, life: { value: 0 }, grow: { value: 0 }, seed: { value: Math.random() * 100 }, R: { value: R } };
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 72, R * (0.02 + Math.random() * 0.03), 10, false), new THREE.ShaderMaterial({
+        uniforms: u, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+        vertexShader: `uniform float grow; uniform float R; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+          void main(){ vUv = uv; vec3 d = normalize(position); vec3 p = d * (R + (length(position) - R) * grow);
+            vec4 mv = modelViewMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+        fragmentShader: NOISE_GLSL + `uniform float time; uniform float life; uniform float seed; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+          void main(){
+            float core = pow(abs(dot(normalize(vN), vV)), 2.0);
+            float fil = snoise(vec3(vUv.x * 7.0 - time * 0.6 + seed, sin(vUv.y * 6.2831) * 0.8, time * 0.3 + seed)) * 0.5 + 0.5;
+            float I = core * (0.35 + 1.1 * fil * fil) * life;
+            vec3 col = mix(vec3(1.0, 0.28, 0.04), vec3(1.0, 0.75, 0.35), fil * life);
+            gl_FragColor = vec4(col, clamp(I, 0.0, 1.0));
+          }`,
+      }));
+      g.add(m); arcs.push({ m, u, delay: Math.random() * 0.5, speed: 0.8 + Math.random() * 0.6 });
+    }
+    // the wave over the surface and the hot spot where it struck
+    const wu = { A: { value: A }, w: { value: 0 }, k: { value: 1 } };
+    const wave = new THREE.Mesh(new THREE.SphereGeometry(R * 1.012, 96, 64), new THREE.ShaderMaterial({
+      uniforms: wu, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+      fragmentShader: `uniform vec3 A; uniform float w; uniform float k; varying vec3 vP;
+        void main(){ float a = acos(clamp(dot(normalize(vP), A), -1.0, 1.0));
+          float ring = exp(-pow((a - w) / (0.05 + 0.08 * w), 2.0)) * (1.0 - smoothstep(0.6, 1.4, w));
+          float spot = exp(-a * a / 0.012) * 1.6;
+          gl_FragColor = vec4(mix(vec3(1.0, 0.45, 0.1), vec3(1.0, 0.85, 0.55), spot * 0.5), clamp((ring * 0.8 + spot) * k, 0.0, 1.0)); }`,
+    }));
+    const flash = glowSprite("255,210,150", R * 2.5, 1); flash.position.copy(A).multiplyScalar(R * 1.05);
+    g.add(wave, flash);
+    S.splashes.push({ g, arcs, wu, flash, t: 0, R });
+  }
+  function splashes(dt) {
+    for (let k = S.splashes.length - 1; k >= 0; k--) {
+      const e = S.splashes[k]; e.t += dt;
+      const t = e.t;
+      for (const a of e.arcs) {
+        const x = Math.max(0, t - a.delay) * a.speed;
+        // up fast, hang, then sink back as it cools
+        a.u.grow.value = Math.min(1, x / 0.7) * (1 - 0.6 * smooth01((x - 2.2) / 2.5));
+        a.u.life.value = Math.min(1, x / 0.25) * (1 - smooth01((x - 1.8) / 2.6));
+        a.u.time.value += dt;
+      }
+      e.wu.w.value = 1.4 * (1 - Math.exp(-t * 0.9));
+      e.wu.k.value = 1 - smooth01((t - 2) / 3);
+      e.flash.material.opacity = Math.max(0, 1 - t / 1.2);
+      e.flash.scale.setScalar(e.R * (1.5 + 2.5 * Math.min(1, t / 0.3)));
+      if (t > 6) { scene.remove(e.g); e.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); S.splashes.splice(k, 1); }
+    }
+  }
+  const smooth01 = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
   // Turn this frame's collisions into explosions: on the star's surface facing the planet, or where two planets met.
   function fireHits() {
     for (const h of S.hits) {
@@ -300,7 +375,7 @@ const sandbox = (() => {
       if (h.star) {
         const c = scenePos(big, V()), dir = scenePos(small, V()).sub(c);
         if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
-        boom(c.add(dir.normalize().multiplyScalar(byId.sun.radius * 1.05)), byId.sun.radius * 0.35, true);
+        splash(c, dir, byId.sun.radius * (big.id === "sun2" ? 0.95 : 1));
       } else {
         boom(scenePos(small, V()), Math.max(byId[h.small].radius, 0.8), false);
         if (S.shells[h.big]) S.shells[h.big].flash = 1;   // the survivor glows from the impact
@@ -314,6 +389,7 @@ const sandbox = (() => {
   function renderPanel() {
     const sc = SCENARIOS[S.scenario];
     el("sbTitle").textContent = sc ? sc.title : "Справжня Сонячна система";
+    document.querySelector("#sandbox .sb-kicker").dataset.title = sc ? sc.title : "без змін";
     el("sbText").textContent = sc ? sc.text : "Тепер планети рухаються за законом тяжіння. Обери, що змінити, — і дивись, що станеться з усіма іншими.";
     document.querySelectorAll("#sbScenes button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.s === S.scenario)));
     el("sbSpeed").value = S.speed; el("sbSpeedOut").textContent = SPEEDS[S.speed][1];
@@ -370,7 +446,7 @@ const sandbox = (() => {
       else B.group.visible = b.m > 0;
     }
     drawTrails();
-    fireHits(); booms(dt); shells(dt);
+    fireHits(); booms(dt); splashes(dt); shells(dt);
     readout();
     return { jd: S.jd0 + S.days, dDays: days, fine: days / Math.max(dt, 1e-3) <= 1 };
   }
@@ -386,6 +462,12 @@ const sandbox = (() => {
       try { history.replaceState(null, "", "#sandbox" + (k ? "-" + k : "")); } catch (e) { /* not allowed here */ }
     }));
     el("sbSpeed").addEventListener("input", e => { S.speed = +e.target.value; renderPanel(); });
+    el("sbOverview").addEventListener("click", () => showOverview());
+    el("sbFold").addEventListener("click", () => {
+      const min = el("sandbox").classList.toggle("min");
+      el("sbFold").setAttribute("aria-expanded", String(!min));
+      el("sbFold").textContent = min ? "▴" : "▾";
+    });
   };
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", wire); else wire();
 

@@ -383,3 +383,11 @@ body.sandboxing .clock, body.sandboxing #controls .speed, body.sandboxing .info,
   .sandbox p { font-size: 13px; }
   .sb-scenes button { padding: 6px 10px; font-size: 12px; }
 }
+.sb-tools { display: flex; gap: 2px; }
+#sbFold { margin-right: 0; font-size: 14px; }
+.sb-btns { display: flex; gap: 6px; }
+/* Folded: only the head row stays, with the scenario's name, so the view is clear. */
+.sandbox.min { padding-bottom: 10px; }
+.sandbox.min > :not(.sb-head) { display: none; }
+.sandbox.min .sb-kicker::after { content: " · " attr(data-title); color: var(--fg); text-transform: none; letter-spacing: 0; }
+.sb-row { flex-wrap: wrap; }
