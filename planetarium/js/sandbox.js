@@ -306,11 +306,11 @@ const sandbox = (() => {
     const g = new THREE.Group(); g.position.copy(c); scene.add(g);
     const A = dir.clone().normalize();
     const arcs = [];
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 14; i++) {
       const side = new THREE.Vector3().crossVectors(A, Math.abs(A.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
       side.applyAxisAngle(A, Math.random() * TAU);
       const start = A.clone().applyAxisAngle(side, (Math.random() - 0.5) * 0.12);
-      const sep = 0.12 + Math.random() * 0.35, height = 0.18 + Math.random() * 0.55, twist = (Math.random() - 0.5) * 0.3;
+      const sep = 0.15 + Math.random() * 0.45, height = 0.3 + Math.random() * 0.7, twist = (Math.random() - 0.5) * 0.3;
       const end = start.clone().applyAxisAngle(side, sep), normal = new THREE.Vector3().crossVectors(start, end).normalize();
       const pts = [];
       for (let k = 0; k <= 28; k++) {
@@ -318,7 +318,7 @@ const sandbox = (() => {
         pts.push(d.multiplyScalar(R * (0.99 + height * Math.sin(PI * t))));
       }
       const u = { time: { value: Math.random() * 10 }, life: { value: 0 }, grow: { value: 0 }, seed: { value: Math.random() * 100 }, R: { value: R } };
-      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 72, R * (0.02 + Math.random() * 0.03), 10, false), new THREE.ShaderMaterial({
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 72, R * (0.03 + Math.random() * 0.04), 10, false), new THREE.ShaderMaterial({
         uniforms: u, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
         vertexShader: `uniform float grow; uniform float R; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
           void main(){ vUv = uv; vec3 d = normalize(position); vec3 p = d * (R + (length(position) - R) * grow);
@@ -327,7 +327,7 @@ const sandbox = (() => {
           void main(){
             float core = pow(abs(dot(normalize(vN), vV)), 2.0);
             float fil = snoise(vec3(vUv.x * 7.0 - time * 0.6 + seed, sin(vUv.y * 6.2831) * 0.8, time * 0.3 + seed)) * 0.5 + 0.5;
-            float I = core * (0.35 + 1.1 * fil * fil) * life;
+            float I = core * (0.5 + 1.5 * fil * fil) * life;
             vec3 col = mix(vec3(1.0, 0.28, 0.04), vec3(1.0, 0.75, 0.35), fil * life);
             gl_FragColor = vec4(col, clamp(I, 0.0, 1.0));
           }`,
@@ -356,15 +356,15 @@ const sandbox = (() => {
       for (const a of e.arcs) {
         const x = Math.max(0, t - a.delay) * a.speed;
         // up fast, hang, then sink back as it cools
-        a.u.grow.value = Math.min(1, x / 0.7) * (1 - 0.6 * smooth01((x - 2.2) / 2.5));
-        a.u.life.value = Math.min(1, x / 0.25) * (1 - smooth01((x - 1.8) / 2.6));
+        a.u.grow.value = Math.min(1, x / 0.9) * (1 - 0.6 * smooth01((x - 3.0) / 3.0));
+        a.u.life.value = Math.min(1, x / 0.3) * (1 - smooth01((x - 2.8) / 3.2));
         a.u.time.value += dt;
       }
       e.wu.w.value = 1.4 * (1 - Math.exp(-t * 0.9));
       e.wu.k.value = 1 - smooth01((t - 2) / 3);
       e.flash.material.opacity = Math.max(0, 1 - t / 1.2);
       e.flash.scale.setScalar(e.R * (1.5 + 2.5 * Math.min(1, t / 0.3)));
-      if (t > 6) { scene.remove(e.g); e.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); S.splashes.splice(k, 1); }
+      if (t > 8) { scene.remove(e.g); e.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); S.splashes.splice(k, 1); }
     }
   }
   const smooth01 = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
