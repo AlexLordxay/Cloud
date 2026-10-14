@@ -27,7 +27,7 @@ const sandbox = (() => {
     "stop-earth": { title: "Земля зупинилася", speed: 2,
       text: "Земля раптом зупинилася на своїй орбіті. Ніщо більше не відводить її вбік — і вона падає прямо на Сонце." },
   };
-  const S = { on: false, bodies: [], days: 0, speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, dirFocus: null, calmFor: 0 };
+  const S = { on: false, bodies: [], days: 0, speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
   const V = () => new THREE.Vector3();
 
   function body(id, m, pos, vel) { return { id, m, p: pos, v: vel, a: V(), alive: true, trail: [] }; }
@@ -91,7 +91,7 @@ const sandbox = (() => {
       if (small.m === 0 && isStar(small)) continue;
       big.v.multiplyScalar(big.m).addScaledVector(small.v, small.m).multiplyScalar(1 / (big.m + small.m || 1));
       big.m += small.m; small.alive = false;
-      if (byId[small.id] && state.index === byId[small.id].index) { S.dirFocus = null; S.holdUntil = 0; setTimeout(() => { if (S.on) { if (byId[big.id] && !isStar(big)) focusBody(byId[big.id].index); else showOverview(); } }, 2500); }
+
       S.hits.push({ small: small.id, big: big.id, star: isStar(big) });
       const who = NAME[small.id], when = `через ${years(S.days)}`;
       note("hit-" + small.id, isStar(big) ? `${who} ${verb(small.id, "впав", "впала")} на ${big.id === "sun" ? "Сонце" : "друге Сонце"} — ${when}.`
@@ -131,7 +131,7 @@ const sandbox = (() => {
     S.scenario = SCENARIOS[key] ? key : "";
     S.bodies = realStart(S.jd0);
     S.days = 0; S.events.clear(); S.hits.length = 0; clearBooms(); hideShells();
-    S.log.length = 0; S.slow = 1; S.dirFocus = null; S.calmFor = 0; renderLog();
+    S.log.length = 0; S.slow = 1; S.cool = {}; endShot(false); renderLog();
     const sun = get("sun"), earth = get("earth"), jup = get("jupiter");
     if (key === "two-suns") {
       // An equal star 9.5 AU away; both circle their midpoint, and the planets keep moving round the first one.
@@ -484,52 +484,102 @@ const sandbox = (() => {
   // orbit, would hit it), a star-grazer, two planets closing in. Time slows so the event lasts a few real seconds, the
   // camera flies to the planet, and when it is over time speeds up again and the camera goes back to the whole system.
   // Touching the scene hands the camera back to the viewer for a while; the 🎬 button turns the director off.
+  // What is coming: { b, o, kind, rate, prio } — o is the other body (a star or a planet), rate the slowest simulated
+  // days per real second the event needs to last ~3 s. Kinds: "impact"/"graze" (a star), "meet" (two planets), "escape".
   function upcoming() {
     let best = null, rate = Infinity;
-    const consider = (b, tdyn, prio) => {
-      const r = Math.max(0.04, tdyn / 3);                   // days per real second: the event takes ~3 s
-      if (r < rate) rate = r;
-      if (!best || prio > best.prio) best = { b, prio };
+    const now = performance.now();
+    const consider = (b, o, kind, tdyn, prio, slow = true) => {
+      if (slow) rate = Math.min(rate, Math.max(0.04, tdyn / 3));
+      if ((S.cool[b.id] || 0) > now && kind !== "impact") return;   // this planet had its moment a moment ago
+      if (!best || prio > best.prio) best = { b, o, kind, prio };
     };
     for (const b of S.bodies) {
       if (!b.alive || isStar(b)) continue;
       for (const st of S.bodies) {
         if (!isStar(st) || !st.alive || st.m <= 0) continue;
         const rv = tRel.copy(b.p).sub(st.p), vv = tS.copy(b.v).sub(st.v), r = rv.length();
-        if (r > 0.6) continue;
+        if (r > 0.8) continue;
         const mu = G * (st.m + b.m), v2 = vv.lengthSq(), rdv = rv.dot(vv);
         const h2 = tOff.crossVectors(rv, vv).lengthSq();
         const ex = (v2 - mu / r) * rv.x - rdv * vv.x, ey = (v2 - mu / r) * rv.y - rdv * vv.y, ez = (v2 - mu / r) * rv.z - rdv * vv.z;
         const e = Math.sqrt(ex * ex + ey * ey + ez * ez) / mu, rp = h2 / (mu * (1 + e));
-        if (rp > 0.06 || rdv > 0 && r > 0.08) continue;     // no close pass coming (or already past it and leaving)
-        consider(b, Math.max(r / Math.max(Math.sqrt(v2), 1e-6), 0.02), 2 / r);
+        if (rp > 0.12 || rdv > 0 && r > 1.6 * rp + 0.02) continue;   // no close pass coming (or long past it)
+        consider(b, st, rp < HIT.star * 1.5 ? "impact" : "graze", Math.max(r / Math.max(Math.sqrt(v2), 1e-6), 0.02), 3 / r);
       }
       for (const o of S.bodies) {
         if (o === b || !o.alive || isStar(o) || o.m < b.m) continue;
-        const d = b.p.distanceTo(o.p);
-        if (d > 0.06) continue;
+        const d = b.p.distanceTo(o.p), lim = o.m > 1e-4 ? 0.2 : 0.06;   // giants pull from farther away
+        if (d > lim) continue;
         const vr = tS.copy(b.v).sub(o.v).dot(tRel.copy(b.p).sub(o.p)) / d;
-        if (vr > 0 && d > 0.015) continue;
-        consider(b, Math.max(d / Math.max(Math.abs(vr), 1e-6), 0.01), 1 / d);
+        if (vr > 0 && d > lim * 0.5) continue;
+        consider(b, o, "meet", Math.max(d / Math.max(Math.abs(vr), 1e-6), 0.01), 1.5 / d);
+      }
+      // torn loose: unbound from every star and heading out — follow it for a moment (no slow motion)
+      const stars = S.bodies.filter(x => isStar(x) && x.alive && x.m > 0);
+      if (stars.length && !S.events.has("free-" + b.id)) {
+        const M = stars.reduce((a, x) => a + x.m, 0), c = V(), cv = V();
+        for (const x of stars) { c.addScaledVector(x.p, x.m / M); cv.addScaledVector(x.v, x.m / M); }
+        const r = b.p.distanceTo(c), v = b.v.distanceTo(cv);
+        if (r > 2 && v * v > 2 * G * M / r) {
+          note("free-" + b.id, `${NAME[b.id]} ${verb(b.id, "зірвався", "зірвалася")} з орбіти й летить геть — через ${years(S.days)}.`);
+          consider(b, null, "escape", 1, 0.5, false);
+          S.cool[b.id] = 0;
+        }
       }
     }
     return { best, rate };
+  }
+
+  // The shot: from the side of the line between the planet and what it is falling into (or passing), framing both, so the
+  // approach and the hit are seen across the screen rather than with the star filling the view. It follows every frame.
+  const shot = { on: false, t: 0, b: null, o: null, kind: "", tgt: V(), cam: V(), keep: 0 };
+  const sT = V(), sC = V(), sP = V(), sO = V(), sDir = V(), sSide = V(), UP = new THREE.Vector3(0, 1, 0);
+  function frame(dt) {
+    const B = byId[shot.b.id];
+    if (shot.b.alive && B) sP.copy(B.world); // else: keep looking where it ended
+    const oR = shot.o ? (isStar(shot.o) ? byId.sun.radius * SUN_K * (shot.o.id === "sun2" ? 0.95 : 1) : byId[shot.o.id].radius) : 0;
+    if (shot.o && shot.o.alive) scenePos(shot.o, sO); else if (!shot.o) sO.copy(sP);
+    const pr = B ? B.radius : 1;
+    sDir.copy(sP).sub(sO); const gap = Math.max(sDir.length(), 1e-3); sDir.divideScalar(gap);
+    sSide.crossVectors(sDir, UP); if (sSide.lengthSq() < 1e-6) sSide.set(1, 0, 0); sSide.normalize();
+    // look at a point between them, nearer the planet; stand back far enough for both (with the star's edge) to fit
+    const span = shot.o ? gap + oR : pr * 6;
+    sT.copy(sP).addScaledVector(sDir, -Math.min(gap * 0.45, gap - oR * 0.5 > 0 ? gap * 0.45 : gap * 0.3));
+    if (!shot.o) sT.copy(sP);
+    const d = Math.max(span * 1.35, pr * 7);
+    sC.copy(sT).addScaledVector(sSide, d).addScaledVector(UP, d * 0.35).addScaledVector(sDir, d * 0.15);
+    const k = 1 - Math.exp(-dt * (shot.t < 1.8 ? 2.2 : 6));   // glide in, then hold steady on the moving pair
+    shot.tgt.lerp(sT, k); shot.cam.lerp(sC, k);
+    controls.target.copy(shot.tgt); camera.position.copy(shot.cam); camera.lookAt(shot.tgt);
+  }
+  function startShot(ev) {
+    shot.on = true; shot.t = 0; shot.b = ev.b; shot.o = ev.o; shot.kind = ev.kind; shot.keep = 0;
+    shot.tgt.copy(controls.target); shot.cam.copy(camera.position);
+    state.flight = null; state.mode = "overview"; state.index = -1;   // the sandbox drives the camera now
+    controls.enabled = false;
+  }
+  function endShot(toOverview) {
+    if (!shot.on) return;
+    shot.on = false; controls.enabled = true;
+    if (shot.b) S.cool[shot.b.id] = performance.now() + 30000;
+    if (toOverview) showOverview();
   }
   function direct(dt) {
     const want = SPEEDS[S.speed][0];
     const { best, rate } = want > 0 ? upcoming() : { best: null, rate: Infinity };
     const target = Math.min(1, rate / Math.max(want, 1e-9));
-    // slow down quickly, speed up gently
-    S.slow += (target - S.slow) * Math.min(1, dt * (target < S.slow ? 6 : 0.8));
-    if (!S.director || performance.now() < S.holdUntil) return;
-    if (best) {
-      S.calmFor = 0;
-      const B = byId[best.b.id];
-      if (B && state.index !== B.index && (!S.dirFocus || S.dirFocus !== best.b.id)) { S.dirFocus = best.b.id; focusBody(B.index); }
-    } else if (S.dirFocus) {
-      S.calmFor += dt;
-      if (S.calmFor > 3) { S.dirFocus = null; showOverview(); }
-    }
+    S.slow += (target - S.slow) * Math.min(1, dt * (target < S.slow ? 6 : 0.8));   // slow down quickly, speed up gently
+    if (!S.director || performance.now() < S.holdUntil) { if (shot.on) endShot(false); return; }
+    if (best && (!shot.on || (best.b !== shot.b && best.prio > 2 * (shot.prio || 0)))) { startShot(best); shot.prio = best.prio; }
+    if (!shot.on) return;
+    shot.t += dt;
+    const live = best && best.b === shot.b;
+    if (live) shot.keep = 0; else shot.keep += dt;
+    // after the event: hold on the scene a little (the splash, the flash), then back to the whole system
+    const linger = shot.kind === "escape" ? 4 : 3.5;
+    if (!live && shot.keep > linger) { endShot(true); return; }
+    frame(dt);
   }
   function renderLog() {
     const ul = el("sbLog");
@@ -581,6 +631,7 @@ const sandbox = (() => {
     try { history.replaceState(null, "", "#sandbox" + (S.scenario ? "-" + S.scenario : "")); } catch (e) { /* not allowed here */ }
   }
   function close() {
+    endShot(false);
     S.on = false;
     document.body.classList.remove("sandboxing");
     el("sandbox").hidden = true;
@@ -632,7 +683,7 @@ const sandbox = (() => {
       if (S.speed) { S.resume = S.speed; S.speed = 0; } else S.speed = S.resume || 2;
       renderPanel();
     });
-    el("sbOverview").addEventListener("click", () => { S.dirFocus = null; S.holdUntil = performance.now() + 8000; showOverview(); });
+    el("sbOverview").addEventListener("click", () => { endShot(false); S.holdUntil = performance.now() + 8000; showOverview(); });
     el("sbDirector").addEventListener("click", () => { S.director = !S.director; S.holdUntil = 0; renderPanel(); });
     canvas.addEventListener("pointerdown", () => { if (S.on) S.holdUntil = performance.now() + 12000; });
     canvas.addEventListener("wheel", () => { if (S.on) S.holdUntil = performance.now() + 12000; }, { passive: true });
