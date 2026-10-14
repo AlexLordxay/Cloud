@@ -27,7 +27,7 @@ const sandbox = (() => {
     "stop-earth": { title: "Земля зупинилася", speed: 2,
       text: "Земля раптом зупинилася на своїй орбіті. Ніщо більше не відводить її вбік — і вона падає прямо на Сонце." },
   };
-  const S = { on: false, bodies: [], days: 0, speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {} };
+  const S = { on: false, bodies: [], days: 0, speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, dirFocus: null, calmFor: 0 };
   const V = () => new THREE.Vector3();
 
   function body(id, m, pos, vel) { return { id, m, p: pos, v: vel, a: V(), alive: true, trail: [] }; }
@@ -78,7 +78,7 @@ const sandbox = (() => {
     }
   }
   // Two bodies closer than this (AU) merge: a planet into a star, or the lighter planet into the heavier one.
-  const HIT = { star: 0.012, planet: 0.004 };
+  const HIT = { star: 0.006, planet: 0.004 };
   const isStar = b => b.id === "sun" || b.id === "sun2";
   function collide() {
     const B = S.bodies;
@@ -91,6 +91,7 @@ const sandbox = (() => {
       if (small.m === 0 && isStar(small)) continue;
       big.v.multiplyScalar(big.m).addScaledVector(small.v, small.m).multiplyScalar(1 / (big.m + small.m || 1));
       big.m += small.m; small.alive = false;
+      if (byId[small.id] && state.index === byId[small.id].index) { S.dirFocus = null; S.holdUntil = 0; setTimeout(() => { if (S.on) { if (byId[big.id] && !isStar(big)) focusBody(byId[big.id].index); else showOverview(); } }, 2500); }
       S.hits.push({ small: small.id, big: big.id, star: isStar(big) });
       const who = NAME[small.id], when = `через ${years(S.days)}`;
       note("hit-" + small.id, isStar(big) ? `${who} ${verb(small.id, "впав", "впала")} на ${big.id === "sun" ? "Сонце" : "друге Сонце"} — ${when}.`
@@ -107,7 +108,10 @@ const sandbox = (() => {
   function note(key, text) {
     if (S.events.has(key)) return;
     S.events.add(key);
-    showToast(text, 5000);
+    S.log.unshift(text);
+    if (S.log.length > 5) S.log.pop();
+    renderLog();
+    showToast(text, 3500);
   }
   // Planets that fly off: farther than 80 AU from the stars and faster than escape speed.
   function watch() {
@@ -127,6 +131,7 @@ const sandbox = (() => {
     S.scenario = SCENARIOS[key] ? key : "";
     S.bodies = realStart(S.jd0);
     S.days = 0; S.events.clear(); S.hits.length = 0; clearBooms(); hideShells();
+    S.log.length = 0; S.slow = 1; S.dirFocus = null; S.calmFor = 0; renderLog();
     const sun = get("sun"), earth = get("earth"), jup = get("jupiter");
     if (key === "two-suns") {
       // An equal star 9.5 AU away; both circle their midpoint, and the planets keep moving round the first one.
@@ -167,13 +172,24 @@ const sandbox = (() => {
     }
     // the second Sun: a bright disc with the Sun's glow (no surface effects)
     const sun = byId.sun, g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(sun.radius * 0.95, 48, 32), new THREE.MeshBasicMaterial({ color: 0xffe2b0 })));
-    g.add(glowSprite("255,170,90", sun.radius * 11, 0.24));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(sun.radius * 0.95 * SUN_K, 48, 32), new THREE.MeshBasicMaterial({ color: 0xffe2b0 })));
+    g.add(glowSprite("255,170,90", sun.radius * 11 * SUN_K, 0.24));
     g.visible = false; scene.add(g); S.sun2 = g;
   }
   const tS = V(), tRel = V();
   // Scene position of a body: relative to the first Sun (it stays in the middle of the screen), on the site's distance scale.
-  function scenePos(b, out) { return toScene(tRel.copy(b.p).sub(get("sun").p), out); }
+  function scenePos(b, out) { return sbToScene(tRel.copy(b.p).sub(get("sun").p), out); }
+  // The sandbox's own distance scale: the site's beyond 0.05 AU, and inside it — where the site puts everything on the
+  // Sun's surface — a log scale down to the Sun's real radius. With the Sun drawn at half size there, a close pass or a
+  // fall into it can be seen instead of happening "inside" the Sun.
+  const SUN_K = 0.5, R_SUN_AU = 0.00465;
+  function sbDist(au) {
+    if (au >= 0.05) return sceneDist(au);
+    const r0 = byId.sun.radius * SUN_K;
+    if (au <= R_SUN_AU) return r0 * au / R_SUN_AU;
+    return r0 + (sceneDist(0.05) - r0) * Math.log(au / R_SUN_AU) / Math.log(0.05 / R_SUN_AU);
+  }
+  function sbToScene(vAU, out) { const r = vAU.length(); return out.copy(vAU).multiplyScalar(r > 0 ? sbDist(r) / r : 0); }
   function drawTrails() {
     for (const b of S.bodies) {
       const line = S.trails[b.id];
@@ -454,13 +470,72 @@ const sandbox = (() => {
       if (h.star) {
         const c = scenePos(big, V()), dir = scenePos(small, V()).sub(c);
         if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
-        splash(c, dir, byId.sun.radius * (big.id === "sun2" ? 0.95 : 1));
+        splash(c, dir, byId.sun.radius * SUN_K * (big.id === "sun2" ? 0.95 : 1));
       } else {
         boom(scenePos(small, V()), Math.max(byId[h.small].radius, 0.8), false);
         if (S.shells[h.big]) S.shells[h.big].flash = 1;   // the survivor glows from the impact
       }
     }
     S.hits.length = 0;
+  }
+
+  /* ---------- The director: slow motion and the camera on what matters ---------- */
+  // Each frame it looks for what is about to happen: a planet on course into a star (its closest approach, from its
+  // orbit, would hit it), a star-grazer, two planets closing in. Time slows so the event lasts a few real seconds, the
+  // camera flies to the planet, and when it is over time speeds up again and the camera goes back to the whole system.
+  // Touching the scene hands the camera back to the viewer for a while; the 🎬 button turns the director off.
+  function upcoming() {
+    let best = null, rate = Infinity;
+    const consider = (b, tdyn, prio) => {
+      const r = Math.max(0.04, tdyn / 3);                   // days per real second: the event takes ~3 s
+      if (r < rate) rate = r;
+      if (!best || prio > best.prio) best = { b, prio };
+    };
+    for (const b of S.bodies) {
+      if (!b.alive || isStar(b)) continue;
+      for (const st of S.bodies) {
+        if (!isStar(st) || !st.alive || st.m <= 0) continue;
+        const rv = tRel.copy(b.p).sub(st.p), vv = tS.copy(b.v).sub(st.v), r = rv.length();
+        if (r > 0.6) continue;
+        const mu = G * (st.m + b.m), v2 = vv.lengthSq(), rdv = rv.dot(vv);
+        const h2 = tOff.crossVectors(rv, vv).lengthSq();
+        const ex = (v2 - mu / r) * rv.x - rdv * vv.x, ey = (v2 - mu / r) * rv.y - rdv * vv.y, ez = (v2 - mu / r) * rv.z - rdv * vv.z;
+        const e = Math.sqrt(ex * ex + ey * ey + ez * ez) / mu, rp = h2 / (mu * (1 + e));
+        if (rp > 0.06 || rdv > 0 && r > 0.08) continue;     // no close pass coming (or already past it and leaving)
+        consider(b, Math.max(r / Math.max(Math.sqrt(v2), 1e-6), 0.02), 2 / r);
+      }
+      for (const o of S.bodies) {
+        if (o === b || !o.alive || isStar(o) || o.m < b.m) continue;
+        const d = b.p.distanceTo(o.p);
+        if (d > 0.06) continue;
+        const vr = tS.copy(b.v).sub(o.v).dot(tRel.copy(b.p).sub(o.p)) / d;
+        if (vr > 0 && d > 0.015) continue;
+        consider(b, Math.max(d / Math.max(Math.abs(vr), 1e-6), 0.01), 1 / d);
+      }
+    }
+    return { best, rate };
+  }
+  function direct(dt) {
+    const want = SPEEDS[S.speed][0];
+    const { best, rate } = want > 0 ? upcoming() : { best: null, rate: Infinity };
+    const target = Math.min(1, rate / Math.max(want, 1e-9));
+    // slow down quickly, speed up gently
+    S.slow += (target - S.slow) * Math.min(1, dt * (target < S.slow ? 6 : 0.8));
+    if (!S.director || performance.now() < S.holdUntil) return;
+    if (best) {
+      S.calmFor = 0;
+      const B = byId[best.b.id];
+      if (B && state.index !== B.index && (!S.dirFocus || S.dirFocus !== best.b.id)) { S.dirFocus = best.b.id; focusBody(B.index); }
+    } else if (S.dirFocus) {
+      S.calmFor += dt;
+      if (S.calmFor > 3) { S.dirFocus = null; showOverview(); }
+    }
+  }
+  function renderLog() {
+    const ul = el("sbLog");
+    if (!ul) return;
+    ul.innerHTML = S.log.map(t => `<li>${t}</li>`).join("");
+    ul.hidden = !S.log.length;
   }
 
   /* ---------- Panel ---------- */
@@ -472,6 +547,7 @@ const sandbox = (() => {
     el("sbText").textContent = sc ? sc.text : "Тепер планети рухаються за законом тяжіння. Обери, що змінити, — і дивись, що станеться з усіма іншими.";
     document.querySelectorAll("#sbScenes button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.s === S.scenario)));
     el("sbSpeedOut").textContent = SPEEDS[S.speed][1];
+    el("sbDirector").setAttribute("aria-pressed", String(S.director));
     el("sbSlower").disabled = S.speed <= 1; el("sbFaster").disabled = S.speed >= SPEEDS.length - 1;
     el("sbPlay").textContent = S.speed === 0 ? "▶" : "❚❚";
     el("sbPlay").setAttribute("aria-label", S.speed === 0 ? "Пуск" : "Пауза");
@@ -482,6 +558,9 @@ const sandbox = (() => {
     const temp = t === null ? "Землі більше немає" : `Земля: ${t > 0 ? "+" : t < 0 ? "−" : ""}${Math.abs(Math.round(t))} °C · ${e.p.distanceTo(sun.p).toFixed(2).replace(".", ",")} а. о. від Сонця`;
     const txt = `Минуло: ${S.days < 1 ? "0 діб" : years(S.days)} · ${temp}`;
     if (txt !== lastRead) { el("sbRead").textContent = txt; lastRead = txt; }
+    const sl = S.speed > 0 && S.slow < 0.85;
+    const out = sl ? "уповільнено" : SPEEDS[S.speed][1];
+    if (el("sbSpeedOut").textContent !== out) { el("sbSpeedOut").textContent = out; el("sbSpeedOut").classList.toggle("slow", sl); }
   }
 
   function open(key) {
@@ -496,6 +575,7 @@ const sandbox = (() => {
       if (b.orbitLine) b.orbitLine.visible = false;
       if (!b.parent && b.id !== "sun" && !ID.includes(b.id)) b.group.visible = false;   // dwarf planets and comets
     }
+    byId.sun.group.scale.setScalar(SUN_K);
     setup(key || "");
     if (state.index >= 0) showOverview();
     try { history.replaceState(null, "", "#sandbox" + (S.scenario ? "-" + S.scenario : "")); } catch (e) { /* not allowed here */ }
@@ -508,6 +588,7 @@ const sandbox = (() => {
     for (const id in S.trails) S.trails[id].visible = false;
     S.sun2.visible = false;
     hideShells(); clearBooms();
+    byId.sun.group.scale.setScalar(1);
     for (const b of BODIES) {
       if (b.orbitLine) b.orbitLine.visible = state.orbits;
       b.group.visible = true;
@@ -517,7 +598,8 @@ const sandbox = (() => {
   }
   // One frame: run the physics, then put the bodies where it says. Returns the moons' clock for placeAll.
   function step(dt) {
-    const days = state.paused ? 0 : dt * SPEEDS[S.speed][0];
+    direct(dt);
+    const days = state.paused ? 0 : dt * SPEEDS[S.speed][0] * S.slow;
     advance(days);
     watch();
     for (const b of S.bodies) {
@@ -550,7 +632,10 @@ const sandbox = (() => {
       if (S.speed) { S.resume = S.speed; S.speed = 0; } else S.speed = S.resume || 2;
       renderPanel();
     });
-    el("sbOverview").addEventListener("click", () => showOverview());
+    el("sbOverview").addEventListener("click", () => { S.dirFocus = null; S.holdUntil = performance.now() + 8000; showOverview(); });
+    el("sbDirector").addEventListener("click", () => { S.director = !S.director; S.holdUntil = 0; renderPanel(); });
+    canvas.addEventListener("pointerdown", () => { if (S.on) S.holdUntil = performance.now() + 12000; });
+    canvas.addEventListener("wheel", () => { if (S.on) S.holdUntil = performance.now() + 12000; }, { passive: true });
     el("sbFold").addEventListener("click", () => {
       const min = el("sandbox").classList.toggle("min");
       el("sbFold").setAttribute("aria-expanded", String(!min));
@@ -559,5 +644,5 @@ const sandbox = (() => {
   };
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", wire); else wire();
 
-  return { get on() { return S.on; }, open, close, step, scenarios: Object.keys(SCENARIOS), _state: S };   // _state: for tests
+  return { get on() { return S.on; }, open, close, step, toScene: sbToScene, scenarios: Object.keys(SCENARIOS), _state: S };   // _state: for tests
 })();

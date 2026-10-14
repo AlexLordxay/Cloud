@@ -401,3 +401,8 @@ body.sandboxing .clock, body.sandboxing #controls .speed, body.sandboxing .info,
 .sb-time button:disabled { opacity: 0.3; cursor: default; }
 #sbPlay { color: var(--sun); font-size: 12px; letter-spacing: -0.1em; }
 .sb-time output { min-width: 82px; text-align: center; font: 500 12.5px var(--font-mono); color: var(--fg); }
+.sb-log { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; color: #c9d0e0; max-height: 6.6em; overflow-y: auto; }
+.sb-log li::before { content: "• "; color: var(--sun); }
+.sb-log li:first-child { color: var(--fg); }
+.sb-time output.slow { color: var(--sun); }
+#sbDirector[aria-pressed="true"] { border-color: rgba(243,185,100,0.6); background: rgba(243,185,100,0.16); color: var(--sun); }

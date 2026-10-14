@@ -395,7 +395,7 @@ function placeAll(jd, dDays, fine) {
     if (sandbox.on && b.simAU) b.auVec.copy(b.simAU);   // the sandbox's gravity, not the real orbit
     else helioAU(b.id, jd, b.auVec);
     b.au = b.auVec.length();
-    toScene(b.auVec, tB);
+    (sandbox.on ? sandbox.toScene : toScene)(b.auVec, tB);
     // Rotation that carries the old Sun-direction to the new one: the follow camera applies it to keep the lighting.
     if (b.group.position.lengthSq() > 0) b.dq.setFromUnitVectors(tA.copy(b.group.position).normalize(), tAU.copy(tB).normalize());
     else b.dq.identity();

@@ -151,6 +151,7 @@
     <button type="button" data-s="stop-earth">Зупинити Землю</button>
   </div>
   <p class="sb-read" id="sbRead"></p>
+  <ul class="sb-log" id="sbLog" aria-label="Що сталося" hidden></ul>
   <div class="sb-row">
     <div class="sb-time" role="group" aria-label="Швидкість часу">
       <button type="button" id="sbPlay" aria-label="Пауза">❚❚</button>
@@ -158,7 +159,7 @@
       <output id="sbSpeedOut"></output>
       <button type="button" id="sbFaster" aria-label="Швидше">+</button>
     </div>
-    <span class="sb-btns"><button type="button" class="sb-reset" id="sbOverview">Огляд</button><button type="button" class="sb-reset" id="sbReset">↺ Спочатку</button></span>
+    <span class="sb-btns"><button type="button" class="sb-reset" id="sbDirector" aria-pressed="true" title="Камера сама летить до подій, час сповільнюється">🎬 Авто</button><button type="button" class="sb-reset" id="sbOverview">Огляд</button><button type="button" class="sb-reset" id="sbReset">↺ Спочатку</button></span>
   </div>
 </section>
 
