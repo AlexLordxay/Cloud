@@ -356,6 +356,7 @@ const sandbox = (() => {
             a = max(a, fa);
             // no star at all: only starlight — the planet all but goes out
             col *= 1.0 - dark; a += dark * (1.0 - a);
+            col += vec3(0.16, 0.2, 0.28) * fa * dark * (0.4 + 0.6 * rim);   // ice under starlight: a faint cold sheen
             a = clamp(a, 0.0, 1.0);
             gl_FragColor = vec4(col / max(a, 1e-3), a);
           }`,
@@ -380,6 +381,12 @@ const sandbox = (() => {
   function shells(dt) {
     // the Sun's light goes out with it (moons and other plain surfaces)
     if (typeof sunLight !== "undefined") sunLight.intensity += ((starless() ? 0.12 : 1.7) - sunLight.intensity) * Math.min(1, dt * 1.2);
+    // the belts of small bodies held by the Sun scatter too: they fade away
+    for (const belt of typeof asteroidBelt !== "undefined" ? [asteroidBelt, kuiperBelt] : []) {
+      const m = belt.material, o = m.userData.o ?? (m.userData.o = m.opacity);
+      m.opacity += ((starless() ? 0 : o) - m.opacity) * Math.min(1, dt * 0.8);
+      belt.visible = m.opacity > 0.01;
+    }
     for (const b of S.bodies) {
       const sh = S.shells[b.id];
       if (!sh) continue;
@@ -391,7 +398,7 @@ const sandbox = (() => {
       ease(sh.u.melt, sh.gas ? ramp(T, 700, 1800) : ramp(T, 1100, 1700), 2);
       ease(sh.u.frost, !ROCKY.includes(b.id) ? 0 : S.scenario === "no-sun" ? ramp(S.days, 5, 400) : ramp(-T, -175, -55), 1.5);
       sh.u.flash.value = sh.flash;
-      ease(sh.u.dark, starless() ? 0.9 : 0, 1.2);
+      ease(sh.u.dark, starless() ? 0.7 : 0, 1.2);
       sh.u.time.value += dt;
       // the brightest star lights the shell
       let best = null, bf = 0;
@@ -945,6 +952,7 @@ const sandbox = (() => {
     hideShells(); clearBooms();
     byId.sun.group.scale.setScalar(1);
     if (typeof sunLight !== "undefined") sunLight.intensity = 1.7;
+    for (const belt of typeof asteroidBelt !== "undefined" ? [asteroidBelt, kuiperBelt] : []) { if (belt.material.userData.o !== undefined) belt.material.opacity = belt.material.userData.o; belt.visible = true; }
     for (const id of ID.slice(1)) { byId[id].sbScale = 1; byId[id].group.scale.setScalar(1); }
     for (const b of BODIES) {
       if (b.orbitLine) b.orbitLine.visible = state.orbits;
