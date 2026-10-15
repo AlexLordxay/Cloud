@@ -406,3 +406,13 @@ body.sandboxing .clock, body.sandboxing #controls .speed, body.sandboxing .info,
 .sb-log li:first-child { color: var(--fg); }
 .sb-time output.slow { color: var(--sun); }
 #sbDirector[aria-pressed="true"] { border-color: rgba(243,185,100,0.6); background: rgba(243,185,100,0.16); color: var(--sun); }
+/* A sandbox story: the tour's card; the sandbox panel steps aside while it runs. */
+body.storying #sandbox { display: none !important; }
+.sb-story p#sbsText { min-height: 5.6em; }
+.sb-story .sb-read { margin: 6px 0 0; min-height: 1.4em; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+#sbsPause { font-size: 12px; letter-spacing: -0.1em; color: var(--sun); }
+.sb-story.paused #sbsPause { background: rgba(243,185,100,0.16); font-size: 15px; letter-spacing: 0; }
+#sbsSound[aria-pressed="false"] { text-decoration: line-through; }
+#sbsSound[aria-pressed="true"] { color: var(--sun); }
+#sbsNext { min-width: 44px; width: auto; padding: 0 14px; }
+.sb-story-btn { border-color: rgba(243,185,100,0.5) !important; color: var(--sun) !important; }

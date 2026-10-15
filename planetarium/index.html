@@ -163,6 +163,26 @@
   </div>
 </section>
 
+<!-- A sandbox story (js/sandbox.js): a scenario told step by step, like the tour — text, camera and time set for each. -->
+<section class="tour glass sb-story" id="sbStory" aria-label="Історія" aria-live="polite" hidden>
+  <div class="tour-head">
+    <span class="tour-count"><span>Що, якби…</span> <span id="sbsCount"></span></span>
+    <span class="tour-tools">
+      <button type="button" class="tour-close" id="sbsSound" aria-pressed="true" aria-label="Музика" title="Музика">♪</button>
+      <button type="button" class="tour-close" id="sbsClose" aria-label="Завершити історію">✕</button>
+    </span>
+  </div>
+  <h2 id="sbsTitle"></h2>
+  <p id="sbsText"></p>
+  <p class="sb-read" id="sbsRead"></p>
+  <div class="tour-nav">
+    <button type="button" id="sbsAgain" aria-label="Спочатку">↺</button>
+    <button type="button" id="sbsPause" aria-label="Пауза">❚❚</button>
+    <button type="button" id="sbsNext" aria-label="Далі">›</button>
+  </div>
+  <div class="tour-bar"><i id="sbsBar"></i></div>
+</section>
+
 <div class="support-back" id="supportBack" hidden></div>
 <div class="support glass" id="support" role="dialog" aria-modal="true" aria-labelledby="supportTitle" hidden>
   <button class="support-close" id="supportClose" type="button" aria-label="Закрити">✕</button>

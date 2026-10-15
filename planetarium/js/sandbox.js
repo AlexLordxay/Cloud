@@ -536,7 +536,9 @@ const sandbox = (() => {
   // The shot: a chase camera on the planet itself — close behind it, a little to the side, looking past it at what it is
   // falling into (or passing), so the planet stays big in the frame (its heating is seen) and the star grows behind it.
   // The camera's offset from the planet is what is smoothed, so the planet stays locked in the frame while it moves.
-  const shot = { on: false, t: 0, b: null, o: null, kind: "", off: V(), aim: V(), keep: 0 };
+  // A story sets its own shots: mode "chase" (as above), "pair" (the planet and the star together, from the side and
+  // above) or "sun" (the star alone, from a fixed side); dk scales the chase distance.
+  const shot = { on: false, t: 0, b: null, o: null, kind: "", off: V(), aim: V(), keep: 0, mode: "chase", dk: 1 };
   const sT = V(), sC = V(), sP = V(), sO = V(), sDir = V(), sSide = V(), UP = new THREE.Vector3(0, 1, 0);
   function frame(dt) {
     const B = byId[shot.b.id];
@@ -544,21 +546,39 @@ const sandbox = (() => {
     const o = shot.o || get("sun");                // torn loose: look back past it at the Sun it is leaving
     if (o && o.alive && o !== shot.b) scenePos(o, sO); else sO.set(0, 0, 0);
     const pr = B ? B.radius : 1;
+    if (shot.mode === "sun") {
+      scenePos(get("sun"), sP);
+      const r = sbDist(shot.dk);
+      sC.set(0.75, 0.42, 0.52).normalize().multiplyScalar(r); sT.set(0, -r * 0.12, 0);
+      return glide(dt);
+    }
     sDir.copy(sP).sub(sO); const gap = Math.max(sDir.length(), 1e-3); sDir.divideScalar(gap);
     sSide.crossVectors(sDir, UP); if (sSide.lengthSq() < 1e-6) sSide.set(1, 0, 0); sSide.normalize();
-    const d = pr * 11;
+    if (shot.mode === "pair") {
+      // between the two, nearer the planet; from the side and above, far enough for both
+      sT.copy(sDir).multiplyScalar(-gap * 0.42).addScaledVector(UP, -gap * 0.12);
+      sC.copy(sT).addScaledVector(sSide, gap * 0.95 * shot.dk).addScaledVector(UP, gap * 0.55 * shot.dk).addScaledVector(sDir, gap * 0.25);
+      return glide(dt);
+    }
+    const d = pr * 11 * shot.dk;
     // camera: mostly to the side of the planet (so its day side and its glow are seen), a little behind it and above
     sC.copy(sDir).multiplyScalar(d * 0.45).addScaledVector(sSide, d * 0.8).addScaledVector(UP, d * 0.3);
     // aim: a little past the planet toward the star, and below it, so the planet sits in the upper part of the
     // screen, clear of the panel, with the star beside it
     sT.copy(sDir).multiplyScalar(-Math.min(gap * 0.3, pr * 1.2)).addScaledVector(UP, -pr * 2.2);
+    glide(dt);
+  }
+  function glide(dt) {
     const k = 1 - Math.exp(-dt * (shot.t < 2.5 ? 1.6 : 4));   // glide in, then hold steady on the planet
     shot.off.lerp(sC, k); shot.aim.lerp(sT, k);
     controls.target.copy(sP).add(shot.aim); camera.position.copy(sP).add(shot.off); camera.lookAt(controls.target);
   }
   function startShot(ev) {
     shot.on = true; shot.t = 0; shot.b = ev.b; shot.o = ev.o; shot.kind = ev.kind; shot.keep = 0;
-    const B = byId[ev.b.id]; if (B) sP.copy(B.world); else scenePos(ev.b, sP); shot.off.copy(camera.position).sub(sP); shot.aim.copy(controls.target).sub(sP);
+    shot.mode = ev.mode || "chase"; shot.dk = ev.dk || 1;
+    const B = byId[ev.b.id];
+    if (shot.mode === "sun") scenePos(get("sun"), sP); else if (B && ev.b.alive) sP.copy(B.world); else if (ev.b.alive) scenePos(ev.b, sP);
+    shot.off.copy(camera.position).sub(sP); shot.aim.copy(controls.target).sub(sP);
     state.flight = null; state.mode = "overview"; state.index = -1;   // the sandbox drives the camera now
     controls.enabled = false;
   }
@@ -569,6 +589,7 @@ const sandbox = (() => {
     if (toOverview) showOverview();
   }
   function direct(dt) {
+    if (story.on) return;
     const want = SPEEDS[S.speed][0];
     const { best, rate } = want > 0 ? upcoming() : { best: null, rate: Infinity };
     // a shot lasts ~20 s at most: after that the slow motion lets go, so the end comes soon
@@ -591,6 +612,99 @@ const sandbox = (() => {
     if (!ul) return;
     ul.innerHTML = S.log.map(t => `<li>${t}</li>`).join("");
     ul.hidden = !S.log.length;
+  }
+
+
+  /* ---------- Stories: a scenario told step by step, like the tour ---------- */
+  // Each step has its text, its shot and its pace, and ends on an event (the Earth is this close, it is gone), not on a
+  // timer — so the words always match what is on the screen. Pace: "rate" simulated days per real second, or "k": the
+  // time left to the event shrinks e times every k real seconds (fast while far, slow at the end). "min": seconds to read.
+  const rSun = id => { const b = get(id); return b && b.alive ? b.p.distanceTo(get("sun").p) : 0; };
+  const STORIES = {
+    "stop-earth": [
+      { title: "Земля зупинилася", shot: { mode: "pair", b: "earth", o: "sun", dk: 1 }, rate: 0.6, min: 8,
+        text: "Уяви: Земля раптом зупинилася на своїй орбіті. Її швидкість — 30 км/с — щезла. Ніщо більше не несе її вбік, і Сонце починає тягнути її до себе." },
+      { title: "Падіння", shot: { b: "earth", o: "sun", dk: 1.3 }, rate: 4, min: 9, until: () => rSun("earth") < 0.62,
+        text: "Перші тижні майже нічого не помітно: Земля лише повільно набирає швидкість. Але кожного дня вона падає швидше, ніж учора, а Сонце в небі стає більшим." },
+      { title: "Океани закипають", shot: { b: "earth", o: "sun" }, k: 7, min: 9, until: () => rSun("earth") < 0.2,
+        text: "Сонце світить уже майже втричі яскравіше. Спека понад +100 °C — океани закипають, небо затягує пара, а потім вода втікає в космос. Земля стає пустелею." },
+      { title: "Камінь плавиться", shot: { b: "earth", o: "sun", dk: 0.9 }, k: 6, min: 9, until: () => rSun("earth") < 0.04,
+        text: "Ще ближче — і плавиться сам камінь. Кора тріскається, з тріщин світиться магма, і Земля перетворюється на розжарену лавову кулю. Позаду тягнеться хвіст пари." },
+      { title: "Удар", shot: { b: "earth", o: "sun", dk: 1.1 }, k: 3, min: 7, until: () => !get("earth").alive, after: 4,
+        text: "Останні години. Земля мчить уже сотні кілометрів за секунду — і зникає в Сонці. Для Сонця це навіть не крапля: воно в 333 000 разів важче." },
+      { title: "65 днів", shot: { mode: "sun", dk: 1.15 }, rate: 6, min: 12, end: true,
+        text: "Від зупинки до удару минуло б близько 65 днів. На щастя, Земля не може просто зупинитися: немає сили, здатної загальмувати планету. Тож вона летить далі — як і 4,5 млрд років до нас." },
+    ],
+  };
+  const story = { on: false, key: "", i: 0, held: 0, after: 0, rate: 0, paused: false, ff: false, steps: null, wasHeld: false };
+  let storyMusic = null;
+  function storyMusicWanted() { return typeof tourMusicWanted === "undefined" ? true : tourMusicWanted; }
+  async function setStoryMusic(on) {
+    el("sbsSound").setAttribute("aria-pressed", String(on));
+    if (typeof createMusicPlayer !== "function") return;
+    if (on && !storyMusic) storyMusic = createMusicPlayer(createCinematicMusic);
+    if (storyMusic && storyMusic.on !== on) await storyMusic.toggle();
+  }
+  function startStory(key) {
+    if (!STORIES[key]) return;
+    setup(key);
+    story.on = true; story.key = key; story.steps = STORIES[key]; story.paused = false;
+    document.body.classList.add("storying");
+    el("sbStory").hidden = false;
+    requestAnimationFrame(() => el("sbStory").classList.add("show"));
+    el("sbStory").classList.remove("paused"); el("sbsPause").textContent = "❚❚";
+    setStoryMusic(storyMusicWanted());
+    storyStep(0);
+  }
+  function endStory(keepPlaying) {
+    if (!story.on) return;
+    story.on = false;
+    setStoryMusic(false);
+    document.body.classList.remove("storying");
+    el("sbStory").classList.remove("show"); el("sbStory").hidden = true;
+    endShot(false);
+    if (keepPlaying) { S.speed = 3; renderPanel(); }
+  }
+  function storyStep(i) {
+    const st = story.steps[i];
+    story.i = i; story.held = 0; story.after = 0; story.ff = false;
+    el("sbsCount").textContent = `${i + 1} / ${story.steps.length}`;
+    el("sbsTitle").textContent = st.title;
+    el("sbsText").textContent = st.text;
+    el("sbsNext").textContent = st.end ? "Інші сценарії" : "›";
+    el("sbsNext").setAttribute("aria-label", st.end ? "Інші сценарії" : "Далі");
+    el("sbsBar").style.transform = `scaleX(${i / (story.steps.length - 1)})`;
+    const sh = st.shot, b = get(sh.b || "sun");
+    startShot({ b, o: sh.o ? get(sh.o) : null, kind: "story", mode: sh.mode, dk: sh.dk });
+  }
+  // The pace of this frame (simulated days per real second).
+  function storyRate(st) {
+    if (st.rate !== undefined) return st.rate;
+    const e = get(st.shot.b), sun = get("sun");
+    if (!e || !e.alive) return 0.3;
+    const r = e.p.distanceTo(sun.p), v = Math.max(e.v.distanceTo(sun.v), 1e-6);
+    return Math.max(0.03, r / v / st.k);
+  }
+  // One frame of the story: the pace, the step's end, the camera. Returns simulated days to run.
+  function storyTick(dt) {
+    const st = story.steps[story.i];
+    if (!story.paused && !document.hidden) story.held += dt;
+    let want = story.paused ? 0 : storyRate(st) * (story.ff ? 6 : 1);
+    story.rate += (want - story.rate) * Math.min(1, dt * (want < story.rate ? 5 : 1.2));
+    const done = !st.until || st.until();
+    if (done && st.until) story.after += story.paused ? 0 : dt;
+    if (!st.end && story.held >= st.min && done && story.after >= (st.after || 0)) storyStep(story.i + 1);
+    // touching the scene hands the camera to the viewer for a while; then it glides back
+    const held = performance.now() < S.holdUntil;
+    if (held) { if (!story.wasHeld) controls.enabled = true; }
+    else {
+      if (story.wasHeld) { const s2 = story.steps[story.i].shot; startShot({ b: get(s2.b || "sun"), o: s2.o ? get(s2.o) : null, kind: "story", mode: s2.mode, dk: s2.dk }); }
+      shot.t += dt; frame(dt);
+    }
+    story.wasHeld = held;
+    const t = earthTemp();
+    el("sbsRead").textContent = `Минуло: ${S.days < 1 ? "0 діб" : years(S.days)}` + (t === null ? "" : ` · Земля: ${t > 0 ? "+" : t < 0 ? "−" : ""}${Math.abs(Math.round(t))} °C`);
+    return dt * story.rate;
   }
 
   /* ---------- Panel ---------- */
@@ -633,9 +747,11 @@ const sandbox = (() => {
     byId.sun.group.scale.setScalar(SUN_K);
     setup(key || "");
     if (state.index >= 0) showOverview();
+    if (STORIES[key]) startStory(key);
     try { history.replaceState(null, "", "#sandbox" + (S.scenario ? "-" + S.scenario : "")); } catch (e) { /* not allowed here */ }
   }
   function close() {
+    endStory(false);
     endShot(false);
     S.on = false;
     document.body.classList.remove("sandboxing");
@@ -655,7 +771,7 @@ const sandbox = (() => {
   // One frame: run the physics, then put the bodies where it says. Returns the moons' clock for placeAll.
   function step(dt) {
     direct(dt);
-    const days = state.paused ? 0 : dt * SPEEDS[S.speed][0] * S.slow;
+    const days = story.on ? storyTick(dt) : state.paused ? 0 : dt * SPEEDS[S.speed][0] * S.slow;
     advance(days);
     watch();
     for (const b of S.bodies) {
@@ -677,8 +793,8 @@ const sandbox = (() => {
     el("sbClose").addEventListener("click", close);
     el("sbReset").addEventListener("click", () => setup(S.scenario));
     document.querySelectorAll("#sbScenes button").forEach(b => b.addEventListener("click", () => {
-      const k = b.dataset.s === S.scenario ? "" : b.dataset.s;
-      setup(k);
+      const k = b.dataset.s === S.scenario && !STORIES[b.dataset.s] ? "" : b.dataset.s;
+      if (STORIES[k]) startStory(k); else setup(k);
       try { history.replaceState(null, "", "#sandbox" + (k ? "-" + k : "")); } catch (e) { /* not allowed here */ }
     }));
     // Time: one step per tap (no slider to overshoot); ❚❚ stops it and ▶ goes on at the speed it had.
@@ -692,6 +808,24 @@ const sandbox = (() => {
     el("sbDirector").addEventListener("click", () => { S.director = !S.director; S.holdUntil = 0; renderPanel(); });
     canvas.addEventListener("pointerdown", () => { if (S.on) S.holdUntil = performance.now() + 12000; });
     canvas.addEventListener("wheel", () => { if (S.on) S.holdUntil = performance.now() + 12000; }, { passive: true });
+    el("sbsClose").addEventListener("click", () => endStory(true));
+    el("sbsAgain").addEventListener("click", () => startStory(story.key));
+    el("sbsNext").addEventListener("click", () => {
+      const st = story.steps[story.i];
+      if (st.end) { endStory(false); setup(""); showOverview(); return; }
+      if (!st.until || story.held < st.min && st.until()) storyStep(story.i + 1);   // nothing to wait for: go on
+      else story.ff = true;                                                       // let time run fast to the event
+    });
+    el("sbsPause").addEventListener("click", () => {
+      story.paused = !story.paused;
+      el("sbsPause").textContent = story.paused ? "▶" : "❚❚";
+      el("sbStory").classList.toggle("paused", story.paused);
+    });
+    el("sbsSound").addEventListener("click", () => {
+      const on = el("sbsSound").getAttribute("aria-pressed") !== "true";
+      if (typeof tourMusicWanted !== "undefined") { tourMusicWanted = on; try { localStorage.setItem(TOUR_MUSIC_KEY, on ? "1" : "0"); } catch (e) { /* not saved */ } }
+      setStoryMusic(on);
+    });
     el("sbFold").addEventListener("click", () => {
       const min = el("sandbox").classList.toggle("min");
       el("sbFold").setAttribute("aria-expanded", String(!min));
@@ -700,5 +834,5 @@ const sandbox = (() => {
   };
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", wire); else wire();
 
-  return { get on() { return S.on; }, open, close, step, toScene: sbToScene, scenarios: Object.keys(SCENARIOS), _state: S, _shot: shot };   // _state: for tests
+  return { get on() { return S.on; }, open, close, step, toScene: sbToScene, scenarios: Object.keys(SCENARIOS), _state: S, _shot: shot, _story: story };   // _state: for tests
 })();
