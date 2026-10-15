@@ -231,9 +231,12 @@ const sandbox = (() => {
       const arr = line.geometry.attributes.position.array, ca = line.geometry.attributes.color.array, c = line.userData.col;
       // the trail fades toward its tail; in a story the planet in the shot keeps a bright one, the rest step back
       const lead = story.on && (shot.on && shot.b && shot.b.id === b.id || (story.steps[story.i].hl || []).includes(b.id)), top = !story.on ? 0.7 : lead ? 1 : 0.32, n = tr.length;
-      for (let k = 0; k < n; k++) {
+      // fades along its length (the last ~70 scene units), however fast time runs
+      let along = 0;
+      for (let k = n - 1; k >= 0; k--) {
         arr[k * 3] = tr[k].x; arr[k * 3 + 1] = tr[k].y; arr[k * 3 + 2] = tr[k].z;
-        const f = Math.max(0, 1 - (n - 1 - k) / 320);   // the last few hundred points; older ones fade out
+        if (k < n - 1) along += tr[k].distanceTo(tr[k + 1]);
+        const f = Math.max(0, 1 - along / 70);
         ca[k * 4] = c.r; ca[k * 4 + 1] = c.g; ca[k * 4 + 2] = c.b; ca[k * 4 + 3] = top * f * f;
       }
       line.geometry.attributes.position.needsUpdate = true; line.geometry.attributes.color.needsUpdate = true;
