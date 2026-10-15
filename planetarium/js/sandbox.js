@@ -73,6 +73,8 @@ const sandbox = (() => {
     let n = 0;
     while (S.t < S.days && n < 4000) {
       const h = stepSize();
+      S.t0 = S.t;
+      for (const b of S.bodies) { (b.p0 || (b.p0 = V())).copy(b.p); (b.v0 || (b.v0 = V())).copy(b.v); }
       for (const b of S.bodies) if (b.alive) b.v.addScaledVector(b.a, h / 2);
       for (const b of S.bodies) if (b.alive) b.p.addScaledVector(b.v, h);
       accel();
@@ -82,8 +84,15 @@ const sandbox = (() => {
     }
     if (S.t < S.days) S.days = S.t;                 // too much for one frame: time waits for the physics
   }
-  // Where a body is shown now (AU): its physics place moved back by the lag between the two clocks.
-  const shown = (b, out) => out.copy(b.p).addScaledVector(b.v, -(S.t - S.days));
+  // Where a body is shown now (AU): on the smooth curve (cubic Hermite, from place and speed at both ends) through the
+  // last physics step, at the shown clock — so a planet swinging round another moves smoothly, not in jumps.
+  const shown = (b, out) => {
+    const H = S.t - S.t0;
+    if (!b.p0 || !(H > 0) || S.days >= S.t) return out.copy(b.p);
+    const u = Math.min(1, Math.max(0, (S.days - S.t0) / H)), u2 = u * u, u3 = u2 * u;
+    return out.copy(b.p0).multiplyScalar(2 * u3 - 3 * u2 + 1).addScaledVector(b.v0, (u3 - 2 * u2 + u) * H)
+      .addScaledVector(b.p, -2 * u3 + 3 * u2).addScaledVector(b.v, (u3 - u2) * H);
+  };
   const tLag = new THREE.Vector3();
   // Two bodies closer than this (AU) merge: a planet into a star, or the lighter planet into the heavier one.
   const HIT = { star: 0.006, planet: 0.004 };
@@ -147,7 +156,7 @@ const sandbox = (() => {
     const start = fixed && STORY_START[key];
     if (start) S.jd0 = start.jd;
     S.bodies = start ? start.bodies.map(([id, m, p, v]) => body(id, m, V().fromArray(p), V().fromArray(v))) : realStart(S.jd0);
-    S.days = 0; S.t = 0; S.events.clear(); S.hits.length = 0; clearBooms(); hideShells();
+    S.days = 0; S.t = 0; S.t0 = 0; S.events.clear(); S.hits.length = 0; clearBooms(); hideShells();
     S.log.length = 0; S.slow = 1; S.cool = {}; endShot(false); renderLog();
     const sun = get("sun"), earth = get("earth"), jup = get("jupiter");
     if (start) { /* already set */ } else if (key === "two-suns") {
