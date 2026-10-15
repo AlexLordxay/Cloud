@@ -403,7 +403,7 @@ const sandbox = (() => {
       ease(sh.u.dry, b.id === "earth" ? ramp(T, 330, 520) : 0, 2);
       ease(sh.u.crack, sh.gas ? 0 : ramp(T, 600, 1100), 2);
       ease(sh.u.melt, sh.gas ? ramp(T, 700, 1800) : ramp(T, 1100, 1700), 2);
-      ease(sh.u.frost, !ROCKY.includes(b.id) ? 0 : S.scenario === "no-sun" ? ramp(S.days, 5, 400) : S.scenario === "jupiter-earth" && b.id === "earth" ? ramp(S.days, 60, 3000) : ramp(-T, -175, -55), 1.5);
+      ease(sh.u.frost, !ROCKY.includes(b.id) ? 0 : S.scenario === "no-sun" ? ramp(S.days, 5, 400) : S.scenario === "jupiter-earth" && b.id === "earth" ? ramp(S.days, 30, 700) : ramp(-T, -175, -55), 1.5);
       sh.u.flash.value = sh.flash;
       ease(sh.u.dark, starless() ? 0.7 : 0, 1.2);
       sh.u.time.value += dt;
