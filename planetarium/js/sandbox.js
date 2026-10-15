@@ -644,6 +644,7 @@ const sandbox = (() => {
   // Each step has its text, its shot and its pace, and ends on an event (the Earth is this close, it is gone), not on a
   // timer — so the words always match what is on the screen. Pace: "rate" simulated days per real second, or "k": the
   // time left to the event shrinks e times every k real seconds (fast while far, slow at the end). "min": seconds to read.
+  const Y = 365.25;
   const rSun = id => { const b = get(id); return b && b.alive ? b.p.distanceTo(get("sun").p) : 0; };
   const STORIES = {
     "two-suns": [
