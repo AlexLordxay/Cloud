@@ -117,6 +117,8 @@ const sandbox = (() => {
     }
   }
   function years(d) {
+    if (d < 1 / 24) { const m = Math.max(1, Math.round(d * 1440)); return `${m} ${plural(m, ["хвилину", "хвилини", "хвилин"])}`; }
+    if (d < 1) { const h = Math.round(d * 24); return `${h} ${plural(h, ["годину", "години", "годин"])}`; }
     if (d < 60) return `${Math.max(1, Math.round(d))} ${plural(Math.max(1, Math.round(d)), ["добу", "доби", "діб"])}`;
     if (d < 730) return `${Math.round(d / 30.44)} ${plural(Math.round(d / 30.44), ["місяць", "місяці", "місяців"])}`;
     const y = Math.round(d / 365.25);
@@ -147,8 +149,9 @@ const sandbox = (() => {
   /* ---------- Scenarios ---------- */
   // A story starts from one fixed moment (the bodies' exact places and speeds), so its future is always the same and
   // the words can be written for it. "two-suns": the system of 1 September 2026 with the second Sun already added;
-  // "heavy-sun": the same day, the Sun twice as heavy.
+  // "heavy-sun": the same day, the Sun twice as heavy; "no-sun": the same day, the Sun gone.
   const STORY_START = {
+    "no-sun": {"jd":2461284.5,"bodies":[["sun",0,[0,0,0],[0,0,0]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.009067121410422596,-0.0013533878243529099,0.026736150795543694]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.01623758698677691,-0.0007747289772347885,-0.011804427963593489]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.006103149325228707,-9.606720727967957e-07,-0.015911724344803146]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.012617947830879106,0.00043480529313185204,-0.005983355099650645]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.0059818921752397,0.0001520486531615614,0.004375334065029435]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.0012562785245968655,-4.529654143409223e-05,-0.0054832253119529994]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0035113982721561854,5.15837649088316e-05,-0.0016441978961339032]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.00015515841646518425,-6.139143961414462e-05,-0.003154704488425253]]]},
     "heavy-sun": {"jd":2461284.5,"bodies":[["sun",2,[0,0,0],[0,0,0]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.009067121410422596,-0.0013533878243529099,0.026736150795543694]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.01623758698677691,-0.0007747289772347885,-0.011804427963593489]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.006103149325228707,-9.606720727967957e-07,-0.015911724344803146]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.012617947830879106,0.00043480529313185204,-0.005983355099650645]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.0059818921752397,0.0001520486531615614,0.004375334065029435]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.0012562785245968655,-4.529654143409223e-05,-0.0054832253119529994]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0035113982721561854,5.15837649088316e-05,-0.0016441978961339032]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.00015515841646518425,-6.139143961414462e-05,-0.003154704488425253]]]},
     "two-suns": {"jd":2461284.5,"bodies":[["sun",1,[0,0,0],[-0.0031571457238594816,0,-0.002367859292894611]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.012224267134282077,-0.0013533878243529099,0.024368291502649082]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.013080441262917427,-0.0007747289772347885,-0.0141722872564881]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.0029460036013692257,-9.606720727967957e-07,-0.018279583637697758]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.01577509355473859,0.00043480529313185204,-0.008351214392545256]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.009139037899099181,0.0001520486531615614,0.002007474772134824]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.004413424248456347,-4.529654143409223e-05,-0.00785108460484761]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0066685439960156665,5.15837649088316e-05,-0.0040120571890285145]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.003312304140324666,-6.139143961414462e-05,-0.005522563781319864]],["sun2",1,[-5.7,0,7.6000000000000005],[0.0031571457238594816,0,0.002367859292894611]]]},
   };
@@ -178,7 +181,7 @@ const sandbox = (() => {
       earth.v.set(0, 0, 0);
     }
     accel();
-    for (const b of S.bodies) b.trail.length = 0;
+    for (const b of S.bodies) { b.trail.length = 0; b.r0 = b.p.length(); }
     S.speed = SCENARIOS[key] ? SCENARIOS[key].speed : 5;
     if (S.sun2) S.sun2.visible = key === "two-suns";
     renderPanel();
@@ -263,6 +266,7 @@ const sandbox = (() => {
   function earthTemp() {
     const e = get("earth");
     if (!e.alive) return null;
+    if (S.scenario === "no-sun") return cooled(288) - 273;
     let flux = 0;
     for (const s of S.bodies) if (isStar(s) && s.alive && s.m > 0) flux += Math.pow(s.m, 3.5) / Math.max(e.p.distanceToSquared(s.p), 1e-6);
     return flux <= 0 ? -270 : Math.max(-270, 288 * Math.pow(flux, 0.25) - 273);
@@ -270,7 +274,18 @@ const sandbox = (() => {
 
   /* ---------- Effects: heat, frost, explosions ---------- */
   // A body's temperature (K) as a bare rock in the light it gets now: 278 K at 1 AU from one Sun; a star's light ∝ mass^3.5.
+  // Without any star a planet does not freeze at once: its air, oceans and rock hold heat. Earth: below zero within a
+  // week, about −70 °C after a year, −240 °C only after a million years (an interpolation in log time); others alike.
+  const COOL = [[0, 0], [0.006, 0], [7, 0.125], [60, 0.24], [365, 0.345], [3650, 0.45], [1e5, 0.65], [1e6, 1]];
+  function cooled(T0) {
+    const d = S.days; let k = 1;
+    while (k < COOL.length - 1 && d > COOL[k][0]) k++;
+    const [d0, g0] = COOL[k - 1], [d1, g1] = COOL[k];
+    const f = d <= d0 ? 0 : Math.min(1, Math.log((d + 1e-3) / (d0 + 1e-3)) / Math.log((d1 + 1e-3) / (d0 + 1e-3)));
+    return T0 - (T0 - 33) * (g0 + (g1 - g0) * f);
+  }
   function tempK(b) {
+    if (S.scenario === "no-sun") return cooled(278 / Math.sqrt(b.r0 || 1));
     let flux = 0;
     for (const s of S.bodies) if (isStar(s) && s.alive && s.m > 0 && s !== b) flux += Math.pow(s.m, 3.5) / Math.max(b.p.distanceToSquared(s.p), 1e-8);
     return 278 * Math.pow(flux, 0.25);
@@ -288,13 +303,13 @@ const sandbox = (() => {
     tailTex = glowSprite("255,255,255", 1, 1).material.map;
     for (const id of ID.slice(1)) {
       const B = byId[id], gas = !ROCKY.includes(id);
-      const u = { dry: { value: 0 }, crack: { value: 0 }, melt: { value: 0 }, frost: { value: 0 }, flash: { value: 0 },
+      const u = { dry: { value: 0 }, crack: { value: 0 }, melt: { value: 0 }, frost: { value: 0 }, flash: { value: 0 }, dark: { value: 0 },
         time: { value: Math.random() * 50 }, sunDir: { value: new THREE.Vector3(1, 0, 0) } };
       const m = new THREE.Mesh(new THREE.SphereGeometry(B.radius * 1.018, 96, 64), new THREE.ShaderMaterial({
         uniforms: u, transparent: true, depthWrite: false, defines: gas ? { GAS: 1 } : {},
         vertexShader: `varying vec3 vN; varying vec3 vW; varying vec3 vP;
           void main(){ vP = normalize(position); vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-        fragmentShader: NOISE_GLSL + `uniform float dry; uniform float crack; uniform float melt; uniform float frost; uniform float flash; uniform float time; uniform vec3 sunDir;
+        fragmentShader: NOISE_GLSL + `uniform float dry; uniform float crack; uniform float melt; uniform float frost; uniform float flash; uniform float dark; uniform float time; uniform vec3 sunDir;
           varying vec3 vN; varying vec3 vW; varying vec3 vP;
           void main(){
             vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
@@ -336,9 +351,11 @@ const sandbox = (() => {
             col += vec3(1.0, 0.4, 0.08) * (hotRim * 1.5 + flash * 2.0);
             a = max(a, max(hotRim, flash));
             // frost in the cold (rocky planets)
-            float fa = frost * smoothstep(0.62 - 0.5 * frost, 0.7 - 0.45 * frost, n) * 0.9;
+            float fa = frost * smoothstep(0.62 - 0.75 * frost, 0.7 - 0.55 * frost, n);   // deep cold: ice everywhere
             col = mix(col, vec3(0.88, 0.94, 1.0) * (0.25 + 0.75 * lit), fa);
             a = max(a, fa);
+            // no star at all: only starlight — the planet all but goes out
+            col *= 1.0 - dark; a += dark * (1.0 - a);
             a = clamp(a, 0.0, 1.0);
             gl_FragColor = vec4(col / max(a, 1e-3), a);
           }`,
@@ -352,12 +369,17 @@ const sandbox = (() => {
       tail.frustumCulled = false; tail.visible = false; scene.add(tail);
       const seeds = Array.from({ length: NT }, () => [Math.random(), Math.random() * 2 - 1, Math.random() * 2 - 1, 0.6 + Math.random() * 0.8]);
       // the Earth's blue air glow goes with the oceans
-      const air = id === "earth" ? B.tiltGroup.children.filter(c => c !== m && c.material && c.material.blending === THREE.AdditiveBlending) : [];
+      // (and every rocky planet's air glow goes out when no star is left to light it)
+      const air = ROCKY.includes(id) ? B.tiltGroup.children.filter(c => c !== m && c.material && c.material.blending === THREE.AdditiveBlending) : [];
       S.shells[id] = { m, u, glow, tail, seeds, flash: 0, gas, air };
     }
   }
+  // No star shines any more (its last light, 8 minutes on the way, has passed too).
+  const starless = () => S.days > 0.006 && !S.bodies.some(s => isStar(s) && s.alive && s.m > 0);
   const tSun = V(), tOff = V(), tSide = V(), tUp = V();
   function shells(dt) {
+    // the Sun's light goes out with it (moons and other plain surfaces)
+    if (typeof sunLight !== "undefined") sunLight.intensity += ((starless() ? 0.12 : 1.7) - sunLight.intensity) * Math.min(1, dt * 1.2);
     for (const b of S.bodies) {
       const sh = S.shells[b.id];
       if (!sh) continue;
@@ -367,21 +389,22 @@ const sandbox = (() => {
       ease(sh.u.dry, b.id === "earth" ? ramp(T, 330, 520) : 0, 2);
       ease(sh.u.crack, sh.gas ? 0 : ramp(T, 600, 1100), 2);
       ease(sh.u.melt, sh.gas ? ramp(T, 700, 1800) : ramp(T, 1100, 1700), 2);
-      ease(sh.u.frost, ROCKY.includes(b.id) ? ramp(-T, -175, -55) : 0, 1.5);
+      ease(sh.u.frost, !ROCKY.includes(b.id) ? 0 : S.scenario === "no-sun" ? ramp(S.days, 5, 400) : ramp(-T, -175, -55), 1.5);
       sh.u.flash.value = sh.flash;
+      ease(sh.u.dark, starless() ? 0.9 : 0, 1.2);
       sh.u.time.value += dt;
       // the brightest star lights the shell
       let best = null, bf = 0;
       for (const s of S.bodies) if (isStar(s) && s.alive && s.m > 0) { const f = Math.pow(s.m, 3.5) / Math.max(b.p.distanceToSquared(s.p), 1e-8); if (f > bf) { bf = f; best = s; } }
       if (best) sh.u.sunDir.value.copy(scenePos(best, tSun)).sub(B.world).normalize();
-      const u = sh.u, any = u.dry.value + u.crack.value + u.melt.value + u.frost.value + u.flash.value;
+      const u = sh.u, any = u.dry.value + u.crack.value + u.melt.value + u.frost.value + u.flash.value + u.dark.value;
       sh.m.visible = b.alive && any > 0.01;
       const heat = Math.max(u.crack.value * 0.6, u.melt.value, u.flash.value);
       sh.glow.visible = b.alive && heat > 0.03;
       sh.glow.material.opacity = 0.55 * heat;
       // the Earth's clouds burn away as it dries
       if (b.id === "earth" && typeof earthClouds !== "undefined" && earthClouds) earthClouds.visible = !b.alive || u.dry.value < 0.4;
-      for (const c of sh.air) c.visible = u.dry.value < 0.5 && u.crack.value < 0.3;
+      for (const c of sh.air) c.visible = u.dry.value < 0.5 && u.crack.value < 0.3 && u.dark.value < 0.3;
       // the vapour tail
       const tk = b.alive && best ? ramp(T, 850, 1600) : 0;
       sh.tail.visible = tk > 0.01;
@@ -400,7 +423,7 @@ const sandbox = (() => {
     }
   }
   function hideShells() {
-    for (const id in S.shells) { const sh = S.shells[id]; sh.m.visible = sh.glow.visible = sh.tail.visible = false; sh.flash = 0; for (const k of ["dry", "crack", "melt", "frost", "flash"]) sh.u[k].value = 0; }
+    for (const id in S.shells) { const sh = S.shells[id]; sh.m.visible = sh.glow.visible = sh.tail.visible = false; sh.flash = 0; for (const k of ["dry", "crack", "melt", "frost", "flash", "dark"]) sh.u[k].value = 0; }
     if (typeof earthClouds !== "undefined" && earthClouds) earthClouds.visible = true;
     for (const id in S.shells) for (const c of S.shells[id].air) c.visible = true;
   }
@@ -699,6 +722,20 @@ const sandbox = (() => {
   const Y = 365.25;
   const rSun = id => { const b = get(id); return b && b.alive ? b.p.distanceTo(get("sun").p) : 0; };
   const STORIES = {
+    "no-sun": [
+      { title: "Сонце зникло", shot: { mode: "sun", dk: 1.6 }, rate: 0.0006, min: 11, until: () => S.days > 0.0058, after: 2,
+        text: "Уяви: Сонце зникло. Не вибухнуло — просто зникло. Перші 8 хвилин на Землі нічого не змінюється: світло, яке вже в дорозі, ще летить до нас. А потім — темрява." },
+      { title: "Темрява", shot: { b: "earth", o: "sun", dk: 1.4 }, rate: 0.6, min: 12, until: () => S.days > 7,
+        text: "Ніщо більше не тримає Землю — вона летить по прямій, туди, куди мчала тієї миті, 30 км/с. Місяць не відстає: він і далі кружляє навколо неї. За тиждень на всій планеті мороз." },
+      { title: "Холод", shot: { b: "earth", o: "sun", dk: 1.4 }, rate: 30, min: 12, until: () => S.days > 365,
+        text: "За рік температура падає до −70 °C. Океани вкриваються кригою, повітря завмирає. Але під кригою вода лишиться рідкою ще тисячі років: Земля гріє себе зсередини." },
+      { title: "Розліт", shot: { mode: "sun", dk: 90 }, hl: ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"], rate: 365, min: 12, until: () => S.days > 12 * Y,
+        text: "Планети розлітаються, кожна своєю прямою. Меркурій найшвидший — 47 км/с, Нептун ледь повзе — 5 км/с. Вони вже ніколи не зустрінуться." },
+      { title: "Далеко від усіх", shot: { b: "earth", o: "sun", dk: 1.6 }, rate: 700, min: 12,
+        text: "До відстані найближчої зорі, Проксими Центавра, Земля долетіла б лише за 40 тисяч років. І весь цей час — без жодного променя тепла." },
+      { title: "Планета-сирота", shot: { mode: "sun", dk: 120 }, rate: 1500, min: 12, end: true,
+        text: "У нашій Галактиці мільярди таких планет-сиріт — без зорі, у вічній темряві. Тепер Земля — одна з них." },
+    ],
     "heavy-sun": [
       { title: "Сонце вдвічі важче", shot: { mode: "sun", dk: 1.8 }, rate: 3, min: 9,
         text: "Уяви: Сонце раптом стало вдвічі масивнішим. Така зоря світить в 11 разів яскравіше, а тягне вдвічі сильніше. Планети летять надто повільно для нової сили тяжіння." },
@@ -888,6 +925,7 @@ const sandbox = (() => {
     S.sun2.visible = false;
     hideShells(); clearBooms();
     byId.sun.group.scale.setScalar(1);
+    if (typeof sunLight !== "undefined") sunLight.intensity = 1.7;
     for (const id of ID.slice(1)) { byId[id].sbScale = 1; byId[id].group.scale.setScalar(1); }
     for (const b of BODIES) {
       if (b.orbitLine) b.orbitLine.visible = state.orbits;
@@ -907,7 +945,7 @@ const sandbox = (() => {
       if (b.id === "sun2") { scenePos(b, S.sun2.position); S.sun2.visible = b.alive; continue; }
       if (!B) continue;
       if (b.id !== "sun") { B.group.visible = b.alive; shown(b, tRel).sub(shown(get("sun"), tLag)); B.simAU = tRel.clone(); }
-      else B.group.visible = b.m > 0;
+      else B.group.visible = b.m > 0 || S.days < 0.0058;   // gone, but its last light is still on the way for 8 minutes
     }
     shrinkClose(dt);
     drawTrails();
