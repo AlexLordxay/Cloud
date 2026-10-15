@@ -224,7 +224,7 @@ const sandbox = (() => {
       const lead = story.on && (shot.on && shot.b && shot.b.id === b.id || (story.steps[story.i].hl || []).includes(b.id)), top = !story.on ? 0.7 : lead ? 1 : 0.32, n = tr.length;
       for (let k = 0; k < n; k++) {
         arr[k * 3] = tr[k].x; arr[k * 3 + 1] = tr[k].y; arr[k * 3 + 2] = tr[k].z;
-        const f = (k + 1) / n;
+        const f = Math.max(0, 1 - (n - 1 - k) / 320);   // the last few hundred points; older ones fade out
         ca[k * 4] = c.r; ca[k * 4 + 1] = c.g; ca[k * 4 + 2] = c.b; ca[k * 4 + 3] = top * f * f;
       }
       line.geometry.attributes.position.needsUpdate = true; line.geometry.attributes.color.needsUpdate = true;
