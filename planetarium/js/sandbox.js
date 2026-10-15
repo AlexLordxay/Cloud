@@ -81,6 +81,7 @@ const sandbox = (() => {
       for (const b of S.bodies) if (b.alive) b.v.addScaledVector(b.a, h / 2);
       S.t += h; n++;
       collide();
+      if (S.trails) trailStep();
     }
     if (S.t < S.days) S.days = S.t;                 // too much for one frame: time waits for the physics
   }
@@ -184,13 +185,13 @@ const sandbox = (() => {
   }
 
   /* ---------- Look ---------- */
-  const TRAIL = 700;
+  const TRAIL = 1200;
   function makeTrails() {
     S.trails = {};
     for (const id of ID.concat("sun2")) {
       const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(TRAIL * 3), 3));
-      g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(TRAIL * 4), 4));   // rgb + fading alpha
+      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array((TRAIL + 1) * 3), 3));
+      g.setAttribute("color", new THREE.BufferAttribute(new Float32Array((TRAIL + 1) * 4), 4));   // rgb + fading alpha
       g.setDrawRange(0, 0);
       const col = new THREE.Color(id === "sun2" ? 0xffc070 : (byId[id] && byId[id].dot) || "#9fb2d8");
       const line = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false }));
@@ -220,17 +221,32 @@ const sandbox = (() => {
     return r0 + (sceneDist(0.05) - r0) * Math.log(au / R_SUN_AU) / Math.log(0.05 / R_SUN_AU);
   }
   function sbToScene(vAU, out) { const r = vAU.length(); return out.copy(vAU).multiplyScalar(r > 0 ? sbDist(r) / r : 0); }
+  // Trail points come from the physics steps (several per frame when time runs fast), so a fast orbit draws as a
+  // smooth curve rather than a polygon of one point per frame.
+  const tT = new THREE.Vector3(), tSunP = new THREE.Vector3();
+  function trailStep() {
+    const sun = get("sun");
+    for (const b of S.bodies) {
+      if (!b.alive || b.id === "sun") continue;
+      sbToScene(tT.copy(b.p).sub(sun.p), tSunP);
+      const tr = b.trail, last = tr[tr.length - 1];
+      if (!last || last.distanceToSquared(tSunP) > 0.04) { const q = tSunP.clone(); q.t = S.t; tr.push(q); if (tr.length > TRAIL) tr.shift(); }
+    }
+  }
   function drawTrails() {
     for (const b of S.bodies) {
       const line = S.trails[b.id];
       if (!line || b.id === "sun") continue;
       line.visible = b.alive;
       if (!b.alive) continue;
-      const p = scenePos(b, tS), tr = b.trail, last = tr[tr.length - 1];
-      if (!last || last.distanceToSquared(p) > 0.04) { tr.push(p.clone()); if (tr.length > TRAIL) tr.shift(); }
+      // the physics runs a step ahead: draw the points already reached, then end exactly at the planet
+      let m = b.trail.length;
+      while (m > 0 && b.trail[m - 1].t > S.days) m--;
+      const tr = b.trail.slice(0, m);
+      tr.push(scenePos(b, tS).clone());
       const arr = line.geometry.attributes.position.array, ca = line.geometry.attributes.color.array, c = line.userData.col;
       // the trail fades toward its tail; in a story the planet in the shot keeps a bright one, the rest step back
-      const lead = story.on && (shot.on && shot.b && shot.b.id === b.id || (story.steps[story.i].hl || []).includes(b.id)), top = !story.on ? 0.7 : lead ? 1 : 0.32, n = tr.length;
+      const lead = story.on && (shot.on && shot.b && shot.b.id === b.id || (story.steps[story.i].hl || []).includes(b.id) || story.steps[story.i].shot.b === b.id || story.steps[story.i].shot.o === b.id), top = !story.on ? 0.7 : lead ? 1 : 0.32, n = tr.length;
       // fades along its length (the last ~70 scene units), however fast time runs
       let along = 0;
       for (let k = n - 1; k >= 0; k--) {
@@ -690,11 +706,11 @@ const sandbox = (() => {
         text: "За 70 днів Земля падає втричі ближче до Сонця — і злітає назад. Уже зараз на ній +250 °C, а в найближчій точці понад +600 °C: океани википають, камінь світиться. Рік тепер триває 141 день." },
       { title: "Орбіти перетинаються", shot: { mode: "sun", dk: 1.8 }, hl: ["mercury", "venus", "earth", "mars"], rate: 40, min: 10, until: () => S.days > 640,
         text: "Усі кам'яні планети тепер на витягнутих орбітах, і ці орбіти перетинаються. Рано чи пізно хтось із кимось зустрінеться." },
-      { title: "Венера і Марс", shot: { mode: "meet", b: "mars", o: "venus", dk: 1 }, at: 668.36, k: 3, low: 0.15, max: 30, min: 11, until: () => S.days > 668.36, after: 3,
+      { title: "Венера і Марс", shot: { mode: "meet", b: "mars", o: "venus", dk: 1, wide: 1.7 }, at: 668.36, k: 3, low: 0.15, max: 30, min: 11, until: () => S.days > 668.36, after: 3,
         text: "Перша зустріч: Венера проноситься за 2,8 мільйона кілометрів від Марса — лише в 7 разів далі, ніж Місяць від Землі." },
-      { title: "Меркурій", shot: { mode: "meet", b: "mercury", o: "venus", dk: 1 }, at: 1531.3, k: 2.2, low: 0.1, max: 120, min: 12, until: () => !get("mercury").alive, after: 4,
+      { title: "Меркурій", shot: { mode: "meet", b: "mercury", o: "venus", dk: 1, wide: 1.7 }, at: 1531.3, k: 2.2, low: 0.1, max: 120, min: 12, until: () => !get("mercury").alive, after: 4,
         text: "Меркурій тепер підходить до Сонця втричі ближче, ніж раніше, і розжарюється до лави. Через 4 роки він врізається у Венеру на швидкості 60 км/с. Венера поглинає його." },
-      { title: "Земля і Венера", shot: { mode: "meet", b: "earth", o: "venus", dk: 1 }, at: 2497.16, k: 2.5, low: 0.2, max: 150, min: 11, until: () => S.days > 2497.16, after: 3,
+      { title: "Земля і Венера", shot: { mode: "meet", b: "earth", o: "venus", dk: 1, wide: 1.7 }, at: 2497.16, k: 2.5, low: 0.2, max: 150, min: 11, until: () => S.days > 2497.16, after: 3,
         text: "Ще за три роки вже Венера проноситься за 6 мільйонів кілометрів від Землі. Орбіти й далі перетинаються, і кожна така зустріч може стати останньою." },
       { title: "Нова система", shot: { mode: "sun", dk: 6 }, hl: ["jupiter", "earth"], rate: 30, min: 12, end: true,
         text: "Гіганти вціліли, але їхні орбіти теж витягнулися: Юпітер тепер підходить до Сонця майже так близько, як колись Марс. А Земля — розпечена кам'яна куля з роком у 141 день." },
@@ -709,7 +725,7 @@ const sandbox = (() => {
         text: "Юпітер, найважча з планет, переходить до другої зорі й тепер кружляє навколо неї. Але й там він не залишиться надовго." },
       { title: "Юпітер повертається", shot: { b: "jupiter", o: "sun", dk: 1.4 }, at: 7871.8, k: 5, low: 30, max: 300, min: 9, until: () => S.days > 7840,
         text: "Друга зоря відкидає Юпітер назад — просто у внутрішню частину системи, туди, де Марс, Земля й Венера." },
-      { title: "Земля", shot: { mode: "meet", b: "earth", o: "jupiter", dk: 1 }, at: 7871.8, k: 4, low: 0.25, max: 30, min: 12, until: () => S.days > 7871.8, after: 3,
+      { title: "Земля", shot: { mode: "meet", b: "earth", o: "jupiter", dk: 1, wide: 3 }, at: 7871.8, k: 4, low: 0.25, max: 30, min: 12, until: () => S.days > 7871.8, after: 3,
         text: "Юпітер пролітає повз Землю на відстані 7 мільйонів кілометрів — лише у 17 разів далі за Місяць. У нашому небі він удвічі більший за повний Місяць." },
       { title: "Нова орбіта Землі", shot: { b: "earth", o: "sun", dk: 1.6 }, rate: 40, min: 11, until: () => S.days > 23 * Y,
         text: "Земля вціліла, але її орбіта тепер витягнута: то 0,8, то 1 а. о. від Сонця. Коли вона найближче до Сонця, спека сягає +50 °C. А в небі — два сонця." },
@@ -775,8 +791,15 @@ const sandbox = (() => {
     el("sbsNext").textContent = st.end ? "Інші сценарії" : "›";
     el("sbsNext").setAttribute("aria-label", st.end ? "Інші сценарії" : "Далі");
     el("sbsBar").style.transform = `scaleX(${i / (story.steps.length - 1)})`;
-    const sh = st.shot, b = get(sh.b || "sun");
-    startShot({ b, o: sh.o ? get(sh.o) : null, kind: "story", mode: sh.mode, dk: sh.dk });
+    story.wide = st.shot.mode === "meet";                 // a meeting: the whole system while time runs fast
+    storyShot();
+  }
+  // The step's shot. Before a meeting, while time still runs fast, the planets would whirl round the Sun on screen:
+  // so the camera holds the whole system from above, and comes in to the two only once time has slowed for it.
+  function storyShot() {
+    const sh = story.steps[story.i].shot;
+    if (story.wide) return startShot({ b: get("sun"), o: null, kind: "story", mode: "sun", dk: sh.wide || 2 });
+    startShot({ b: get(sh.b || "sun"), o: sh.o ? get(sh.o) : null, kind: "story", mode: sh.mode, dk: sh.dk });
   }
   // The pace of this frame (simulated days per real second).
   function storyRate(st) {
@@ -800,7 +823,8 @@ const sandbox = (() => {
     const held = performance.now() < S.holdUntil;
     if (held) { if (!story.wasHeld) controls.enabled = true; }
     else {
-      if (story.wasHeld) { const s2 = story.steps[story.i].shot; startShot({ b: get(s2.b || "sun"), o: s2.o ? get(s2.o) : null, kind: "story", mode: s2.mode, dk: s2.dk }); }
+      if (story.wide && story.rate < 6) { story.wide = false; storyShot(); }
+      if (story.wasHeld) storyShot();
       shot.t += dt; frame(dt);
     }
     story.wasHeld = held;
