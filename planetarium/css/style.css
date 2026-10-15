@@ -416,3 +416,5 @@ body.storying #sandbox { display: none !important; }
 #sbsSound[aria-pressed="true"] { color: var(--sun); }
 #sbsNext { min-width: 44px; width: auto; padding: 0 14px; }
 .sb-story-btn { border-color: rgba(243,185,100,0.5) !important; color: var(--sun) !important; }
+/* What it means for people on the Earth, under the story's text */
+.sb-story p.sb-life { margin: 8px 0 0; min-height: 0; padding: 7px 10px; border-radius: 10px; font-size: 13px; line-height: 1.4; color: #f1d9ad; background: rgba(243,185,100,0.09); border: 1px solid rgba(243,185,100,0.22); }
