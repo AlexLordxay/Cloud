@@ -573,8 +573,10 @@ const sandbox = (() => {
     const pr = B && shot.b.id !== "sun" ? B.radius * (B.sbScale || 1) : isStar(shot.b) ? byId.sun.radius * SUN_K : 1;
     if (shot.mode === "sun") {
       scenePos(get("sun"), sP);
-      const r = sbDist(shot.dk);
-      sC.set(0.75, 0.42, 0.52).normalize().multiplyScalar(r); sT.set(0, -r * 0.12, 0);
+      // far enough that a circle of dk AU fits the screen's narrower side (a phone held upright)
+      const r = sbDist(shot.dk), half = camera.fov * DEG / 2, narrow = Math.min(half, Math.atan(Math.tan(half) * camera.aspect));
+      const dist = r / Math.tan(narrow) * 0.9;
+      sC.set(0.75, 0.9, 0.52).normalize().multiplyScalar(dist); sT.set(0, -r * 0.25, 0);
       return glide(dt);
     }
     sDir.copy(sP).sub(sO); const gap = Math.max(sDir.length(), 1e-3); sDir.divideScalar(gap);
@@ -653,7 +655,7 @@ const sandbox = (() => {
       // the moments below come from this start's own future (the physics is the same every time)
       { title: "Друге Сонце", shot: { mode: "pair", b: "sun2", o: "sun", dk: 1.1 }, rate: 20, min: 10,
         text: "Уяви: там, де кружляє Сатурн, спалахує ще одна зоря — точно така, як Сонце. Тепер дві зорі обертаються одна навколо одної, а планети опиняються між двох вогнів." },
-      { title: "Гіганти тікають", shot: { mode: "sun", dk: 90 }, hl: ["saturn", "uranus", "neptune"], rate: 300, min: 12, until: () => S.days > 10 * Y,
+      { title: "Гіганти тікають", shot: { mode: "sun", dk: 45 }, hl: ["saturn", "uranus", "neptune"], rate: 300, min: 12, until: () => S.days > 10 * Y,
         text: "Сатурн, Уран і Нептун тепер тягнуть дві зорі одразу. Їхні орбіти розхитуються, і за кілька років усі троє йдуть у темряву між зорями. Більше вони не повернуться." },
       { title: "Юпітер", shot: { b: "jupiter", o: "sun2", dk: 1.4 }, rate: 220, min: 10, until: () => S.days > 14.6 * Y,
         text: "Юпітер, найважча з планет, переходить до другої зорі й тепер кружляє навколо неї. Але й там він не залишиться надовго." },
