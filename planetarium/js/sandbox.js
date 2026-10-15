@@ -219,7 +219,7 @@ const sandbox = (() => {
       if (!last || last.distanceToSquared(p) > 0.25) { tr.push(p.clone()); if (tr.length > TRAIL) tr.shift(); }
       const arr = line.geometry.attributes.position.array, ca = line.geometry.attributes.color.array, c = line.userData.col;
       // the trail fades toward its tail; in a story the planet in the shot keeps a bright one, the rest step back
-      const lead = story.on && shot.on && shot.b && shot.b.id === b.id, top = !story.on ? 0.7 : lead ? 1 : 0.32, n = tr.length;
+      const lead = story.on && (shot.on && shot.b && shot.b.id === b.id || (story.steps[story.i].hl || []).includes(b.id)), top = !story.on ? 0.7 : lead ? 1 : 0.32, n = tr.length;
       for (let k = 0; k < n; k++) {
         arr[k * 3] = tr[k].x; arr[k * 3 + 1] = tr[k].y; arr[k * 3 + 2] = tr[k].z;
         const f = (k + 1) / n;
@@ -570,7 +570,7 @@ const sandbox = (() => {
     if (shot.b.alive) { if (B && shot.b.id !== "sun") sP.copy(B.world); else scenePos(shot.b, sP); } // else: keep looking where it ended
     const o = shot.o || get("sun");                // torn loose: look back past it at the Sun it is leaving
     if (o && o.alive && o !== shot.b) scenePos(o, sO); else sO.set(0, 0, 0);
-    const pr = B && shot.b.id !== "sun" ? B.radius : isStar(shot.b) ? byId.sun.radius * SUN_K : 1;
+    const pr = B && shot.b.id !== "sun" ? B.radius * (B.sbScale || 1) : isStar(shot.b) ? byId.sun.radius * SUN_K : 1;
     if (shot.mode === "sun") {
       scenePos(get("sun"), sP);
       const r = sbDist(shot.dk);
@@ -580,9 +580,11 @@ const sandbox = (() => {
     sDir.copy(sP).sub(sO); const gap = Math.max(sDir.length(), 1e-3); sDir.divideScalar(gap);
     sSide.crossVectors(sDir, UP); if (sSide.lengthSq() < 1e-6) sSide.set(1, 0, 0); sSide.normalize();
     if (shot.mode === "pair") {
-      // between the two, nearer the planet; from the side and above, far enough for both
-      sT.copy(sDir).multiplyScalar(-gap * 0.42).addScaledVector(UP, -gap * 0.12);
-      sC.copy(sT).addScaledVector(sSide, gap * 0.95 * shot.dk).addScaledVector(UP, gap * 0.55 * shot.dk).addScaledVector(sDir, gap * 0.25);
+      // both from high above, looking along the line between them, so on a tall phone screen they stand one above the
+      // other (the screen is taller than wide); the middle sits a little high, clear of the card below
+      const half = gap * 0.5 + pr * 3, dist = half / Math.tan(camera.fov * DEG / 2) * 1.35 * shot.dk;
+      sT.copy(sDir).multiplyScalar(-gap * 0.5 + gap * 0.18);
+      sC.copy(sDir).multiplyScalar(0.38).addScaledVector(UP, 1).normalize().multiplyScalar(dist).add(sT);
       return glide(dt);
     }
     const d = pr * 11 * shot.dk;
@@ -651,7 +653,7 @@ const sandbox = (() => {
       // the moments below come from this start's own future (the physics is the same every time)
       { title: "Друге Сонце", shot: { mode: "pair", b: "sun2", o: "sun", dk: 1.1 }, rate: 20, min: 10,
         text: "Уяви: там, де кружляє Сатурн, спалахує ще одна зоря — точно така, як Сонце. Тепер дві зорі обертаються одна навколо одної, а планети опиняються між двох вогнів." },
-      { title: "Гіганти тікають", shot: { mode: "sun", dk: 26 }, rate: 300, min: 12, until: () => S.days > 10 * Y,
+      { title: "Гіганти тікають", shot: { mode: "sun", dk: 90 }, hl: ["saturn", "uranus", "neptune"], rate: 300, min: 12, until: () => S.days > 10 * Y,
         text: "Сатурн, Уран і Нептун тепер тягнуть дві зорі одразу. Їхні орбіти розхитуються, і за кілька років усі троє йдуть у темряву між зорями. Більше вони не повернуться." },
       { title: "Юпітер", shot: { b: "jupiter", o: "sun2", dk: 1.4 }, rate: 220, min: 10, until: () => S.days > 14.6 * Y,
         text: "Юпітер, найважча з планет, переходить до другої зорі й тепер кружляє навколо неї. Але й там він не залишиться надовго." },
@@ -661,7 +663,7 @@ const sandbox = (() => {
         text: "Юпітер пролітає повз Землю на відстані 7 мільйонів кілометрів — лише у 17 разів далі за Місяць. У нашому небі він удвічі більший за повний Місяць." },
       { title: "Нова орбіта Землі", shot: { b: "earth", o: "sun", dk: 1.6 }, rate: 40, min: 11, until: () => S.days > 23 * Y,
         text: "Земля вціліла, але її орбіта тепер витягнута: то 0,8, то 1 а. о. від Сонця. Коли вона найближче до Сонця, спека сягає +50 °C. А в небі — два сонця." },
-      { title: "Юпітер падає", shot: { b: "jupiter", o: "sun", dk: 1.3 }, at: 17411.6, k: 4, low: 0.3, max: 800, min: 12, until: () => S.days > 17411.6, after: 3,
+      { title: "Юпітер падає", shot: { b: "jupiter", o: "sun", dk: 1.3 }, at: 17411.6, k: 2.2, low: 0.3, max: 800, min: 12, until: () => S.days > 17411.6, after: 3,
         text: "Двадцять п'ять років Юпітер кидається між двома зорями. І нарешті пірнає просто до Сонця — у п'ять разів ближче, ніж літає Меркурій. Його хмари розжарюються." },
       { title: "Удар", shot: { b: "jupiter", o: "sun", dk: 1.2 }, at: 18679.7, k: 2.5, low: 0.3, max: 500, min: 12, until: () => !get("jupiter").alive, after: 4,
         text: "Ще три з половиною роки витягнутої орбіти — і Юпітер падає на Сонце. Планета, у 318 разів важча за Землю, зникає в ньому. А Сонце стає важчим лише на тисячну частку." },
@@ -811,6 +813,7 @@ const sandbox = (() => {
     S.sun2.visible = false;
     hideShells(); clearBooms();
     byId.sun.group.scale.setScalar(1);
+    for (const id of ID.slice(1)) { byId[id].sbScale = 1; byId[id].group.scale.setScalar(1); }
     for (const b of BODIES) {
       if (b.orbitLine) b.orbitLine.visible = state.orbits;
       b.group.visible = true;
@@ -831,10 +834,26 @@ const sandbox = (() => {
       if (b.id !== "sun") { B.group.visible = b.alive; shown(b, tRel).sub(shown(get("sun"), tLag)); B.simAU = tRel.clone(); }
       else B.group.visible = b.m > 0;
     }
+    shrinkClose(dt);
     drawTrails();
     fireHits(); booms(dt); splashes(dt); shells(dt);
     readout();
     return { jd: S.jd0 + S.days, dDays: days, fine: days / Math.max(dt, 1e-3) <= 1 };
+  }
+
+  // Planets are drawn far bigger than their distances allow, so two that pass close would swallow each other on the
+  // screen. While they are close, both are drawn smaller (moons and glow with them), so the gap between them is seen.
+  const tA = new THREE.Vector3(), tB = new THREE.Vector3();
+  function shrinkClose(dt) {
+    const P = S.bodies.filter(b => b.alive && !isStar(b) && byId[b.id]);
+    for (const b of P) {
+      const B = byId[b.id];
+      let k = 1;
+      scenePos(b, tA);
+      for (const o of P) if (o !== b) k = Math.min(k, Math.max(0.12, scenePos(o, tB).distanceTo(tA) / ((B.radius + byId[o.id].radius) * 2.2)));
+      B.sbScale = (B.sbScale || 1) + (k - (B.sbScale || 1)) * Math.min(1, dt * 4);
+      B.group.scale.setScalar(B.sbScale);
+    }
   }
 
   // Wire the panel.
