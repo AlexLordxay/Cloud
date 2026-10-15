@@ -27,7 +27,7 @@ const sandbox = (() => {
     "stop-earth": { title: "Земля зупинилася", speed: 2,
       text: "Земля раптом зупинилася на своїй орбіті. Ніщо більше не відводить її вбік — і вона падає прямо на Сонце." },
   };
-  const S = { on: false, bodies: [], days: 0, speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
+  const S = { on: false, bodies: [], days: 0, t: 0, speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
   const V = () => new THREE.Vector3();
 
   function body(id, m, pos, vel) { return { id, m, p: pos, v: vel, a: V(), alive: true, trail: [] }; }
@@ -65,18 +65,26 @@ const sandbox = (() => {
     return Math.max(dt, 1e-4);
   }
   // Kick–drift–kick (leapfrog): energy stays honest over thousands of orbits.
+  // The physics clock S.t runs in whole steps whose size depends only on where the bodies are — never on the frame
+  // rate — so the same start always gives the same future (a story can be written for it). It runs a step ahead of
+  // the shown clock S.days, and the bodies are drawn moved back by that small lag along their velocity.
   function advance(days) {
-    let left = days, n = 0;
-    while (left > 1e-9 && n < 4000) {
-      const h = Math.min(left, stepSize());
+    S.days += days;
+    let n = 0;
+    while (S.t < S.days && n < 4000) {
+      const h = stepSize();
       for (const b of S.bodies) if (b.alive) b.v.addScaledVector(b.a, h / 2);
       for (const b of S.bodies) if (b.alive) b.p.addScaledVector(b.v, h);
       accel();
       for (const b of S.bodies) if (b.alive) b.v.addScaledVector(b.a, h / 2);
-      left -= h; S.days += h; n++;
+      S.t += h; n++;
       collide();
     }
+    if (S.t < S.days) S.days = S.t;                 // too much for one frame: time waits for the physics
   }
+  // Where a body is shown now (AU): its physics place moved back by the lag between the two clocks.
+  const shown = (b, out) => out.copy(b.p).addScaledVector(b.v, -(S.t - S.days));
+  const tLag = new THREE.Vector3();
   // Two bodies closer than this (AU) merge: a planet into a star, or the lighter planet into the heavier one.
   const HIT = { star: 0.006, planet: 0.004 };
   const isStar = b => b.id === "sun" || b.id === "sun2";
@@ -111,7 +119,7 @@ const sandbox = (() => {
     S.log.unshift(text);
     if (S.log.length > 5) S.log.pop();
     renderLog();
-    showToast(text, 3500);
+    if (!story.on) showToast(text, 3500);
   }
   // Planets that fly off: farther than 80 AU from the stars and faster than escape speed.
   function watch() {
@@ -127,13 +135,20 @@ const sandbox = (() => {
   }
 
   /* ---------- Scenarios ---------- */
-  function setup(key) {
+  // A story starts from one fixed moment (the bodies' exact places and speeds), so its future is always the same and
+  // the words can be written for it. "two-suns": the system of 1 September 2026 with the second Sun already added.
+  const STORY_START = {
+    "two-suns": {"jd":2461284.5,"bodies":[["sun",1,[0,0,0],[-0.0031571457238594816,0,-0.002367859292894611]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.012224267134282077,-0.0013533878243529099,0.024368291502649082]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.013080441262917427,-0.0007747289772347885,-0.0141722872564881]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.0029460036013692257,-9.606720727967957e-07,-0.018279583637697758]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.01577509355473859,0.00043480529313185204,-0.008351214392545256]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.009139037899099181,0.0001520486531615614,0.002007474772134824]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.004413424248456347,-4.529654143409223e-05,-0.00785108460484761]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0066685439960156665,5.15837649088316e-05,-0.0040120571890285145]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.003312304140324666,-6.139143961414462e-05,-0.005522563781319864]],["sun2",1,[-5.7,0,7.6000000000000005],[0.0031571457238594816,0,0.002367859292894611]]]},
+  };
+  function setup(key, fixed) {
     S.scenario = SCENARIOS[key] ? key : "";
-    S.bodies = realStart(S.jd0);
-    S.days = 0; S.events.clear(); S.hits.length = 0; clearBooms(); hideShells();
+    const start = fixed && STORY_START[key];
+    if (start) S.jd0 = start.jd;
+    S.bodies = start ? start.bodies.map(([id, m, p, v]) => body(id, m, V().fromArray(p), V().fromArray(v))) : realStart(S.jd0);
+    S.days = 0; S.t = 0; S.events.clear(); S.hits.length = 0; clearBooms(); hideShells();
     S.log.length = 0; S.slow = 1; S.cool = {}; endShot(false); renderLog();
     const sun = get("sun"), earth = get("earth"), jup = get("jupiter");
-    if (key === "two-suns") {
+    if (start) { /* already set */ } else if (key === "two-suns") {
       // An equal star 9.5 AU away; both circle their midpoint, and the planets keep moving round the first one.
       const a = 9.5, v = Math.sqrt(G * 2 / a);
       const dir = V().set(-0.6, 0, 0.8).normalize(), side = V().set(dir.z, 0, -dir.x);
@@ -164,21 +179,25 @@ const sandbox = (() => {
     for (const id of ID.concat("sun2")) {
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(TRAIL * 3), 3));
+      g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(TRAIL * 4), 4));   // rgb + fading alpha
       g.setDrawRange(0, 0);
-      const col = id === "sun2" ? 0xffc070 : (byId[id] && byId[id].dot) || "#9fb2d8";
-      const line = new THREE.Line(g, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.55 }));
+      const col = new THREE.Color(id === "sun2" ? 0xffc070 : (byId[id] && byId[id].dot) || "#9fb2d8");
+      const line = new THREE.Line(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false }));
+      line.userData.col = col;
       line.frustumCulled = false; line.visible = false;
       scene.add(line); S.trails[id] = line;
     }
     // the second Sun: a bright disc with the Sun's glow (no surface effects)
     const sun = byId.sun, g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(sun.radius * 0.95 * SUN_K, 48, 32), new THREE.MeshBasicMaterial({ color: 0xffe2b0 })));
+    // the same living surface as the Sun's own (its shader, shared), a touch smaller
+    const surf = typeof sunFx !== "undefined" && sunFx && sunFx.material ? sunFx.material : new THREE.MeshBasicMaterial({ color: 0xffe2b0 });
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(sun.radius * 0.95 * SUN_K, 64, 48), surf));
     g.add(glowSprite("255,170,90", sun.radius * 11 * SUN_K, 0.24));
     g.visible = false; scene.add(g); S.sun2 = g;
   }
   const tS = V(), tRel = V();
   // Scene position of a body: relative to the first Sun (it stays in the middle of the screen), on the site's distance scale.
-  function scenePos(b, out) { return sbToScene(tRel.copy(b.p).sub(get("sun").p), out); }
+  function scenePos(b, out) { return sbToScene(shown(b, tRel).sub(shown(get("sun"), tLag)), out); }
   // The sandbox's own distance scale: the site's beyond 0.05 AU, and inside it — where the site puts everything on the
   // Sun's surface — a log scale down to the Sun's real radius. With the Sun drawn at half size there, a close pass or a
   // fall into it can be seen instead of happening "inside" the Sun.
@@ -198,9 +217,15 @@ const sandbox = (() => {
       if (!b.alive) continue;
       const p = scenePos(b, tS), tr = b.trail, last = tr[tr.length - 1];
       if (!last || last.distanceToSquared(p) > 0.25) { tr.push(p.clone()); if (tr.length > TRAIL) tr.shift(); }
-      const arr = line.geometry.attributes.position.array;
-      for (let k = 0; k < tr.length; k++) { arr[k * 3] = tr[k].x; arr[k * 3 + 1] = tr[k].y; arr[k * 3 + 2] = tr[k].z; }
-      line.geometry.attributes.position.needsUpdate = true;
+      const arr = line.geometry.attributes.position.array, ca = line.geometry.attributes.color.array, c = line.userData.col;
+      // the trail fades toward its tail; in a story the planet in the shot keeps a bright one, the rest step back
+      const lead = story.on && shot.on && shot.b && shot.b.id === b.id, top = !story.on ? 0.7 : lead ? 1 : 0.32, n = tr.length;
+      for (let k = 0; k < n; k++) {
+        arr[k * 3] = tr[k].x; arr[k * 3 + 1] = tr[k].y; arr[k * 3 + 2] = tr[k].z;
+        const f = (k + 1) / n;
+        ca[k * 4] = c.r; ca[k * 4 + 1] = c.g; ca[k * 4 + 2] = c.b; ca[k * 4 + 3] = top * f * f;
+      }
+      line.geometry.attributes.position.needsUpdate = true; line.geometry.attributes.color.needsUpdate = true;
       line.geometry.setDrawRange(0, tr.length);
     }
   }
@@ -542,10 +567,10 @@ const sandbox = (() => {
   const sT = V(), sC = V(), sP = V(), sO = V(), sDir = V(), sSide = V(), UP = new THREE.Vector3(0, 1, 0);
   function frame(dt) {
     const B = byId[shot.b.id];
-    if (shot.b.alive && B) sP.copy(B.world); // else: keep looking where it ended
+    if (shot.b.alive) { if (B && shot.b.id !== "sun") sP.copy(B.world); else scenePos(shot.b, sP); } // else: keep looking where it ended
     const o = shot.o || get("sun");                // torn loose: look back past it at the Sun it is leaving
     if (o && o.alive && o !== shot.b) scenePos(o, sO); else sO.set(0, 0, 0);
-    const pr = B ? B.radius : 1;
+    const pr = B && shot.b.id !== "sun" ? B.radius : isStar(shot.b) ? byId.sun.radius * SUN_K : 1;
     if (shot.mode === "sun") {
       scenePos(get("sun"), sP);
       const r = sbDist(shot.dk);
@@ -577,7 +602,7 @@ const sandbox = (() => {
     shot.on = true; shot.t = 0; shot.b = ev.b; shot.o = ev.o; shot.kind = ev.kind; shot.keep = 0;
     shot.mode = ev.mode || "chase"; shot.dk = ev.dk || 1;
     const B = byId[ev.b.id];
-    if (shot.mode === "sun") scenePos(get("sun"), sP); else if (B && ev.b.alive) sP.copy(B.world); else if (ev.b.alive) scenePos(ev.b, sP);
+    if (shot.mode === "sun") scenePos(get("sun"), sP); else if (B && ev.b.id !== "sun" && ev.b.alive) sP.copy(B.world); else if (ev.b.alive) scenePos(ev.b, sP);
     shot.off.copy(camera.position).sub(sP); shot.aim.copy(controls.target).sub(sP);
     state.flight = null; state.mode = "overview"; state.index = -1;   // the sandbox drives the camera now
     controls.enabled = false;
@@ -621,6 +646,27 @@ const sandbox = (() => {
   // time left to the event shrinks e times every k real seconds (fast while far, slow at the end). "min": seconds to read.
   const rSun = id => { const b = get(id); return b && b.alive ? b.p.distanceTo(get("sun").p) : 0; };
   const STORIES = {
+    "two-suns": [
+      // the moments below come from this start's own future (the physics is the same every time)
+      { title: "Друге Сонце", shot: { mode: "pair", b: "sun2", o: "sun", dk: 1.1 }, rate: 20, min: 10,
+        text: "Уяви: там, де кружляє Сатурн, спалахує ще одна зоря — точно така, як Сонце. Тепер дві зорі обертаються одна навколо одної, а планети опиняються між двох вогнів." },
+      { title: "Гіганти тікають", shot: { mode: "sun", dk: 26 }, rate: 300, min: 12, until: () => S.days > 10 * Y,
+        text: "Сатурн, Уран і Нептун тепер тягнуть дві зорі одразу. Їхні орбіти розхитуються, і за кілька років усі троє йдуть у темряву між зорями. Більше вони не повернуться." },
+      { title: "Юпітер", shot: { b: "jupiter", o: "sun2", dk: 1.4 }, rate: 220, min: 10, until: () => S.days > 14.6 * Y,
+        text: "Юпітер, найважча з планет, переходить до другої зорі й тепер кружляє навколо неї. Але й там він не залишиться надовго." },
+      { title: "Юпітер повертається", shot: { b: "jupiter", o: "sun", dk: 1.4 }, at: 7871.8, k: 5, low: 30, max: 300, min: 9, until: () => S.days > 7840,
+        text: "Друга зоря відкидає Юпітер назад — просто у внутрішню частину системи, туди, де Марс, Земля й Венера." },
+      { title: "Земля", shot: { b: "earth", o: "jupiter", dk: 1.5 }, at: 7871.8, k: 4, low: 0.25, max: 30, min: 12, until: () => S.days > 7871.8, after: 3,
+        text: "Юпітер пролітає повз Землю на відстані 7 мільйонів кілометрів — лише у 17 разів далі за Місяць. У нашому небі він удвічі більший за повний Місяць." },
+      { title: "Нова орбіта Землі", shot: { b: "earth", o: "sun", dk: 1.6 }, rate: 40, min: 11, until: () => S.days > 23 * Y,
+        text: "Земля вціліла, але її орбіта тепер витягнута: то 0,8, то 1 а. о. від Сонця. Коли вона найближче до Сонця, спека сягає +50 °C. А в небі — два сонця." },
+      { title: "Юпітер падає", shot: { b: "jupiter", o: "sun", dk: 1.3 }, at: 17411.6, k: 4, low: 0.3, max: 800, min: 12, until: () => S.days > 17411.6, after: 3,
+        text: "Двадцять п'ять років Юпітер кидається між двома зорями. І нарешті пірнає просто до Сонця — у п'ять разів ближче, ніж літає Меркурій. Його хмари розжарюються." },
+      { title: "Удар", shot: { b: "jupiter", o: "sun", dk: 1.2 }, at: 18679.7, k: 2.5, low: 0.3, max: 500, min: 12, until: () => !get("jupiter").alive, after: 4,
+        text: "Ще три з половиною роки витягнутої орбіти — і Юпітер падає на Сонце. Планета, у 318 разів важча за Землю, зникає в ньому. А Сонце стає важчим лише на тисячну частку." },
+      { title: "Що лишилося", shot: { mode: "pair", b: "sun2", o: "sun", dk: 1.1 }, rate: 60, min: 12, end: true,
+        text: "За 51 рік із восьми планет лишилися чотири кам'яні: Меркурій, Венера, Земля й Марс. Тепер у їхньому небі два сонця, а гіганти блукають у темряві між зорями." },
+    ],
     "stop-earth": [
       { title: "Земля зупинилася", shot: { b: "earth", o: "sun", dk: 1.7 }, rate: 0.6, min: 8,
         text: "Уяви: Земля раптом зупинилася на своїй орбіті. Її швидкість — 30 км/с — щезла. Ніщо більше не несе її вбік, і Сонце починає тягнути її до себе." },
@@ -647,7 +693,8 @@ const sandbox = (() => {
   }
   function startStory(key) {
     if (!STORIES[key]) return;
-    setup(key);
+    if (!story.jdReal) story.jdReal = S.jd0;
+    setup(key, true);
     story.on = true; story.key = key; story.steps = STORIES[key]; story.paused = false;
     document.body.classList.add("storying");
     el("sbStory").hidden = false;
@@ -659,6 +706,7 @@ const sandbox = (() => {
   function endStory(keepPlaying) {
     if (!story.on) return;
     story.on = false;
+    if (story.jdReal) { S.jd0 = story.jdReal; story.jdReal = 0; }
     setStoryMusic(false);
     document.body.classList.remove("storying");
     el("sbStory").classList.remove("show"); el("sbStory").hidden = true;
@@ -680,6 +728,7 @@ const sandbox = (() => {
   // The pace of this frame (simulated days per real second).
   function storyRate(st) {
     if (st.rate !== undefined) return st.rate;
+    if (st.at !== undefined) return Math.min(st.max || 365, Math.max(st.low || 0.2, (st.at - S.days) / st.k));
     const e = get(st.shot.b), sun = get("sun");
     if (!e || !e.alive) return 0.3;
     const r = e.p.distanceTo(sun.p), v = Math.max(e.v.distanceTo(sun.v), 1e-6);
@@ -778,7 +827,7 @@ const sandbox = (() => {
       const B = byId[b.id];
       if (b.id === "sun2") { scenePos(b, S.sun2.position); S.sun2.visible = b.alive; continue; }
       if (!B) continue;
-      if (b.id !== "sun") { B.group.visible = b.alive; tRel.copy(b.p).sub(get("sun").p); B.simAU = tRel.clone(); }
+      if (b.id !== "sun") { B.group.visible = b.alive; shown(b, tRel).sub(shown(get("sun"), tLag)); B.simAU = tRel.clone(); }
       else B.group.visible = b.m > 0;
     }
     drawTrails();
