@@ -546,11 +546,12 @@ const sandbox = (() => {
     const pr = B ? B.radius : 1;
     sDir.copy(sP).sub(sO); const gap = Math.max(sDir.length(), 1e-3); sDir.divideScalar(gap);
     sSide.crossVectors(sDir, UP); if (sSide.lengthSq() < 1e-6) sSide.set(1, 0, 0); sSide.normalize();
-    const d = pr * 9;
-    // camera: behind the planet (away from the star), off to the side and a little above
-    sC.copy(sDir).multiplyScalar(d * 0.8).addScaledVector(sSide, d * 0.45).addScaledVector(UP, d * 0.25);
-    // aim: just past the planet, toward the star, so both are in the frame with the planet in front
-    sT.copy(sDir).multiplyScalar(-Math.min(gap * 0.3, pr * 4));
+    const d = pr * 10;
+    // camera: mostly to the side of the planet (so its day side and its glow are seen), a little behind it and above
+    sC.copy(sDir).multiplyScalar(d * 0.45).addScaledVector(sSide, d * 0.8).addScaledVector(UP, d * 0.3);
+    // aim: a little past the planet toward the star, and below it, so the planet sits in the upper part of the
+    // screen, clear of the panel, with the star beside it
+    sT.copy(sDir).multiplyScalar(-Math.min(gap * 0.3, pr * 4)).addScaledVector(UP, -pr * 2.2);
     const k = 1 - Math.exp(-dt * (shot.t < 2.5 ? 1.6 : 4));   // glide in, then hold steady on the planet
     shot.off.lerp(sC, k); shot.aim.lerp(sT, k);
     controls.target.copy(sP).add(shot.aim); camera.position.copy(sP).add(shot.off); camera.lookAt(controls.target);
