@@ -823,7 +823,8 @@ const sandbox = (() => {
     const held = performance.now() < S.holdUntil;
     if (held) { if (!story.wasHeld) controls.enabled = true; }
     else {
-      if (story.wide && story.rate < 6) { story.wide = false; storyShot(); }
+      // come in once the step's own pace (not the eased one, still slow from the step before) has dropped for the event
+      if (story.wide && story.held > 2 && storyRate(st) < 6) { story.wide = false; storyShot(); }
       if (story.wasHeld) storyShot();
       shot.t += dt; frame(dt);
     }
