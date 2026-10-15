@@ -227,7 +227,7 @@ const sandbox = (() => {
       line.visible = b.alive;
       if (!b.alive) continue;
       const p = scenePos(b, tS), tr = b.trail, last = tr[tr.length - 1];
-      if (!last || last.distanceToSquared(p) > 0.25) { tr.push(p.clone()); if (tr.length > TRAIL) tr.shift(); }
+      if (!last || last.distanceToSquared(p) > 0.04) { tr.push(p.clone()); if (tr.length > TRAIL) tr.shift(); }
       const arr = line.geometry.attributes.position.array, ca = line.geometry.attributes.color.array, c = line.userData.col;
       // the trail fades toward its tail; in a story the planet in the shot keeps a bright one, the rest step back
       const lead = story.on && (shot.on && shot.b && shot.b.id === b.id || (story.steps[story.i].hl || []).includes(b.id)), top = !story.on ? 0.7 : lead ? 1 : 0.32, n = tr.length;
@@ -574,7 +574,7 @@ const sandbox = (() => {
   // The camera's offset from the planet is what is smoothed, so the planet stays locked in the frame while it moves.
   // A story sets its own shots: mode "chase" (as above), "pair" (the planet and the star together, from the side and
   // above) or "sun" (the star alone, from a fixed side); dk scales the chase distance.
-  const shot = { on: false, t: 0, b: null, o: null, kind: "", off: V(), aim: V(), keep: 0, mode: "chase", dk: 1 };
+  const shot = { on: false, t: 0, b: null, o: null, kind: "", off: V(), aim: V(), keep: 0, mode: "chase", dk: 1, view: V(), down: V() };
   const sT = V(), sC = V(), sP = V(), sO = V(), sDir = V(), sSide = V(), UP = new THREE.Vector3(0, 1, 0);
   function frame(dt) {
     const B = byId[shot.b.id];
@@ -592,6 +592,18 @@ const sandbox = (() => {
     }
     sDir.copy(sP).sub(sO); const gap = Math.max(sDir.length(), 1e-3); sDir.divideScalar(gap);
     sSide.crossVectors(sDir, UP); if (sSide.lengthSq() < 1e-6) sSide.set(1, 0, 0); sSide.normalize();
+    if (shot.mode === "meet") {
+      // two planets passing close: from above, from a direction fixed when the shot began (so the camera never swings
+      // round with the line between them), framing both once the other is near; until then it stays on this one
+      const oB = shot.o && byId[shot.o.id], rs = pr + (oB ? oB.radius * (oB.sbScale || 1) : 0);
+      const half = camera.fov * DEG / 2, narrow = Math.min(half, Math.atan(Math.tan(half) * camera.aspect));
+      const fit = Math.min(gap, rs * 30), w = fit / gap;
+      sT.copy(sDir).multiplyScalar(-gap * 0.5 * w);
+      const dist = Math.max(pr * 14, (fit * 0.5 + rs * 1.5) / Math.tan(narrow) * 1.15) * shot.dk;
+      sC.copy(shot.view).multiplyScalar(dist).add(sT);
+      sT.addScaledVector(shot.down, dist * 0.12);           // the pair sits a little high, clear of the card
+      return glide(dt);
+    }
     if (shot.mode === "pair") {
       // both from high above, looking along the line between them, so on a tall phone screen they stand one above the
       // other (the screen is taller than wide); the middle sits a little high, clear of the card below
@@ -618,6 +630,12 @@ const sandbox = (() => {
     shot.mode = ev.mode || "chase"; shot.dk = ev.dk || 1;
     const B = byId[ev.b.id];
     if (shot.mode === "sun") scenePos(get("sun"), sP); else if (B && ev.b.id !== "sun" && ev.b.alive) sP.copy(B.world); else if (ev.b.alive) scenePos(ev.b, sP);
+    if (shot.mode === "meet") {
+      // looking down from above and a little outward (away from the Sun), so the Sun is toward the top of the screen
+      tA.copy(sP).sub(scenePos(get("sun"), tB)).setY(0).normalize();
+      shot.view.copy(tA).multiplyScalar(0.5).add(UP).normalize();
+      shot.down.copy(tA);                                   // on screen, outward is down
+    }
     shot.off.copy(camera.position).sub(sP); shot.aim.copy(controls.target).sub(sP);
     state.flight = null; state.mode = "overview"; state.index = -1;   // the sandbox drives the camera now
     controls.enabled = false;
@@ -669,11 +687,11 @@ const sandbox = (() => {
         text: "За 70 днів Земля падає втричі ближче до Сонця — і злітає назад. Уже зараз на ній +250 °C, а в найближчій точці понад +600 °C: океани википають, камінь світиться. Рік тепер триває 141 день." },
       { title: "Орбіти перетинаються", shot: { mode: "sun", dk: 1.8 }, hl: ["mercury", "venus", "earth", "mars"], rate: 40, min: 10, until: () => S.days > 640,
         text: "Усі кам'яні планети тепер на витягнутих орбітах, і ці орбіти перетинаються. Рано чи пізно хтось із кимось зустрінеться." },
-      { title: "Венера і Марс", shot: { b: "mars", o: "venus", dk: 1.4 }, at: 668.36, k: 3, low: 0.15, max: 30, min: 11, until: () => S.days > 668.36, after: 3,
+      { title: "Венера і Марс", shot: { mode: "meet", b: "mars", o: "venus", dk: 1 }, at: 668.36, k: 3, low: 0.15, max: 30, min: 11, until: () => S.days > 668.36, after: 3,
         text: "Перша зустріч: Венера проноситься за 2,8 мільйона кілометрів від Марса — лише в 7 разів далі, ніж Місяць від Землі." },
-      { title: "Меркурій", shot: { b: "mercury", o: "venus", dk: 1.4 }, at: 1531.3, k: 2.2, low: 0.1, max: 120, min: 12, until: () => !get("mercury").alive, after: 4,
+      { title: "Меркурій", shot: { mode: "meet", b: "mercury", o: "venus", dk: 1 }, at: 1531.3, k: 2.2, low: 0.1, max: 120, min: 12, until: () => !get("mercury").alive, after: 4,
         text: "Меркурій тепер підходить до Сонця втричі ближче, ніж раніше, і розжарюється до лави. Через 4 роки він врізається у Венеру на швидкості 60 км/с. Венера поглинає його." },
-      { title: "Земля і Венера", shot: { b: "earth", o: "venus", dk: 1.4 }, at: 2497.16, k: 2.5, low: 0.2, max: 150, min: 11, until: () => S.days > 2497.16, after: 3,
+      { title: "Земля і Венера", shot: { mode: "meet", b: "earth", o: "venus", dk: 1 }, at: 2497.16, k: 2.5, low: 0.2, max: 150, min: 11, until: () => S.days > 2497.16, after: 3,
         text: "Ще за три роки вже Венера проноситься за 6 мільйонів кілометрів від Землі. Орбіти й далі перетинаються, і кожна така зустріч може стати останньою." },
       { title: "Нова система", shot: { mode: "sun", dk: 6 }, hl: ["jupiter", "earth"], rate: 30, min: 12, end: true,
         text: "Гіганти вціліли, але їхні орбіти теж витягнулися: Юпітер тепер підходить до Сонця майже так близько, як колись Марс. А Земля — розпечена кам'яна куля з роком у 141 день." },
@@ -688,7 +706,7 @@ const sandbox = (() => {
         text: "Юпітер, найважча з планет, переходить до другої зорі й тепер кружляє навколо неї. Але й там він не залишиться надовго." },
       { title: "Юпітер повертається", shot: { b: "jupiter", o: "sun", dk: 1.4 }, at: 7871.8, k: 5, low: 30, max: 300, min: 9, until: () => S.days > 7840,
         text: "Друга зоря відкидає Юпітер назад — просто у внутрішню частину системи, туди, де Марс, Земля й Венера." },
-      { title: "Земля", shot: { b: "earth", o: "jupiter", dk: 1.5 }, at: 7871.8, k: 4, low: 0.25, max: 30, min: 12, until: () => S.days > 7871.8, after: 3,
+      { title: "Земля", shot: { mode: "meet", b: "earth", o: "jupiter", dk: 1 }, at: 7871.8, k: 4, low: 0.25, max: 30, min: 12, until: () => S.days > 7871.8, after: 3,
         text: "Юпітер пролітає повз Землю на відстані 7 мільйонів кілометрів — лише у 17 разів далі за Місяць. У нашому небі він удвічі більший за повний Місяць." },
       { title: "Нова орбіта Землі", shot: { b: "earth", o: "sun", dk: 1.6 }, rate: 40, min: 11, until: () => S.days > 23 * Y,
         text: "Земля вціліла, але її орбіта тепер витягнута: то 0,8, то 1 а. о. від Сонця. Коли вона найближче до Сонця, спека сягає +50 °C. А в небі — два сонця." },
