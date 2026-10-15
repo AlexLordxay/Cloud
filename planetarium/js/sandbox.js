@@ -565,7 +565,7 @@ const sandbox = (() => {
     sC.copy(sDir).multiplyScalar(d * 0.45).addScaledVector(sSide, d * 0.8).addScaledVector(UP, d * 0.3);
     // aim: a little past the planet toward the star, and below it, so the planet sits in the upper part of the
     // screen, clear of the panel, with the star beside it
-    sT.copy(sDir).multiplyScalar(-Math.min(gap * 0.3, pr * 1.2)).addScaledVector(UP, -pr * 2.2);
+    sT.copy(sDir).multiplyScalar(-Math.min(gap * 0.3, pr * 0.6)).addScaledVector(UP, -pr * 2.2);
     glide(dt);
   }
   function glide(dt) {
@@ -622,7 +622,7 @@ const sandbox = (() => {
   const rSun = id => { const b = get(id); return b && b.alive ? b.p.distanceTo(get("sun").p) : 0; };
   const STORIES = {
     "stop-earth": [
-      { title: "Земля зупинилася", shot: { mode: "pair", b: "earth", o: "sun", dk: 1 }, rate: 0.6, min: 8,
+      { title: "Земля зупинилася", shot: { b: "earth", o: "sun", dk: 1.7 }, rate: 0.6, min: 8,
         text: "Уяви: Земля раптом зупинилася на своїй орбіті. Її швидкість — 30 км/с — щезла. Ніщо більше не несе її вбік, і Сонце починає тягнути її до себе." },
       { title: "Падіння", shot: { b: "earth", o: "sun", dk: 1.3 }, rate: 4, min: 9, until: () => rSun("earth") < 0.62,
         text: "Перші тижні майже нічого не помітно: Земля лише повільно набирає швидкість. Але кожного дня вона падає швидше, ніж учора, а Сонце в небі стає більшим." },
@@ -632,7 +632,7 @@ const sandbox = (() => {
         text: "Ще ближче — і плавиться сам камінь. Кора тріскається, з тріщин світиться магма, і Земля перетворюється на розжарену лавову кулю. Позаду тягнеться хвіст пари." },
       { title: "Удар", shot: { b: "earth", o: "sun", dk: 1.1 }, k: 3, min: 7, until: () => !get("earth").alive, after: 4,
         text: "Останні години. Земля мчить уже сотні кілометрів за секунду — і зникає в Сонці. Для Сонця це навіть не крапля: воно в 333 000 разів важче." },
-      { title: "65 днів", shot: { mode: "sun", dk: 1.15 }, rate: 6, min: 12, end: true,
+      { title: "65 днів", shot: { mode: "sun", dk: 1.7 }, rate: 6, min: 12, end: true,
         text: "Від зупинки до удару минуло б близько 65 днів. На щастя, Земля не може просто зупинитися: немає сили, здатної загальмувати планету. Тож вона летить далі — як і 4,5 млрд років до нас." },
     ],
   };
