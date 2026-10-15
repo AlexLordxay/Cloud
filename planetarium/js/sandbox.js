@@ -485,12 +485,12 @@ const sandbox = (() => {
   // camera flies to the planet, and when it is over time speeds up again and the camera goes back to the whole system.
   // Touching the scene hands the camera back to the viewer for a while; the 🎬 button turns the director off.
   // What is coming: { b, o, kind, rate, prio } — o is the other body (a star or a planet), rate the slowest simulated
-  // days per real second the event needs to last ~3 s. Kinds: "impact"/"graze" (a star), "meet" (two planets), "escape".
+  // days per real second the event needs to last ~4 s. Kinds: "impact"/"graze" (a star), "meet" (two planets), "escape".
   function upcoming() {
     let best = null, rate = Infinity;
     const now = performance.now();
     const consider = (b, o, kind, tdyn, prio, slow = true) => {
-      if (slow) rate = Math.min(rate, Math.max(0.04, tdyn / 3));
+      if (slow) rate = Math.min(rate, Math.max(0.04, tdyn / 4));
       if ((S.cool[b.id] || 0) > now && kind !== "impact") return;   // this planet had its moment a moment ago
       if (!best || prio > best.prio) best = { b, o, kind, prio };
     };
@@ -533,31 +533,31 @@ const sandbox = (() => {
     return { best, rate };
   }
 
-  // The shot: from the side of the line between the planet and what it is falling into (or passing), framing both, so the
-  // approach and the hit are seen across the screen rather than with the star filling the view. It follows every frame.
-  const shot = { on: false, t: 0, b: null, o: null, kind: "", tgt: V(), cam: V(), keep: 0 };
+  // The shot: a chase camera on the planet itself — close behind it, a little to the side, looking past it at what it is
+  // falling into (or passing), so the planet stays big in the frame (its heating is seen) and the star grows behind it.
+  // The camera's offset from the planet is what is smoothed, so the planet stays locked in the frame while it moves.
+  const shot = { on: false, t: 0, b: null, o: null, kind: "", off: V(), aim: V(), keep: 0 };
   const sT = V(), sC = V(), sP = V(), sO = V(), sDir = V(), sSide = V(), UP = new THREE.Vector3(0, 1, 0);
   function frame(dt) {
     const B = byId[shot.b.id];
     if (shot.b.alive && B) sP.copy(B.world); // else: keep looking where it ended
-    const oR = shot.o ? (isStar(shot.o) ? byId.sun.radius * SUN_K * (shot.o.id === "sun2" ? 0.95 : 1) : byId[shot.o.id].radius) : 0;
-    if (shot.o && shot.o.alive) scenePos(shot.o, sO); else if (!shot.o) sO.copy(sP);
+    const o = shot.o || get("sun");                // torn loose: look back past it at the Sun it is leaving
+    if (o && o.alive && o !== shot.b) scenePos(o, sO); else sO.set(0, 0, 0);
     const pr = B ? B.radius : 1;
     sDir.copy(sP).sub(sO); const gap = Math.max(sDir.length(), 1e-3); sDir.divideScalar(gap);
     sSide.crossVectors(sDir, UP); if (sSide.lengthSq() < 1e-6) sSide.set(1, 0, 0); sSide.normalize();
-    // look at a point between them, nearer the planet; stand back far enough for both (with the star's edge) to fit
-    const span = shot.o ? gap + oR : pr * 6;
-    sT.copy(sP).addScaledVector(sDir, -Math.min(gap * 0.45, gap - oR * 0.5 > 0 ? gap * 0.45 : gap * 0.3));
-    if (!shot.o) sT.copy(sP);
-    const d = Math.max(span * 1.35, pr * 7);
-    sC.copy(sT).addScaledVector(sSide, d).addScaledVector(UP, d * 0.35).addScaledVector(sDir, d * 0.15);
-    const k = 1 - Math.exp(-dt * (shot.t < 1.8 ? 2.2 : 6));   // glide in, then hold steady on the moving pair
-    shot.tgt.lerp(sT, k); shot.cam.lerp(sC, k);
-    controls.target.copy(shot.tgt); camera.position.copy(shot.cam); camera.lookAt(shot.tgt);
+    const d = pr * 9;
+    // camera: behind the planet (away from the star), off to the side and a little above
+    sC.copy(sDir).multiplyScalar(d * 0.8).addScaledVector(sSide, d * 0.45).addScaledVector(UP, d * 0.25);
+    // aim: just past the planet, toward the star, so both are in the frame with the planet in front
+    sT.copy(sDir).multiplyScalar(-Math.min(gap * 0.3, pr * 4));
+    const k = 1 - Math.exp(-dt * (shot.t < 2.5 ? 1.6 : 4));   // glide in, then hold steady on the planet
+    shot.off.lerp(sC, k); shot.aim.lerp(sT, k);
+    controls.target.copy(sP).add(shot.aim); camera.position.copy(sP).add(shot.off); camera.lookAt(controls.target);
   }
   function startShot(ev) {
     shot.on = true; shot.t = 0; shot.b = ev.b; shot.o = ev.o; shot.kind = ev.kind; shot.keep = 0;
-    shot.tgt.copy(controls.target); shot.cam.copy(camera.position);
+    const B = byId[ev.b.id]; if (B) sP.copy(B.world); else scenePos(ev.b, sP); shot.off.copy(camera.position).sub(sP); shot.aim.copy(controls.target).sub(sP);
     state.flight = null; state.mode = "overview"; state.index = -1;   // the sandbox drives the camera now
     controls.enabled = false;
   }
@@ -570,7 +570,9 @@ const sandbox = (() => {
   function direct(dt) {
     const want = SPEEDS[S.speed][0];
     const { best, rate } = want > 0 ? upcoming() : { best: null, rate: Infinity };
-    const target = Math.min(1, rate / Math.max(want, 1e-9));
+    // a shot lasts ~20 s at most: after that the slow motion lets go, so the end comes soon
+    const cap = shot.on && shot.t > 18 ? Math.exp((shot.t - 18) * 0.5) : 1;
+    const target = Math.min(1, rate * cap / Math.max(want, 1e-9));
     S.slow += (target - S.slow) * Math.min(1, dt * (target < S.slow ? 6 : 0.8));   // slow down quickly, speed up gently
     if (!S.director || performance.now() < S.holdUntil) { if (shot.on) endShot(false); return; }
     if (best && (!shot.on || (best.b !== shot.b && best.prio > 2 * (shot.prio || 0)))) { startShot(best); shot.prio = best.prio; }
@@ -697,5 +699,5 @@ const sandbox = (() => {
   };
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", wire); else wire();
 
-  return { get on() { return S.on; }, open, close, step, toScene: sbToScene, scenarios: Object.keys(SCENARIOS), _state: S };   // _state: for tests
+  return { get on() { return S.on; }, open, close, step, toScene: sbToScene, scenarios: Object.keys(SCENARIOS), _state: S, _shot: shot };   // _state: for tests
 })();
