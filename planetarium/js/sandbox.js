@@ -681,6 +681,21 @@ const sandbox = (() => {
     }
     sDir.copy(sP).sub(sO); const gap = Math.max(sDir.length(), 1e-3); sDir.divideScalar(gap);
     sSide.crossVectors(sDir, UP); if (sSide.lengthSq() < 1e-6) sSide.set(1, 0, 0); sSide.normalize();
+    if (shot.mode === "stream") {
+      // the debris of the planet just torn: aim at the middle of its pieces, from the side, as close as their spread allows
+      const st = S.streams.find(x => x.id === shot.b.id);
+      if (st) {
+        let n = 0; tPa.set(0, 0, 0);
+        for (let i = 0; i < st.live.length; i += 7) if (st.live[i]) { sbToScene(tPb.set(st.P[i * 3], st.P[i * 3 + 1], st.P[i * 3 + 2]), tPb); tPa.add(tPb); n++; }
+        if (n) sP.copy(tPa.divideScalar(n));
+      }
+      sDir.copy(sP).sub(sO); const g2 = Math.max(sDir.length(), 1e-3); sDir.divideScalar(g2);
+      sSide.crossVectors(sDir, UP); if (sSide.lengthSq() < 1e-6) sSide.set(1, 0, 0); sSide.normalize();
+      const d = pr * 16;
+      sC.copy(sDir).multiplyScalar(d * 0.35).addScaledVector(sSide, d * 0.85).addScaledVector(UP, d * 0.3);
+      sT.set(0, -pr * 1.5, 0);                              // the cloud in the middle, a little high, clear of the card
+      return glide(dt);
+    }
     if (shot.mode === "meet") {
       // two planets passing close: from above, from a direction fixed when the shot began (so the camera never swings
       // round with the line between them), framing both once the other is near; until then it stays on this one
@@ -989,8 +1004,13 @@ const sandbox = (() => {
     else {
       // a planet torn apart: draw back to show the hole and the stream of what was the planet
       const cur = story.steps[story.i];                    // (the step may have just moved on in this frame)
+      // first ride along with the debris for a few seconds, close, then draw back to the hole and the whole stream
       if (cur.ripView && !story.ripped && cur.shot.b && !get(cur.shot.b).alive) {
-        story.ripped = true;
+        story.ripped = 1; story.rippedAt = story.held;
+        startShot({ b: get(cur.shot.b), o: get("sun"), kind: "story", mode: "stream", dk: 1 });
+      }
+      if (cur.ripView && story.ripped === 1 && story.held - story.rippedAt > 3.2) {
+        story.ripped = 2;
         startShot({ b: get(cur.shot.b), o: get("sun"), kind: "story", mode: "pair", dk: 1.15 });
       }
       // come in once the step's own pace (not the eased one, still slow from the step before) has dropped for the event
