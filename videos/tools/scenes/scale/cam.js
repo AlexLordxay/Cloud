@@ -357,10 +357,19 @@
     const r = window.__rec, THREE = r.THREE, V = THREE.Vector3, t = window.__vt() - (window.__t0 || 0) - INTRO;
     const E = r.byId.earth, C = E.world.clone(), R = E.radius, n = N();
     if (t < 0) {
-      // the opening: straight up from Kyiv, fast at first and slowing into the main flight's first frame
-      const u = clamp((t + INTRO) / INTRO, 0, 1), e = u * u * (3 - 2 * u);   // lift off gently, slow into the main flight
-      const cam = r.camera, dir = dirK.clone().lerp(dir0, smooth(u)).normalize();
-      cam.position.copy(C).addScaledVector(dir, lerpLog(R * 1.006, R * 4.6, e));
+      // The opening (scale_kyiv): satellite pictures zoom out from Maidan (scenes/scale_kyiv/intro.py, 0 … SAT s); the
+      // 3D Earth under them follows the same ground span straight down over Kyiv, is crossfaded in over the last
+      // FADE s (post.py), then carries on up and slows into the main flight's first frame.
+      const SAT = 5.8, FADE = 0.8, SPAN0 = 5000, SPAN1 = 3e6, REARTH = 6371000;
+      const tt = t + INTRO, cam = r.camera, half = Math.tan(cam.fov * D / 2);
+      const spanAt = x => Math.exp(Math.log(SPAN0) + Math.log(SPAN1 / SPAN0) * Math.pow(clamp(x / SAT, 0, 1), 1.6));
+      let dist, dir = dirK.clone();
+      if (tt <= SAT) dist = R * (1 + spanAt(Math.max(tt, SAT - FADE - 0.1)) / 2 / half / REARTH);
+      else {
+        const u = (tt - SAT) / (INTRO - SAT), e = 1 - (1 - u) * (1 - u), d1 = R * (1 + SPAN1 / 2 / half / REARTH);
+        dist = lerpLog(d1, R * 4.6, e); dir.lerp(dir0, smooth(u)).normalize();
+      }
+      cam.position.copy(C).addScaledVector(dir, dist);
       cam.up.copy(geoOf(r, 90, 0, 1).sub(C).normalize());
       cam.lookAt(C); r.controls.target.copy(C);
       const near = Math.max(0.002, Math.min(0.5, (cam.position.distanceTo(C) - R * 1.01) * 0.3));
