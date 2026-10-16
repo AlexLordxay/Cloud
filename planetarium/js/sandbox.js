@@ -423,7 +423,9 @@ const sandbox = (() => {
     // the belts of small bodies held by the Sun scatter too: they fade away
     for (const belt of typeof asteroidBelt !== "undefined" ? [asteroidBelt, kuiperBelt] : []) {
       const m = belt.material, o = m.userData.o ?? (m.userData.o = m.opacity);
-      m.opacity += ((starless() ? 0 : o) - m.opacity) * Math.min(1, dt * 0.8);
+      // also out of close shots and around a black hole: their dots would sit on top of the bright glows
+      const h = get("sun"), close = story.on && shot.on && shot.mode !== "sun" && !story.wide;
+      m.opacity += ((starless() || (h && h.bh) || close ? 0 : o) - m.opacity) * Math.min(1, dt * 0.8);
       belt.visible = m.opacity > 0.01;
     }
     for (const b of S.bodies) {
@@ -1122,21 +1124,76 @@ const sandbox = (() => {
     if (!h || !h.bh || !b.alive || !R_KM[b.id]) return 0;
     return Math.pow(tidalAU(b, h) / Math.max(b.p.distanceTo(h.p), 1e-9), 3);
   }
-  // The hole: a black ball the size of its horizon, a thin ring of bent light just outside it, and a glow that flares
-  // as debris falls in. A hole of the Sun's own mass is 6 km across — drawn as a small dot, or it could not be seen.
+  // The hole, as it would look: light bent round it by its gravity. A quad facing the camera traces, for each pixel,
+  // the ray from the eye past the hole (Schwarzschild bending, in units of the horizon radius): rays that fall in
+  // leave a black shadow about 2.6 times the horizon, rays that cross the thin glowing disc of gas round it pick up its
+  // light — hotter inwards, brighter on the side turning towards us — and the disc's far side shows above and below
+  // the shadow. Debris falling in makes the disc flare up. A hole of the Sun's own mass (6 km) is drawn far bigger
+  // than it is, or it could not be seen.
   let BHG = null;
+  const HOLE_S = 14;                                           // the quad's half-size, in horizon radii
   function makeBlackHole() {
     const g = new THREE.Group();
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), new THREE.MeshBasicMaterial({ color: 0x000000 }));
-    const cv = document.createElement("canvas"); cv.width = cv.height = 512;
-    const c = cv.getContext("2d"), grd = c.createRadialGradient(256, 256, 0, 256, 256, 256);
-    grd.addColorStop(0, "rgba(0,0,0,0)"); grd.addColorStop(0.37, "rgba(255,190,120,0)"); grd.addColorStop(0.40, "rgba(255,236,200,1)");
-    grd.addColorStop(0.43, "rgba(255,170,90,0.55)"); grd.addColorStop(0.6, "rgba(255,120,60,0.12)"); grd.addColorStop(1, "rgba(255,90,40,0)");
-    c.fillStyle = grd; c.fillRect(0, 0, 512, 512);
-    const ring = new THREE.Sprite(new THREE.SpriteMaterial({ map: toTexture(cv), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-    const flare = glowSprite("255,150,80", 1, 0);
-    g.add(ball, ring, flare); g.visible = false; scene.add(g);
-    BHG = { g, ball, ring, flare, glow: 0 };
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { R: { value: 1 }, rot: { value: new THREE.Matrix3() }, time: { value: 0 }, lum: { value: 1 }, fade: { value: 1 } },
+      vertexShader: `
+        uniform float R; varying vec3 vW; varying vec3 vC;
+        void main() {
+          vec3 c = modelMatrix[3].xyz; vC = c;
+          vec3 right = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]), up = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+          vW = c + (right * position.x + up * position.y) * R * ${HOLE_S.toFixed(1)};
+          gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.0);
+        }`,
+      fragmentShader: `
+        uniform float R; uniform mat3 rot; uniform float time; uniform float lum; uniform float fade; varying vec3 vW; varying vec3 vC;
+        float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+        vec3 bb(float t) { return clamp(vec3(1.0, 0.42 + 0.42 * t, 0.12 + 0.5 * t * t) * t, 0.0, 4.0); }
+        void main() {
+          vec3 c = vC;
+          vec3 p = rot * ((cameraPosition - c) / R), v = normalize(rot * (vW - cameraPosition));
+          float S = ${HOLE_S.toFixed(1)};
+          float b = dot(p, v), cc = dot(p, p) - S * S, disc = b * b - cc;
+          if (disc < 0.0) discard;
+          if (cc > 0.0) { if (-b - sqrt(disc) < 0.0) discard; p += v * (-b - sqrt(disc)); }
+          vec3 hc = cross(p, v); float h2 = dot(hc, hc);
+          vec3 col = vec3(0.0); float alpha = 0.0;
+          for (int i = 0; i < 140; i++) {
+            float rr = length(p);
+            if (rr < 1.0) { alpha = 1.0; break; }
+            if (rr > S + 0.5 && dot(p, v) > 0.0) break;
+            float dt = clamp(0.07 * rr, 0.02, 1.2);
+            vec3 q0 = p;
+            v += -1.5 * h2 * p / pow(rr, 5.0) * dt; p += v * dt;
+            if (q0.y * p.y < 0.0) {
+              vec3 q = mix(q0, p, q0.y / (q0.y - p.y));
+              float qr = length(q.xz);
+              if (qr > 2.6 && qr < 11.0) {
+                float sw = time * 1.4 / pow(qr, 1.5), cs = cos(sw), sn = sin(sw);
+                vec2 w = vec2(q.x * cs - q.z * sn, q.x * sn + q.z * cs);   // the gas turning, faster inwards
+                float rings = 0.5 + 0.5 * (0.6 * vn(w * 1.1 + qr * 1.3) + 0.4 * vn(w * 3.2 - qr * 2.0));
+                float temp = pow(3.0 / qr, 1.2) * smoothstep(2.6, 3.4, qr) * (1.0 - smoothstep(6.5, 11.0, qr));
+                vec3 vel = normalize(vec3(-q.z, 0.0, q.x)) * sqrt(0.5 / max(qr - 1.0, 0.5));
+                float gd = 1.0 / (1.0 - dot(vel, -normalize(v)) * 0.9);
+                float I = temp * rings * gd * gd * gd * lum;
+                float a = clamp(temp * 1.3, 0.0, 0.95) * (1.0 - alpha);
+                col += bb(I * 0.85) * a; alpha += a;
+                if (alpha > 0.98) break;
+              }
+            }
+          }
+          gl_FragColor = vec4(col * fade, alpha * fade);
+        }`,
+      transparent: true, depthWrite: false,
+      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    });
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+    quad.frustumCulled = false;
+    g.add(quad); g.visible = false; scene.add(g);
+    // the disc is tilted well away from the planets' plane, so seen from above it shows edge-on-ish, bent over the shadow
+    mat.uniforms.rot.value.setFromMatrix4(new THREE.Matrix4().makeRotationX(-1.25));
+    BHG = { g, quad, mat, glow: 0 };
   }
   function blackHole(dt) {
     const h = get("sun");
@@ -1144,14 +1201,13 @@ const sandbox = (() => {
     BHG.g.visible = !!(h && h.bh);
     if (!BHG.g.visible) return;
     scenePos(h, BHG.g.position);
-    // a hole of the Sun's own mass (6 km) is drawn as a small dark dot with its ring, appearing as the Sun shrinks
+    // a hole of the Sun's own mass appears as the Sun shrinks away; it has little gas round it, so its disc is dimmer
     const small = sbDist(rsAU(h)) < 1, grow = small ? ramp(S.days, 0.0008, 0.0024) : 1;
-    const R = small ? 2.4 * Math.max(grow, 0.05) : sbDist(rsAU(h));
-    BHG.ball.scale.setScalar(R);
-    BHG.ring.scale.setScalar(R * 5.25);                       // the ring texture's bright edge sits at 0.40 of its half-size
+    const R = small ? 1.1 * Math.max(grow, 0.05) : sbDist(rsAU(h));
     BHG.glow = Math.max(0, BHG.glow - dt * 0.6);
-    BHG.ring.material.opacity = Math.min(1, 0.7 + BHG.glow) * grow;
-    BHG.flare.scale.setScalar(R * 9); BHG.flare.material.opacity = Math.min(0.8, BHG.glow * 0.7);
+    const u = BHG.mat.uniforms;
+    u.R.value = R; u.time.value += dt; u.fade.value = grow;
+    u.lum.value = (small ? 0.75 : 1) + BHG.glow * 0.8;
   }
   // A torn planet becomes a stream of debris: pieces spread along the line to the hole (the near side moves faster
   // inwards), each then falls on its own, heating up — brighter the nearer it gets — until it crosses the horizon.
