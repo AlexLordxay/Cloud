@@ -19,7 +19,7 @@
   const RS_LY = 1.27e-6;                 // Schwarzschild radius of Sgr A* (4.1 million Suns) in light years
   const SUN_R = 26000;                   // the Sun's distance from the centre, ly
 
-  let ready = false, dir0 = null, G = null;
+  let ready = false, dir0 = null, dirK = null, G = null, INTRO = 0;
   const N = () => new window.__rec.THREE.Vector3(0, 1, 0);
 
   function geoOf(r, lat, lon, h) {
@@ -306,12 +306,14 @@
     return { scene, mat, cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1) };
   }
 
-  window.__sceneSetup = async (r) => {
+  window.__sceneSetup = async (r, c) => {
+    INTRO = (c && c.intro) || 0;          // seconds of an opening pull-back from Kyiv before the main flight (scale_kyiv)
     const THREE = r.THREE, s = r.state;
     s.index = r.BODIES.indexOf(r.byId.earth); s.mode = 'focus'; s.flight = null; s.rate = 0;
     window.__step(1 / 30);
     const E = r.byId.earth;
     dir0 = geoOf(r, 49.0, 31.5, 1).sub(E.world).normalize();
+    dirK = geoOf(r, 50.45, 30.52, 1).sub(E.world).normalize();   // Kyiv, Maidan Nezalezhnosti
     for (const m of E.tiltGroup.children) if (m.geometry && m.geometry.parameters && Math.abs(m.geometry.parameters.radius - E.radius * 1.025) < 1e-6) m.visible = false;
     const W = r.renderer.domElement.width, H = r.renderer.domElement.height;
     const rtOpts = { type: THREE.HalfFloatType, depthBuffer: true };
@@ -352,8 +354,22 @@
 
   window.__recCam = () => {
     if (!ready) return;
-    const r = window.__rec, THREE = r.THREE, V = THREE.Vector3, t = window.__vt() - (window.__t0 || 0);
+    const r = window.__rec, THREE = r.THREE, V = THREE.Vector3, t = window.__vt() - (window.__t0 || 0) - INTRO;
     const E = r.byId.earth, C = E.world.clone(), R = E.radius, n = N();
+    if (t < 0) {
+      // the opening: straight up from Kyiv, fast at first and slowing into the main flight's first frame
+      const u = clamp((t + INTRO) / INTRO, 0, 1), e = u * u * (3 - 2 * u);   // lift off gently, slow into the main flight
+      const cam = r.camera, dir = dirK.clone().lerp(dir0, smooth(u)).normalize();
+      cam.position.copy(C).addScaledVector(dir, lerpLog(R * 1.006, R * 4.6, e));
+      cam.up.copy(geoOf(r, 90, 0, 1).sub(C).normalize());
+      cam.lookAt(C); r.controls.target.copy(C);
+      const near = Math.max(0.002, Math.min(0.5, (cam.position.distanceTo(C) - R * 1.01) * 0.3));
+      if (Math.abs(cam.near - near) > near * 0.02 || cam.far !== 20000) { cam.near = near; cam.far = 20000; cam.updateProjectionMatrix(); }
+      for (const x of r.BODIES) if (x.orbitLine) x.orbitLine.visible = false;
+      if (r.asteroidBelt) r.asteroidBelt.visible = r.kuiperBelt.visible = false;
+      G.t = t;
+      return;
+    }
     // Site part: from 4.6 R over Ukraine back past the Moon's orbit, the Earth and the Sun, to the whole system.
     const vel = new V().crossVectors(n, C).normalize();
     const back = vel.clone().negate().multiplyScalar(0.6).addScaledVector(C.clone().normalize(), 0.35).addScaledVector(n, 0.7).normalize();
