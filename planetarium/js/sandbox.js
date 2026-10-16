@@ -988,9 +988,10 @@ const sandbox = (() => {
     if (held) { if (!story.wasHeld) controls.enabled = true; }
     else {
       // a planet torn apart: draw back to show the hole and the stream of what was the planet
-      if (st.ripView && !story.ripped && st.shot.b && !get(st.shot.b).alive) {
+      const cur = story.steps[story.i];                    // (the step may have just moved on in this frame)
+      if (cur.ripView && !story.ripped && cur.shot.b && !get(cur.shot.b).alive) {
         story.ripped = true;
-        startShot({ b: get(st.shot.b), o: get("sun"), kind: "story", mode: "pair", dk: 1.15 });
+        startShot({ b: get(cur.shot.b), o: get("sun"), kind: "story", mode: "pair", dk: 1.15 });
       }
       // come in once the step's own pace (not the eased one, still slow from the step before) has dropped for the event
       if (story.wide && story.held > 2 && storyRate(st) < 6) { story.wide = false; storyShot(); }
@@ -1267,5 +1268,5 @@ const sandbox = (() => {
   };
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", wire); else wire();
 
-  return { get on() { return S.on; }, open, close, step, toScene: sbToScene, scenarios: Object.keys(SCENARIOS), _state: S, _shot: shot, _story: story };   // _state: for tests
+  return { get on() { return S.on; }, open, close, step, toScene: sbToScene, scenarios: Object.keys(SCENARIOS), _state: S, _shot: shot, _story: story, _storyStep: i => storyStep(i) };   // _state: for tests
 })();
