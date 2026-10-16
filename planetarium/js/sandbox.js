@@ -102,7 +102,7 @@ const sandbox = (() => {
   // Two bodies closer than this (AU) merge: a planet into a star, or the lighter planet into the heavier one.
   const HIT = { star: 0.006, planet: 0.004 };
   const isStar = b => b.id === "sun" || b.id === "sun2";
-  const shines = s => shines(s) && !s.bh;   // a black hole has the mass but gives no light
+  const shines = s => isStar(s) && s.alive && s.m > 0 && !s.bh;   // a black hole has the mass but gives no light
   // A black hole's horizon (AU): the Schwarzschild radius, 2.95 km per solar mass.
   const rsAU = b => 2.953 * b.m / 1.495978707e8;
   // Tidal disruption: a planet of radius R and mass m is torn apart closer than R·(M/m)^⅓ to a mass M — the pull on its
