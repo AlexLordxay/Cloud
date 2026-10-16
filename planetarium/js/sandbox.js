@@ -190,7 +190,8 @@ const sandbox = (() => {
     const start = fixed && STORY_START[key];
     if (start) S.jd0 = start.jd;
     S.bodies = start ? start.bodies.map(([id, m, p, v]) => body(id, m, V().fromArray(p), V().fromArray(v))) : realStart(S.jd0);
-    S.days = 0; S.t = 0; S.t0 = 0; S.events.clear(); S.rips.length = 0; clearStreams(); S.hits.length = 0; clearBooms(); hideShells();
+    S.days = 0; S.t = 0; S.t0 = 0; S.events.clear(); S.rips.length = 0; clearStreams();
+    if (S.on) byId.sun.group.scale.setScalar(SUN_K);   // (a black-hole story may have shrunk it) S.hits.length = 0; clearBooms(); hideShells();
     S.log.length = 0; S.slow = 1; S.cool = {}; endShot(false); renderLog();
     const sun = get("sun"), earth = get("earth"), jup = get("jupiter");
     sun.bh = key === "bh-sun" || key === "sgr-a";
@@ -1100,7 +1101,11 @@ const sandbox = (() => {
       if (b.id === "sun2") { scenePos(b, S.sun2.position); S.sun2.visible = b.alive; continue; }
       if (!B) continue;
       if (b.id !== "sun") { B.group.visible = b.alive; shown(b, tRel).sub(shown(get("sun"), tLag)); B.simAU = tRel.clone(); }
-      else B.group.visible = !b.bh && (b.m > 0 || S.days < 0.0058);   // gone, but its last light is still on the way for 8 minutes
+      else if (b.bh && sbDist(rsAU(b)) < 1) {
+        // the Sun collapsing into a hole of its own mass: it shrinks to nothing over a few seconds of the story
+        const k = 1 - ramp(S.days, 0.0004, 0.0022);
+        B.group.visible = k > 0.02; B.group.scale.setScalar(SUN_K * Math.max(k, 0.02));
+      } else B.group.visible = !b.bh && (b.m > 0 || S.days < 0.0058);   // gone, but its last light is still on the way for 8 minutes
     }
     shrinkClose(dt);
     stretch(); blackHole(dt); streams(days, dt);
@@ -1139,11 +1144,13 @@ const sandbox = (() => {
     BHG.g.visible = !!(h && h.bh);
     if (!BHG.g.visible) return;
     scenePos(h, BHG.g.position);
-    const R = Math.max(sbDist(rsAU(h)), 0.45);
+    // a hole of the Sun's own mass (6 km) is drawn as a small dark dot with its ring, appearing as the Sun shrinks
+    const small = sbDist(rsAU(h)) < 1, grow = small ? ramp(S.days, 0.0008, 0.0024) : 1;
+    const R = small ? 2.4 * Math.max(grow, 0.05) : sbDist(rsAU(h));
     BHG.ball.scale.setScalar(R);
     BHG.ring.scale.setScalar(R * 5.25);                       // the ring texture's bright edge sits at 0.40 of its half-size
     BHG.glow = Math.max(0, BHG.glow - dt * 0.6);
-    BHG.ring.material.opacity = Math.min(1, 0.7 + BHG.glow);
+    BHG.ring.material.opacity = Math.min(1, 0.7 + BHG.glow) * grow;
     BHG.flare.scale.setScalar(R * 9); BHG.flare.material.opacity = Math.min(0.8, BHG.glow * 0.7);
   }
   // A torn planet becomes a stream of debris: pieces spread along the line to the hole (the near side moves faster
