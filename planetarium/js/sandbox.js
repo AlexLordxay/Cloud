@@ -1334,6 +1334,16 @@ const sandbox = (() => {
     canvas.addEventListener("pointerdown", () => { if (S.on) S.holdUntil = performance.now() + 12000; });
     canvas.addEventListener("wheel", () => { if (S.on) S.holdUntil = performance.now() + 12000; }, { passive: true });
     el("sbsClose").addEventListener("click", () => endStory(true));
+    // the card folds down to its title and buttons (remembered for the next visit)
+    const fold = on => {
+      el("sbStory").classList.toggle("min", on);
+      el("sbsMin").setAttribute("aria-expanded", String(!on));
+      el("sbsMin").setAttribute("aria-label", on ? "Розгорнути" : "Згорнути"); el("sbsMin").title = on ? "Розгорнути" : "Згорнути";
+      try { localStorage.setItem("sbStoryMin", on ? "1" : ""); } catch (e) {}
+    };
+    try { if (localStorage.getItem("sbStoryMin")) fold(true); } catch (e) {}
+    el("sbsMin").addEventListener("click", () => fold(!el("sbStory").classList.contains("min")));
+    el("sbsTitle").addEventListener("click", () => { if (el("sbStory").classList.contains("min")) fold(false); });
     el("sbsAgain").addEventListener("click", () => startStory(story.key));
     el("sbsNext").addEventListener("click", () => {
       const st = story.steps[story.i];

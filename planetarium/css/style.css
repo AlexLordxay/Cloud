@@ -418,3 +418,8 @@ body.storying #sandbox { display: none !important; }
 .sb-story-btn { border-color: rgba(243,185,100,0.5) !important; color: var(--sun) !important; }
 /* What it means for people on the Earth, under the story's text */
 .sb-story p.sb-life { margin: 8px 0 0; min-height: 0; padding: 7px 10px; border-radius: 10px; font-size: 13px; line-height: 1.4; color: #f1d9ad; background: rgba(243,185,100,0.09); border: 1px solid rgba(243,185,100,0.22); }
+/* folded: only the title, the clock and the buttons stay */
+.sb-story.min #sbsText, .sb-story.min #sbsLife { display: none; }
+.sb-story.min h2 { margin-bottom: 0; cursor: pointer; }
+.sb-story #sbsMin { transition: transform .2s; }
+.sb-story.min #sbsMin { transform: rotate(180deg); }
