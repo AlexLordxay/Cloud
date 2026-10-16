@@ -714,8 +714,10 @@ const sandbox = (() => {
     if (shot.mode === "pair") {
       // both from high above, looking along the line between them, so on a tall phone screen they stand one above the
       // other (the screen is taller than wide); the middle sits a little high, clear of the card below
-      const half = gap * 0.5 + pr * 3, dist = half / Math.tan(camera.fov * DEG / 2) * 1.35 * shot.dk;
-      sT.copy(sDir).multiplyScalar(-gap * 0.5 + gap * 0.18);
+      // (a black hole's shadow and disc take room too: about three of its drawn horizons)
+      const hr = shot.o && shot.o.bh && BHG ? BHG.mat.uniforms.R.value * 4 : 0;
+      const half = gap * 0.5 + Math.max(pr * 3, hr), dist = half / Math.tan(camera.fov * DEG / 2) * 1.35 * shot.dk;
+      sT.copy(sDir).multiplyScalar(-gap * 0.5 + gap * 0.18 + hr * 0.45);   // (with a hole, the debris higher, off the card)
       sC.copy(sDir).multiplyScalar(0.38).addScaledVector(UP, 1).normalize().multiplyScalar(dist).add(sT);
       return glide(dt);
     }
@@ -1000,7 +1002,9 @@ const sandbox = (() => {
     story.rate += (want - story.rate) * Math.min(1, dt * (want < story.rate ? 5 : 1.2));
     const done = !st.until || st.until();
     if (done && st.until) story.after += story.paused ? 0 : dt;
-    if (!st.end && story.held >= st.min && done && story.after >= (st.after || 0)) storyStep(story.i + 1);
+    // a planet just torn: stay until the camera has drawn back and the hole and the stream have been seen for a while
+    const ripping = story.ripped === 1 || story.ripped === 2 && story.held - story.rippedAt < 9;
+    if (!st.end && story.held >= st.min && done && story.after >= (st.after || 0) && !ripping) storyStep(story.i + 1);
     // touching the scene hands the camera to the viewer for a while; then it glides back
     const held = performance.now() < S.holdUntil;
     if (held) { if (!story.wasHeld) controls.enabled = true; }
@@ -1131,11 +1135,11 @@ const sandbox = (() => {
   // the shadow. Debris falling in makes the disc flare up. A hole of the Sun's own mass (6 km) is drawn far bigger
   // than it is, or it could not be seen.
   let BHG = null;
-  const HOLE_S = 14;                                           // the quad's half-size, in horizon radii
+  const HOLE_S = 10;                                           // the quad's half-size, in horizon radii
   function makeBlackHole() {
     const g = new THREE.Group();
     const mat = new THREE.ShaderMaterial({
-      uniforms: { R: { value: 1 }, rot: { value: new THREE.Matrix3() }, time: { value: 0 }, lum: { value: 1 }, fade: { value: 1 } },
+      uniforms: { R: { value: 1 }, rot: { value: new THREE.Matrix3() }, time: { value: 0 }, lum: { value: 1 }, fade: { value: 1 }, dim: { value: 1 } },
       vertexShader: `
         uniform float R; varying vec3 vW; varying vec3 vC;
         void main() {
@@ -1145,7 +1149,7 @@ const sandbox = (() => {
           gl_Position = projectionMatrix * viewMatrix * vec4(vW, 1.0);
         }`,
       fragmentShader: `
-        uniform float R; uniform mat3 rot; uniform float time; uniform float lum; uniform float fade; varying vec3 vW; varying vec3 vC;
+        uniform float R; uniform mat3 rot; uniform float time; uniform float lum; uniform float fade; uniform float dim; varying vec3 vW; varying vec3 vC;
         float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
@@ -1169,15 +1173,15 @@ const sandbox = (() => {
             if (q0.y * p.y < 0.0) {
               vec3 q = mix(q0, p, q0.y / (q0.y - p.y));
               float qr = length(q.xz);
-              if (qr > 2.6 && qr < 11.0) {
+              if (qr > 2.6 && qr < 8.0) {
                 float sw = time * 1.4 / pow(qr, 1.5), cs = cos(sw), sn = sin(sw);
                 vec2 w = vec2(q.x * cs - q.z * sn, q.x * sn + q.z * cs);   // the gas turning, faster inwards
                 float rings = 0.5 + 0.5 * (0.6 * vn(w * 1.1 + qr * 1.3) + 0.4 * vn(w * 3.2 - qr * 2.0));
-                float temp = pow(3.0 / qr, 1.2) * smoothstep(2.6, 3.4, qr) * (1.0 - smoothstep(6.5, 11.0, qr));
+                float temp = pow(3.0 / qr, 1.2) * smoothstep(2.6, 3.4, qr) * (1.0 - smoothstep(4.5, 8.0, qr));
                 vec3 vel = normalize(vec3(-q.z, 0.0, q.x)) * sqrt(0.5 / max(qr - 1.0, 0.5));
                 float gd = 1.0 / (1.0 - dot(vel, -normalize(v)) * 0.9);
                 float I = temp * rings * gd * gd * gd * lum;
-                float a = clamp(temp * 1.3, 0.0, 0.95) * (1.0 - alpha);
+                float a = clamp(temp * 1.1, 0.0, 0.7) * dim * (1.0 - alpha);   // see-through, so planets behind still show
                 col += bb(I * 0.85) * a; alpha += a;
                 if (alpha > 0.98) break;
               }
@@ -1203,10 +1207,14 @@ const sandbox = (() => {
     scenePos(h, BHG.g.position);
     // a hole of the Sun's own mass appears as the Sun shrinks away; it has little gas round it, so its disc is dimmer
     const small = sbDist(rsAU(h)) < 1, grow = small ? ramp(S.days, 0.0008, 0.0024) : 1;
-    const R = small ? 1.1 * Math.max(grow, 0.05) : sbDist(rsAU(h));
+    // Sgr A*'s true horizon (0.085 AU) would be drawn 12 units wide — on the sandbox's squeezed distances its shadow
+    // and disc would cover Mercury's and Venus's orbits — so it is drawn at a third of that, with the planets around it.
+    const R = small ? 1.1 * Math.max(grow, 0.05) : Math.min(4, sbDist(rsAU(h)));
     BHG.glow = Math.max(0, BHG.glow - dt * 0.6);
     const u = BHG.mat.uniforms;
     u.R.value = R; u.time.value += dt; u.fade.value = grow;
+    // seen from close by (a camera beside a planet near the hole) the disc fills the sky: it is dimmed, so the planet stands out
+    u.dim.value = 0.25 + 0.75 * ramp(camera.position.distanceTo(BHG.g.position) / R, 10, 18);
     u.lum.value = (small ? 0.75 : 1) + BHG.glow * 0.8;
   }
   // A torn planet becomes a stream of debris: pieces spread along the line to the hole (the near side moves faster
