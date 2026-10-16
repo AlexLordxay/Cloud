@@ -24,10 +24,14 @@ const sandbox = (() => {
       text: "Сонце раптом стало вдвічі масивнішим — і в 11 разів яскравішим. Планети рухаються надто повільно для нової сили тяжіння й падають на витягнуті орбіти." },
     "no-sun": { title: "Сонце зникло", speed: 5,
       text: "Сонця більше немає. Ніщо не тримає планети — вони летять по прямих, кожна туди, куди рухалася тієї миті. Світло зникне через 8 хвилин." },
+    "bh-sun": { title: "Сонце — чорна діра", speed: 5,
+      text: "Сонце стиснулося в чорну діру тієї самої маси — кульку завширшки 6 кілометрів. Чи впадуть у неї планети?" },
+    "sgr-a": { title: "Стрілець A* замість Сонця", speed: 1,
+      text: "На місці Сонця — Стрілець A*, чорна діра з центру нашої галактики, у 4,3 мільйона разів масивніша. Планети не втримаються на орбітах." },
     "stop-earth": { title: "Земля зупинилася", speed: 2,
       text: "Земля раптом зупинилася на своїй орбіті. Ніщо більше не відводить її вбік — і вона падає прямо на Сонце." },
   };
-  const S = { on: false, bodies: [], days: 0, t: 0, speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
+  const S = { on: false, bodies: [], days: 0, t: 0, rips: [], streams: [], speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
   const V = () => new THREE.Vector3();
 
   function body(id, m, pos, vel) { return { id, m, p: pos, v: vel, a: V(), alive: true, trail: [] }; }
@@ -80,7 +84,7 @@ const sandbox = (() => {
       accel();
       for (const b of S.bodies) if (b.alive) b.v.addScaledVector(b.a, h / 2);
       S.t += h; n++;
-      collide();
+      collide(); tides();
       if (S.trails) trailStep();
     }
     if (S.t < S.days) S.days = S.t;                 // too much for one frame: time waits for the physics
@@ -98,12 +102,33 @@ const sandbox = (() => {
   // Two bodies closer than this (AU) merge: a planet into a star, or the lighter planet into the heavier one.
   const HIT = { star: 0.006, planet: 0.004 };
   const isStar = b => b.id === "sun" || b.id === "sun2";
+  const shines = s => shines(s) && !s.bh;   // a black hole has the mass but gives no light
+  // A black hole's horizon (AU): the Schwarzschild radius, 2.95 km per solar mass.
+  const rsAU = b => 2.953 * b.m / 1.495978707e8;
+  // Tidal disruption: a planet of radius R and mass m is torn apart closer than R·(M/m)^⅓ to a mass M — the pull on its
+  // near side then beats its own gravity. The news of the black hole reaches it at the speed of light (r · 8.3 min/AU).
+  const R_KM = { mercury: 2440, venus: 6052, earth: 6371, mars: 3390, jupiter: 71492, saturn: 58232, uranus: 25559, neptune: 24764 };
+  const tidalAU = (b, h) => R_KM[b.id] / 1.495978707e8 * Math.cbrt(h.m / b.m);
+  function tides() {
+    const h = get("sun");
+    if (!h || !h.bh || !h.alive) return;
+    for (const b of S.bodies) {
+      if (!b.alive || !R_KM[b.id]) continue;
+      const r = b.p.distanceTo(h.p);
+      if (r < tidalAU(b, h) && S.t > r * 499.005 / 86400) {
+        b.alive = false; S.rips.push({ id: b.id, p: b.p.clone().sub(h.p), v: b.v.clone().sub(h.v) });
+        note("rip-" + b.id, `${ACC[b.id]} розірвало на шматки — через ${years(S.t)}.`);
+      }
+    }
+  }
+  const ACC = { mercury: "Меркурій", venus: "Венеру", earth: "Землю", mars: "Марс", jupiter: "Юпітер", saturn: "Сатурн", uranus: "Уран", neptune: "Нептун" };
   function collide() {
     const B = S.bodies;
     for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
       const a = B[i], b = B[j];
       if (!a.alive || !b.alive) continue;
-      const lim = isStar(a) || isStar(b) ? HIT.star : HIT.planet;
+      const bh = a.bh ? a : b.bh ? b : null;
+      const lim = bh ? Math.max(HIT.star, rsAU(bh)) : isStar(a) || isStar(b) ? HIT.star : HIT.planet;
       if (a.p.distanceTo(b.p) > lim) continue;
       const big = isStar(a) && !isStar(b) ? a : isStar(b) && !isStar(a) ? b : a.m >= b.m ? a : b, small = big === a ? b : a;
       if (small.m === 0 && isStar(small)) continue;
@@ -150,8 +175,11 @@ const sandbox = (() => {
   // A story starts from one fixed moment (the bodies' exact places and speeds), so its future is always the same and
   // the words can be written for it. "two-suns": the system of 1 September 2026 with the second Sun already added;
   // "heavy-sun": the same day, the Sun twice as heavy; "no-sun": the same day, the Sun gone;
-  // "jupiter-earth": the same day, the Earth and Jupiter swapped.
+  // "jupiter-earth": the same day, the Earth and Jupiter swapped;
+  // "bh-sun" / "sgr-a": the same day, the Sun a black hole of its own mass / of Sagittarius A*'s (4.3 million Suns).
   const STORY_START = {
+    "sgr-a": {"jd":2461284.5,"bodies":[["sun",4300000,[0,0,0],[0,0,0]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.009067121410422596,-0.0013533878243529099,0.026736150795543694]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.01623758698677691,-0.0007747289772347885,-0.011804427963593489]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.006103149325228707,-9.606720727967957e-07,-0.015911724344803146]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.012617947830879106,0.00043480529313185204,-0.005983355099650645]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.0059818921752397,0.0001520486531615614,0.004375334065029435]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.0012562785245968655,-4.529654143409223e-05,-0.0054832253119529994]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0035113982721561854,5.15837649088316e-05,-0.0016441978961339032]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.00015515841646518425,-6.139143961414462e-05,-0.003154704488425253]]]},
+    "bh-sun": {"jd":2461284.5,"bodies":[["sun",1,[0,0,0],[0,0,0]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.009067121410422596,-0.0013533878243529099,0.026736150795543694]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.01623758698677691,-0.0007747289772347885,-0.011804427963593489]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.006103149325228707,-9.606720727967957e-07,-0.015911724344803146]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.012617947830879106,0.00043480529313185204,-0.005983355099650645]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.0059818921752397,0.0001520486531615614,0.004375334065029435]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.0012562785245968655,-4.529654143409223e-05,-0.0054832253119529994]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0035113982721561854,5.15837649088316e-05,-0.0016441978961339032]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.00015515841646518425,-6.139143961414462e-05,-0.003154704488425253]]]},
     "jupiter-earth": {"jd":2461284.5,"bodies":[["sun",1,[0,0,0],[0,0,0]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.009067121410422596,-0.0013533878243529099,0.026736150795543694]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.01623758698677691,-0.0007747289772347885,-0.011804427963593489]],["earth",3.04e-06,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.0059818921752397,0.0001520486531615614,0.004375334065029435]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.012617947830879106,0.00043480529313185204,-0.005983355099650645]],["jupiter",0.0009548,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.006103149325228707,-9.606720727967957e-07,-0.015911724344803146]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.0012562785245968655,-4.529654143409223e-05,-0.0054832253119529994]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0035113982721561854,5.15837649088316e-05,-0.0016441978961339032]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.00015515841646518425,-6.139143961414462e-05,-0.003154704488425253]]]},
     "no-sun": {"jd":2461284.5,"bodies":[["sun",0,[0,0,0],[0,0,0]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.009067121410422596,-0.0013533878243529099,0.026736150795543694]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.01623758698677691,-0.0007747289772347885,-0.011804427963593489]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.006103149325228707,-9.606720727967957e-07,-0.015911724344803146]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.012617947830879106,0.00043480529313185204,-0.005983355099650645]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.0059818921752397,0.0001520486531615614,0.004375334065029435]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.0012562785245968655,-4.529654143409223e-05,-0.0054832253119529994]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0035113982721561854,5.15837649088316e-05,-0.0016441978961339032]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.00015515841646518425,-6.139143961414462e-05,-0.003154704488425253]]]},
     "heavy-sun": {"jd":2461284.5,"bodies":[["sun",2,[0,0,0],[0,0,0]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.009067121410422596,-0.0013533878243529099,0.026736150795543694]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.01623758698677691,-0.0007747289772347885,-0.011804427963593489]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.006103149325228707,-9.606720727967957e-07,-0.015911724344803146]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.012617947830879106,0.00043480529313185204,-0.005983355099650645]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.0059818921752397,0.0001520486531615614,0.004375334065029435]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.0012562785245968655,-4.529654143409223e-05,-0.0054832253119529994]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0035113982721561854,5.15837649088316e-05,-0.0016441978961339032]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.00015515841646518425,-6.139143961414462e-05,-0.003154704488425253]]]},
@@ -162,9 +190,11 @@ const sandbox = (() => {
     const start = fixed && STORY_START[key];
     if (start) S.jd0 = start.jd;
     S.bodies = start ? start.bodies.map(([id, m, p, v]) => body(id, m, V().fromArray(p), V().fromArray(v))) : realStart(S.jd0);
-    S.days = 0; S.t = 0; S.t0 = 0; S.events.clear(); S.hits.length = 0; clearBooms(); hideShells();
+    S.days = 0; S.t = 0; S.t0 = 0; S.events.clear(); S.rips.length = 0; clearStreams(); S.hits.length = 0; clearBooms(); hideShells();
     S.log.length = 0; S.slow = 1; S.cool = {}; endShot(false); renderLog();
     const sun = get("sun"), earth = get("earth"), jup = get("jupiter");
+    sun.bh = key === "bh-sun" || key === "sgr-a";
+    if (!start && key === "sgr-a") sun.m = 4.3e6;
     if (start) { /* already set */ } else if (key === "two-suns") {
       // An equal star 9.5 AU away; both circle their midpoint, and the planets keep moving round the first one.
       const a = 9.5, v = Math.sqrt(G * 2 / a);
@@ -268,10 +298,10 @@ const sandbox = (() => {
   function earthTemp() {
     const e = get("earth");
     if (!e.alive) return null;
-    if (S.scenario === "no-sun") return cooled(288) - 273;
-    if (S.scenario === "jupiter-earth") { let f = 0; for (const s of S.bodies) if (isStar(s) && s.alive && s.m > 0) f += Math.pow(s.m, 3.5) / Math.max(e.p.distanceToSquared(s.p), 1e-6); return Math.max(288 * Math.pow(f, 0.25), cooled(288)) - 273; }
+    if (COLD[S.scenario]) return cooled(288) - 273;
+    if (S.scenario === "jupiter-earth") { let f = 0; for (const s of S.bodies) if (shines(s)) f += Math.pow(s.m, 3.5) / Math.max(e.p.distanceToSquared(s.p), 1e-6); return Math.max(288 * Math.pow(f, 0.25), cooled(288)) - 273; }
     let flux = 0;
-    for (const s of S.bodies) if (isStar(s) && s.alive && s.m > 0) flux += Math.pow(s.m, 3.5) / Math.max(e.p.distanceToSquared(s.p), 1e-6);
+    for (const s of S.bodies) if (shines(s)) flux += Math.pow(s.m, 3.5) / Math.max(e.p.distanceToSquared(s.p), 1e-6);
     return flux <= 0 ? -270 : Math.max(-270, 288 * Math.pow(flux, 0.25) - 273);
   }
 
@@ -279,6 +309,7 @@ const sandbox = (() => {
   // A body's temperature (K) as a bare rock in the light it gets now: 278 K at 1 AU from one Sun; a star's light ∝ mass^3.5.
   // Without any star a planet does not freeze at once: its air, oceans and rock hold heat. Earth: below zero within a
   // week, about −70 °C after a year, −240 °C only after a million years (an interpolation in log time); others alike.
+  const COLD = { "no-sun": 1, "bh-sun": 1, "sgr-a": 1 };   // scenarios where the light is gone
   const COOL = [[0, 0], [0.006, 0], [7, 0.125], [60, 0.24], [365, 0.345], [3650, 0.45], [1e5, 0.65], [1e6, 1]];
   function cooled(T0) {
     const d = S.days; let k = 1;
@@ -288,13 +319,13 @@ const sandbox = (() => {
     return T0 - (T0 - 33) * (g0 + (g1 - g0) * f);
   }
   function tempK(b) {
-    if (S.scenario === "no-sun") return cooled(278 / Math.sqrt(b.r0 || 1));
+    if (COLD[S.scenario]) return cooled(278 / Math.sqrt(b.r0 || 1));
     if (S.scenario === "jupiter-earth" && b.id === "earth") return Math.max(eqK(b), cooled(278));   // it cools for years
     return eqK(b);
   }
   function eqK(b) {
     let flux = 0;
-    for (const s of S.bodies) if (isStar(s) && s.alive && s.m > 0 && s !== b) flux += Math.pow(s.m, 3.5) / Math.max(b.p.distanceToSquared(s.p), 1e-8);
+    for (const s of S.bodies) if (shines(s) && s !== b) flux += Math.pow(s.m, 3.5) / Math.max(b.p.distanceToSquared(s.p), 1e-8);
     return 278 * Math.pow(flux, 0.25);
   }
   const ROCKY = ["mercury", "venus", "earth", "mars"];
@@ -383,7 +414,7 @@ const sandbox = (() => {
     }
   }
   // No star shines any more (its last light, 8 minutes on the way, has passed too).
-  const starless = () => S.days > 0.006 && !S.bodies.some(s => isStar(s) && s.alive && s.m > 0);
+  const starless = () => S.days > 0.006 && !S.bodies.some(s => shines(s));
   const tSun = V(), tOff = V(), tSide = V(), tUp = V();
   function shells(dt) {
     // the Sun's light goes out with it (moons and other plain surfaces)
@@ -401,15 +432,17 @@ const sandbox = (() => {
       sh.flash = Math.max(0, sh.flash - dt * 0.5);
       const ease = (u, v, k) => { u.value += (v - u.value) * Math.min(1, dt * k); };
       ease(sh.u.dry, b.id === "earth" ? ramp(T, 330, 520) : 0, 2);
-      ease(sh.u.crack, sh.gas ? 0 : ramp(T, 600, 1100), 2);
-      ease(sh.u.melt, sh.gas ? ramp(T, 700, 1800) : ramp(T, 1100, 1700), 2);
-      ease(sh.u.frost, !ROCKY.includes(b.id) ? 0 : S.scenario === "no-sun" ? ramp(S.days, 5, 400) : S.scenario === "jupiter-earth" && b.id === "earth" ? ramp(S.days, 30, 700) : ramp(-T, -175, -55), 1.5);
+      // near a black hole, tides knead the planet: it heats up, cracks and glows before it is torn apart
+      const tf = tidal(b);
+      ease(sh.u.crack, Math.max(sh.gas ? 0 : ramp(T, 600, 1100), sh.gas ? 0 : ramp(tf, 0.3, 0.75)), 3);
+      ease(sh.u.melt, Math.max(sh.gas ? ramp(T, 700, 1800) : ramp(T, 1100, 1700), ramp(tf, sh.gas ? 0.35 : 0.6, 1)), 3);
+      ease(sh.u.frost, !ROCKY.includes(b.id) ? 0 : COLD[S.scenario] ? ramp(S.days, 5, 400) : S.scenario === "jupiter-earth" && b.id === "earth" ? ramp(S.days, 30, 700) : ramp(-T, -175, -55), 1.5);
       sh.u.flash.value = sh.flash;
-      ease(sh.u.dark, starless() ? 0.7 : 0, 1.2);
+      ease(sh.u.dark, starless() ? 0.7 * (1 - Math.max(sh.u.melt.value, sh.u.crack.value * 0.8, sh.flash)) : 0, 1.2);
       sh.u.time.value += dt;
       // the brightest star lights the shell
       let best = null, bf = 0;
-      for (const s of S.bodies) if (isStar(s) && s.alive && s.m > 0) { const f = Math.pow(s.m, 3.5) / Math.max(b.p.distanceToSquared(s.p), 1e-8); if (f > bf) { bf = f; best = s; } }
+      for (const s of S.bodies) if (shines(s)) { const f = Math.pow(s.m, 3.5) / Math.max(b.p.distanceToSquared(s.p), 1e-8); if (f > bf) { bf = f; best = s; } }
       if (best) sh.u.sunDir.value.copy(scenePos(best, tSun)).sub(B.world).normalize();
       const u = sh.u, any = u.dry.value + u.crack.value + u.melt.value + u.frost.value + u.flash.value + u.dark.value;
       sh.m.visible = b.alive && any > 0.01;
@@ -736,6 +769,42 @@ const sandbox = (() => {
   const Y = 365.25;
   const rSun = id => { const b = get(id); return b && b.alive ? b.p.distanceTo(get("sun").p) : 0; };
   const STORIES = {
+    "sgr-a": [
+      // the moments of each planet's tearing come from this start's own future (scratchpad rip.js, the same physics)
+      { title: "Стрілець A* замість Сонця", shot: { mode: "sun", dk: 1.25 }, rate: 0.00012, min: 11, until: () => S.days > 0.0011,
+        life: "Люди: ще кілька хвилин нічого не знають — і тяжіння, і темрява летять до Землі зі швидкістю світла.",
+        text: "Уяви: замість Сонця — Стрілець A*, чорна діра з центру нашої галактики. Вона в 4,3 мільйона разів масивніша за Сонце, а її межа, звідки не вирветься навіть світло, — 25 мільйонів кілометрів завширшки." },
+      { title: "Меркурій", shot: { b: "mercury", o: "sun", dk: 1.5 }, ripView: 1, at: 0.002083, k: 2.2, low: 4e-06, post: 0.0015, max: 0.0002, min: 12, until: () => !get("mercury").alive, after: 5,
+        life: "Люди: на Землі ще світить Сонце — його останні промені в дорозі.",
+        text: "Першим новину отримує Меркурій — за 3 хвилини. Він уже ближче до діри, ніж межа, де її тяжіння рве планети: ближчий бік тягне сильніше за дальній. Меркурій розжарюється, витягується — і розлітається потоком уламків." },
+      { title: "Венера", shot: { b: "venus", o: "sun", dk: 1.5 }, ripView: 1, at: 0.013403, k: 2.2, low: 4e-06, post: 0.0015, max: 0.002, min: 11, until: () => !get("venus").alive, after: 4,
+        life: "Люди: над Землею вже темно, а вона мчить до діри щораз швидше.",
+        text: "За 19 хвилин — Венера. Її розпечена атмосфера й кам'яне тіло розтягуються в довгу сяючу стрічку, що закручується до діри." },
+      { title: "Земля", shot: { b: "earth", o: "sun", dk: 1.6 }, ripView: 1, at: 0.026389, k: 2.4, low: 4e-06, post: 0.0015, max: 0.002, min: 14, until: () => !get("earth").alive, after: 6,
+        life: "Люди: живуть лише 38 хвилин. Останні з них — темрява, землетруси й спека: припливи місять кору планети.",
+        text: "Земля падає вже з третиною швидкості світла. За 72 мільйони кілометрів від діри різниця тяжіння між її боками стає сильнішою за тяжіння самої Землі — і планету розриває на шматки. Від появи діри минуло 38 хвилин." },
+      { title: "Юпітер", shot: { b: "jupiter", o: "sun", dk: 1.4 }, ripView: 1, at: 0.369792, k: 1.6, low: 5e-05, post: 0.002, max: 0.03, min: 13, until: () => !get("jupiter").alive, after: 5,
+        life: "Людей уже немає. Від Землі лишився потік уламків, що зник за межею діри.",
+        text: "Марс зник за годину з чвертю. Велетень Юпітер тримається майже 9 годин — і його розриває ще далі від діри, ніж Землю: за 118 мільйонів кілометрів. Газ розтягується в сяючу стрічку." },
+      { title: "Сатурн", shot: { b: "saturn", o: "sun", dk: 1.4 }, ripView: 1, at: 0.890833, k: 1.6, low: 5e-05, post: 0.0025, max: 0.05, min: 12, until: () => !get("saturn").alive, after: 5,
+        text: "Через 21 годину — Сатурн, разом із кільцями й супутниками." },
+      { title: "Тиждень — і все", shot: { mode: "sun", dk: 32 }, hl: ["uranus", "neptune"], rate: 0.6, min: 13, end: true,
+        text: "Уран протримається 2,7 доби, Нептун — 5. За тиждень від Сонячної системи лишаться тільки уламки, що зникають у темряві. А сама діра навіть не стане помітно важчою." },
+    ],
+    "bh-sun": [
+      { title: "Сонце — чорна діра", shot: { mode: "sun", dk: 1.6 }, rate: 0.0003, min: 11, until: () => S.days > 0.0058, after: 2,
+        life: "Люди: ще 8 хвилин бачать Сонце — його останнє світло в дорозі.",
+        text: "Уяви: Сонце миттєво стискається в чорну діру тієї самої маси. Вона крихітна — кулька завширшки 6 кілометрів, менша за Київ. Тут вона намальована більшою, інакше її не було б видно." },
+      { title: "Земля впаде?", shot: { b: "earth", o: "sun", dk: 1.6 }, rate: 1.5, min: 13,
+        life: "Люди: живі, але настала ніч, якій не буде кінця.",
+        text: "Здається, Земля зараз упаде в діру? Ні! На її відстані тяжіння таке саме, як було: маса не змінилася. Земля летить своєю старою орбітою, і рік триває як і раніше." },
+      { title: "Холод", shot: { b: "earth", o: "sun", dk: 1.4 }, rate: 30, min: 12, until: () => S.days > 365,
+        life: "Люди: на поверхні не вижити. Лише в укриттях з геотермальним чи ядерним теплом — роками.",
+        text: "Без сонячного світла за тиждень на Землі мороз, за рік — близько −70 °C. Океани вкриваються кригою. Але орбіта — та сама." },
+      { title: "Не пилосос", shot: { mode: "sun", dk: 2.2 }, hl: ["mercury", "venus", "earth", "mars"], rate: 25, min: 13, end: true,
+        life: "Люди: виживуть лише глибоко під землею — як і в історії «Без Сонця».",
+        text: "Планети й далі кружляють довкола темряви, наче нічого не сталося. Чорна діра — не пилосос: вона тягне так само, як зоря тієї ж маси. Вона просто не світить." },
+    ],
     "jupiter-earth": [
       { title: "Юпітер замість Землі", shot: { mode: "sun", dk: 6 }, hl: ["earth", "jupiter"], rate: 2, min: 11,
         life: "Люди: на Землі, що тепер на місці Юпітера, Сонце світить у 27 разів слабше. Перші тижні — як найсуворіша зима.",
@@ -885,6 +954,7 @@ const sandbox = (() => {
     el("sbsNext").setAttribute("aria-label", st.end ? "Інші сценарії" : "Далі");
     el("sbsBar").style.transform = `scaleX(${i / (story.steps.length - 1)})`;
     story.wide = st.shot.mode === "meet";                 // a meeting: the whole system while time runs fast
+    story.ripped = false;
     storyShot();
   }
   // The step's shot. Before a meeting, while time still runs fast, the planets would whirl round the Sun on screen:
@@ -897,6 +967,7 @@ const sandbox = (() => {
   // The pace of this frame (simulated days per real second).
   function storyRate(st) {
     if (st.rate !== undefined) return st.rate;
+    if (st.at !== undefined && st.post && S.days >= st.at) return st.post;   // after the event: watch what follows
     if (st.at !== undefined) return Math.min(st.max || 365, Math.max(st.low || 0.2, (st.at - S.days) / st.k));
     const e = get(st.shot.b), sun = get("sun");
     if (!e || !e.alive) return 0.3;
@@ -916,6 +987,11 @@ const sandbox = (() => {
     const held = performance.now() < S.holdUntil;
     if (held) { if (!story.wasHeld) controls.enabled = true; }
     else {
+      // a planet torn apart: draw back to show the hole and the stream of what was the planet
+      if (st.ripView && !story.ripped && st.shot.b && !get(st.shot.b).alive) {
+        story.ripped = true;
+        startShot({ b: get(st.shot.b), o: get("sun"), kind: "story", mode: "pair", dk: 1.15 });
+      }
       // come in once the step's own pace (not the eased one, still slow from the step before) has dropped for the event
       if (story.wide && story.held > 2 && storyRate(st) < 6) { story.wide = false; storyShot(); }
       if (story.wasHeld) storyShot();
@@ -983,7 +1059,8 @@ const sandbox = (() => {
     byId.sun.group.scale.setScalar(1);
     if (typeof sunLight !== "undefined") sunLight.intensity = 1.7;
     for (const belt of typeof asteroidBelt !== "undefined" ? [asteroidBelt, kuiperBelt] : []) { if (belt.material.userData.o !== undefined) belt.material.opacity = belt.material.userData.o; belt.visible = true; }
-    for (const id of ID.slice(1)) { byId[id].sbScale = 1; byId[id].group.scale.setScalar(1); }
+    for (const id of ID.slice(1)) { byId[id].sbScale = 1; byId[id].group.scale.setScalar(1); byId[id].group.quaternion.identity(); byId[id].stretched = false; }
+    clearStreams(); if (BHG) BHG.g.visible = false;
     for (const b of BODIES) {
       if (b.orbitLine) b.orbitLine.visible = state.orbits;
       b.group.visible = true;
@@ -1002,13 +1079,130 @@ const sandbox = (() => {
       if (b.id === "sun2") { scenePos(b, S.sun2.position); S.sun2.visible = b.alive; continue; }
       if (!B) continue;
       if (b.id !== "sun") { B.group.visible = b.alive; shown(b, tRel).sub(shown(get("sun"), tLag)); B.simAU = tRel.clone(); }
-      else B.group.visible = b.m > 0 || S.days < 0.0058;   // gone, but its last light is still on the way for 8 minutes
+      else B.group.visible = !b.bh && (b.m > 0 || S.days < 0.0058);   // gone, but its last light is still on the way for 8 minutes
     }
     shrinkClose(dt);
+    stretch(); blackHole(dt); streams(days, dt);
     drawTrails();
     fireHits(); booms(dt); splashes(dt); shells(dt);
     readout();
     return { jd: S.jd0 + S.days, dDays: days, fine: days / Math.max(dt, 1e-3) <= 1 };
+  }
+
+  /* ---------- Black holes: the hole, tides and streams of debris ---------- */
+  // tf: how near a planet is to being torn apart, (r_t / r)³ (tides grow as 1/r³) — 1 at the tidal radius.
+  function tidal(b) {
+    const h = get("sun");
+    if (!h || !h.bh || !b.alive || !R_KM[b.id]) return 0;
+    return Math.pow(tidalAU(b, h) / Math.max(b.p.distanceTo(h.p), 1e-9), 3);
+  }
+  // The hole: a black ball the size of its horizon, a thin ring of bent light just outside it, and a glow that flares
+  // as debris falls in. A hole of the Sun's own mass is 6 km across — drawn as a small dot, or it could not be seen.
+  let BHG = null;
+  function makeBlackHole() {
+    const g = new THREE.Group();
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+    const cv = document.createElement("canvas"); cv.width = cv.height = 512;
+    const c = cv.getContext("2d"), grd = c.createRadialGradient(256, 256, 0, 256, 256, 256);
+    grd.addColorStop(0, "rgba(0,0,0,0)"); grd.addColorStop(0.37, "rgba(255,190,120,0)"); grd.addColorStop(0.40, "rgba(255,236,200,1)");
+    grd.addColorStop(0.43, "rgba(255,170,90,0.55)"); grd.addColorStop(0.6, "rgba(255,120,60,0.12)"); grd.addColorStop(1, "rgba(255,90,40,0)");
+    c.fillStyle = grd; c.fillRect(0, 0, 512, 512);
+    const ring = new THREE.Sprite(new THREE.SpriteMaterial({ map: toTexture(cv), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const flare = glowSprite("255,150,80", 1, 0);
+    g.add(ball, ring, flare); g.visible = false; scene.add(g);
+    BHG = { g, ball, ring, flare, glow: 0 };
+  }
+  function blackHole(dt) {
+    const h = get("sun");
+    if (!BHG) { if (!h || !h.bh) return; makeBlackHole(); }
+    BHG.g.visible = !!(h && h.bh);
+    if (!BHG.g.visible) return;
+    scenePos(h, BHG.g.position);
+    const R = Math.max(sbDist(rsAU(h)), 0.45);
+    BHG.ball.scale.setScalar(R);
+    BHG.ring.scale.setScalar(R * 5.25);                       // the ring texture's bright edge sits at 0.40 of its half-size
+    BHG.glow = Math.max(0, BHG.glow - dt * 0.6);
+    BHG.ring.material.opacity = Math.min(1, 0.7 + BHG.glow);
+    BHG.flare.scale.setScalar(R * 9); BHG.flare.material.opacity = Math.min(0.8, BHG.glow * 0.7);
+  }
+  // A torn planet becomes a stream of debris: pieces spread along the line to the hole (the near side moves faster
+  // inwards), each then falls on its own, heating up — brighter the nearer it gets — until it crosses the horizon.
+  const tPa = new THREE.Vector3(), tPb = new THREE.Vector3();
+  const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) * 1.15;
+  function spawnStream(rip) {
+    const B = byId[rip.id], h = get("sun"), r = rip.p.length(), u = rip.p.clone().divideScalar(r);
+    const lat = sbDist(r) / r, rad = (sbDist(r * 1.01) - sbDist(r)) / (0.01 * r);   // scene units per AU across / along
+    const Rs = B.radius * (B.sbScale || 1), vl = rip.v.length();
+    const side = V().crossVectors(u, Math.abs(u.y) > 0.9 ? V().set(1, 0, 0) : UP).normalize(), up2 = V().crossVectors(side, u);
+    const N = 1000, P = new Float32Array(N * 3), W = new Float32Array(N * 3), pos = new Float32Array(N * 3), col = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const sl = Math.random() * 2 - 1, a = sl * 1.4 * Rs / rad, b1 = gauss() * 0.45 * Rs / lat, b2 = gauss() * 0.45 * Rs / lat;
+      P[i * 3] = rip.p.x + u.x * a + side.x * b1 + up2.x * b2; P[i * 3 + 1] = rip.p.y + u.y * a + side.y * b1 + up2.y * b2; P[i * 3 + 2] = rip.p.z + u.z * a + side.z * b1 + up2.z * b2;
+      const dv = sl * 0.07 * vl, w1 = gauss() * 0.006 * vl, w2 = gauss() * 0.006 * vl;
+      W[i * 3] = rip.v.x + u.x * dv + side.x * w1 + up2.x * w2; W[i * 3 + 1] = rip.v.y + u.y * dv + side.y * w1 + up2.y * w2; W[i * 3 + 2] = rip.v.z + u.z * dv + side.z * w1 + up2.z * w2;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    if (!softTex) softTex = glowSprite("255,255,255", 1, 1).material.map;
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: Rs * 0.38, map: softTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    pts.frustumCulled = false; scene.add(pts);
+    const base = new THREE.Color(B.dot || "#ffffff");
+    S.streams.push({ id: rip.id, P, W, pts, base, rt: tidalAU(get(rip.id) || { id: rip.id, m: MASS[rip.id] }, h), live: new Uint8Array(N).fill(1), age: 0 });
+    boom(scenePos({ p: rip.p.clone().add(h.p) }, V()), Math.max(Rs, 0.8), true);
+  }
+  function clearStreams() {
+    for (const st of S.streams) { scene.remove(st.pts); st.pts.geometry.dispose(); st.pts.material.dispose(); }
+    S.streams.length = 0;
+    if (BHG) BHG.glow = 0;
+  }
+  function streams(days, dt) {
+    while (S.rips.length) spawnStream(S.rips.shift());
+    if (!S.streams.length) return;
+    const h = get("sun"), GM = G * h.m, rs = rsAU(h);
+    for (const st of S.streams) {
+      st.age += dt;
+      const P = st.P, W = st.W, N = st.live.length;
+      // time steps: a small fraction of the fall time of the piece nearest the hole
+      let rmin = Infinity;
+      for (let i = 0; i < N; i++) if (st.live[i]) rmin = Math.min(rmin, Math.hypot(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]));
+      if (rmin === Infinity) continue;
+      const hstep = 0.03 * Math.sqrt(rmin * rmin * rmin / GM), n = Math.min(60, Math.ceil(days / Math.max(hstep, 1e-9))), dd = days / Math.max(n, 1);
+      for (let k = 0; k < n && days > 0; k++) for (let i = 0; i < N; i++) {
+        if (!st.live[i]) continue;
+        const j = i * 3; let x = P[j], y = P[j + 1], z = P[j + 2];
+        let r2 = x * x + y * y + z * z, f = -GM / (r2 * Math.sqrt(r2)) * dd;
+        W[j] += x * f; W[j + 1] += y * f; W[j + 2] += z * f;
+        P[j] = x += W[j] * dd; P[j + 1] = y += W[j + 1] * dd; P[j + 2] = z += W[j + 2] * dd;
+        if (x * x + y * y + z * z < rs * rs) { st.live[i] = 0; BHG.glow = Math.min(1.2, BHG.glow + 0.004); }
+      }
+      const pa = st.pts.geometry.attributes.position, ca = st.pts.geometry.attributes.color, fade = Math.min(1, st.age / 0.3);
+      for (let i = 0; i < N; i++) {
+        const j = i * 3;
+        if (!st.live[i]) { ca.setXYZ(i, 0, 0, 0); continue; }
+        sbToScene(tPa.set(P[j], P[j + 1], P[j + 2]), tPb);
+        pa.setXYZ(i, tPb.x, tPb.y, tPb.z);
+        // the planet's own colour while still cool, then red, orange and white-hot as it nears the hole
+        const heat = Math.min(1, Math.pow(st.rt / Math.hypot(P[j], P[j + 1], P[j + 2]), 1.2) - 0.6);
+        const hk = Math.max(0, heat);
+        ca.setXYZ(i, fade * Math.min(1, st.base.r * (1 - hk) + hk * 1.3), fade * Math.min(1, st.base.g * (1 - hk) + hk * (0.45 + 0.5 * hk)), fade * Math.min(1, st.base.b * (1 - hk) + hk * 0.25 * hk));
+      }
+      pa.needsUpdate = true; ca.needsUpdate = true;
+    }
+  }
+  // Just before it is torn, a planet is drawn stretched along the line to the hole.
+  const qStretch = new THREE.Quaternion(), X_AXIS = new THREE.Vector3(1, 0, 0);
+  function stretch() {
+    const h = get("sun");
+    for (const b of S.bodies) {
+      const B = byId[b.id];
+      if (!B || isStar(b) || !R_KM[b.id]) continue;
+      const tf = h && h.bh ? tidal(b) : 0, k = ramp(tf, 0.45, 1);
+      if (k <= 0) { if (B.stretched) { B.group.quaternion.identity(); B.stretched = false; } continue; }
+      scenePos(h, tPa); tPb.copy(tPa).sub(B.world).normalize();
+      qStretch.setFromUnitVectors(X_AXIS, tPb); B.group.quaternion.copy(qStretch); B.stretched = true;
+      const sc = B.sbScale || 1, sx = 1 + 0.9 * k;
+      B.group.scale.set(sc * sx, sc / Math.sqrt(sx), sc / Math.sqrt(sx));
+    }
   }
 
   // Planets are drawn far bigger than their distances allow, so two that pass close would swallow each other on the
