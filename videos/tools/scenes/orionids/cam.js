@@ -18,7 +18,7 @@
     [15.001, peri(-2) - 12 * DAY], [25, peri(-1) + 40 * DAY, io],               // Mark Twain: 1835 → 1910
     [25.001, ms('2026-10-21T20:30:00Z')], [61, ms('2026-10-22T01:30:00Z'), x => x],   // the night of the peak
     [61.001, ms('2026-10-22T01:30:00Z')], [66.5, peri(1), io],                  // → 2061
-    [72, peri(1) + 45 * DAY, iin],
+    [74, peri(1) + 52 * DAY, iin],
   ];
   function simDate(t) {
     for (let i = 0; i < DATES.length - 1; i++) {
@@ -281,7 +281,7 @@
       look = geo(lerp(49.6, 49.2, e), lerp(31.5, 32, e), 1.0);
       up = geo(90, 0, 1).sub(C).normalize();
     } else {
-      ({ pos, look, up } = overview(r, 1 - (t - 61) / 11, lerp(260, 200, ease((t - 61) / 11))));
+      ({ pos, look, up } = overview(r, 1 - (t - 61) / 13, lerp(260, 200, ease((t - 61) / 13))));   // (74 s with the voice)
     }
 
     // Orbit lines: Halley's stands out in the wide shots, the Earth's while it crosses the trail.
