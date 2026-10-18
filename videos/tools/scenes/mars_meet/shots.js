@@ -4,7 +4,7 @@
 // Valles Marineris: floor about -5 km, plateau +3 km; the canyon runs from (-220, 85) east-south-east to (500, 290).
 module.exports = {
   // the hook: from high above, diving toward the whole volcano and its summit calderas (thin haze up here)
-  hook: { site: 'olympus', dur: 3.4, fog: 1 / 1400, sun: [-0.85, 0.24, -0.25], keys: [
+  hook: { site: 'olympus', dur: 3.4, fog: 1 / 2400, sun: [-0.85, 0.24, -0.25], keys: [
     { t: 0, pos: [20, 250, 430], look: [20, 6, 63] },
     { t: 3.4, pos: [20, 150, 285], look: [20, 10, 63] },
   ] },

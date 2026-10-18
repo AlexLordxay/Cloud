@@ -21,7 +21,7 @@ const EX = ${shot.ex || 2.5};                          // vertical exaggeration 
 async function setup() {
   const meta = await (await fetch('/data/meta.json')).json();
   const hb = new Float32Array(await (await fetch('/data/height.bin')).arrayBuffer());
-  const N = meta.n, S = ${shot.mesh || 1024}, step = (N - 1) / (S - 1);
+  const N = meta.n, S = ${shot.mesh || 1280}, step = (N - 1) / (S - 1);
   const R = meta.R / 1000, dx = meta.dx / 1000, dy = meta.dy / 1000;
   const pos = new Float32Array(S * S * 3), uv = new Float32Array(S * S * 2);
   for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
@@ -36,13 +36,13 @@ async function setup() {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   geo.setIndex(new THREE.BufferAttribute(idx, 1));
-  const load = f => new Promise(r => new THREE.TextureLoader().load(f, t => { t.anisotropy = 8; r(t); }));
+  const load = f => new Promise(r => new THREE.TextureLoader().load(f, t => { t.anisotropy = 16; r(t); }));
   const [col, nrm] = await Promise.all([load('/data/colour.jpg'), load('/data/normal.png')]);
   const sun = new THREE.Vector3(...${JSON.stringify(shot.sun || [-0.75, 0.42, -0.35])}).normalize();
   const HAZE = new THREE.Color(${JSON.stringify(shot.haze || '#c9a27a')});
   const mat = new THREE.ShaderMaterial({
     uniforms: { col: { value: col }, nrm: { value: nrm }, sun: { value: sun }, haze: { value: HAZE }, ex: { value: EX },
-      fogK: { value: ${shot.fog || 1 / 520} } },
+      fogK: { value: ${shot.fog || 1 / 800} } },
     vertexShader: 'varying vec2 vUv; varying vec3 vW; void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: \`uniform sampler2D col; uniform sampler2D nrm; uniform vec3 sun; uniform vec3 haze; uniform float ex; uniform float fogK;
       varying vec2 vUv; varying vec3 vW;
