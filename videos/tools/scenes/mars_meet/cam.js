@@ -26,8 +26,8 @@
     [9.0, 23.4, (k, c) => hold(c)],
     // the red, rusty surface close up: skimming low over the day side
     [23.4, 29.4, (k, c) => { const e = ease(k); return { pos: at(c, lerp(20, -5, e), lerp(30, 12, e), lerp(1.75, 1.42, e)), look: at(c, lerp(-5, -25, e), lerp(5, -5, e), 0.75) }; }],
-    // Phobos and Deimos: pulled well back, a little above their orbits, both moons and their paths in view
-    [29.4, 37.4, (k, c) => { const e = ease(k); return { pos: at(c, lerp(70, 40, e), lerp(32, 26, e), lerp(5.4, 4.6, e)), look: c.C }; }],
+    // Phobos and Deimos: pulled well back, high above their orbits, both moons and their paths in view
+    [29.4, 37.4, (k, c) => { const e = ease(k); return { pos: at(c, lerp(60, 35, e), lerp(58, 48, e), lerp(10.5, 8.8, e)), look: c.C }; }],
     [37.4, 43.8, (k, c) => hold(c)],
     // closing: Mars drifting away under the end card
     [43.8, 50.0, (k, c) => { const e = ease(k); return { pos: at(c, lerp(35, 20, e), lerp(14, 20, e), lerp(3.0, 5.2, e)), look: c.C }; }],
