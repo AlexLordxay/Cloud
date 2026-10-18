@@ -17,6 +17,19 @@ if (!shot) { console.log('shots:', Object.keys(SHOTS).join(', ')); process.exit(
 const W = 720, H = 1280, FPS = 30, EX = shot.ex || 2.5;
 
 const page = `<!doctype html><html><body style="margin:0;background:#000"><script src="/three.min.js"></script><script>
+
+const SKY = \`
+  uniform vec3 sun; uniform vec3 haze; uniform float dusk;
+  vec3 skyCol(vec3 d, float g) {
+    float e = clamp(d.y, -0.2, 1.0);
+    vec3 day = mix(haze * 1.02, vec3(0.32, 0.22, 0.16), smoothstep(0.0, 0.55, e));
+    // Martian dusk: a dim brown sky, and round the Sun a blue glow (fine dust scatters blue light forward)
+    float a = acos(clamp(dot(d, sun), -1.0, 1.0));
+    vec3 dk = mix(vec3(0.20, 0.15, 0.12), vec3(0.035, 0.03, 0.04), smoothstep(-0.02, 0.5, e));
+    dk += (vec3(0.20, 0.34, 0.58) * exp(-a / 0.16) * 1.1 + vec3(0.55, 0.72, 0.95) * exp(-a / 0.045) * 0.9) * g;
+    dk *= 0.75 + 0.25 * smoothstep(-0.1, 0.05, e);
+    return mix(day, dk, dusk);
+  }\`;
 const EX = ${shot.ex || 2.5};                          // vertical exaggeration (stated in the notes)
 async function setup() {
   const meta = await (await fetch('/data/meta.json')).json();
@@ -39,26 +52,30 @@ async function setup() {
   const load = f => new Promise(r => new THREE.TextureLoader().load(f, t => { t.anisotropy = 16; r(t); }));
   const [col, nrm] = await Promise.all([load('/data/colour.jpg'), load('/data/normal.png')]);
   const sun = new THREE.Vector3(...${JSON.stringify(shot.sun || [-0.75, 0.42, -0.35])}).normalize();
+  const DUSK = ${shot.dusk || 0};
   const HAZE = new THREE.Color(${JSON.stringify(shot.haze || '#c9a27a')});
   const mat = new THREE.ShaderMaterial({
-    uniforms: { col: { value: col }, nrm: { value: nrm }, sun: { value: sun }, haze: { value: HAZE }, ex: { value: EX },
+    uniforms: { col: { value: col }, nrm: { value: nrm }, sun: { value: sun }, haze: { value: HAZE }, ex: { value: EX }, dusk: { value: DUSK },
       fogK: { value: ${shot.fog || 1 / 800} } },
     vertexShader: 'varying vec2 vUv; varying vec3 vW; void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: \`uniform sampler2D col; uniform sampler2D nrm; uniform vec3 sun; uniform vec3 haze; uniform float ex; uniform float fogK;
+    fragmentShader: \`uniform sampler2D col; uniform sampler2D nrm; uniform float ex; uniform float fogK; const float SHB = ${(shot.shadowBias || 0).toFixed(3)};\` + SKY + \`
       varying vec2 vUv; varying vec3 vW;
       void main() {
         vec3 c = pow(texture2D(col, vUv).rgb, vec3(2.2));
         vec3 t = texture2D(nrm, vUv).rgb * 2.0 - 1.0;                     // x east, y north, z up
         vec3 n = normalize(vec3(t.x * ex, t.z, -t.y * ex));
         float d = max(dot(n, sun), 0.0);
-        float sh = smoothstep(-0.05, 0.25, dot(n, sun));                  // soft terminator on slopes facing away
-        vec3 lit = c * (vec3(1.0, 0.93, 0.85) * 2.5 * d * sh + vec3(0.42, 0.33, 0.27) * 0.38);
+        // soft terminator on slopes facing away; at sunset (grazing light) a bias stands in for the shadows that
+        // hills cast on each other, so the land toward the Sun goes dark and stands out against the glow
+        float sh = smoothstep(-0.05 + SHB, 0.25 + SHB, dot(n, sun));
+        vec3 amb = mix(vec3(0.42, 0.33, 0.27) * 0.38, vec3(0.10, 0.085, 0.085), dusk);   // at dusk only a faint skylight
+        vec3 lit = c * (vec3(1.0, 0.93, 0.85) * mix(2.5, 1.4, dusk) * d * sh + amb);
         float dist = length(vW - cameraPosition);
         float f = 1.0 - exp(-dist * fogK);
         vec2 e2 = min(vUv, 1.0 - vUv);
         float edge = 1.0 - smoothstep(0.0, 0.14, min(e2.x, e2.y));          // the patch's edges melt into the haze
         f = max(f * 0.8, edge);
-        lit = mix(lit, pow(haze, vec3(2.2)) * 0.95, f);
+        lit = mix(lit, pow(skyCol(normalize(normalize(vW - cameraPosition) * vec3(1.0, 0.0, 1.0) + vec3(0.0, 0.02, 0.0)), 0.3), vec3(2.2)) * 0.95, f);
         gl_FragColor = vec4(pow(lit, vec3(1.0 / 2.2)), 1.0);
       }\`,
   });
@@ -66,14 +83,18 @@ async function setup() {
   scene.add(new THREE.Mesh(geo, mat));
   // the sky: butterscotch near the horizon, darker and browner overhead
   const sky = new THREE.Mesh(new THREE.SphereGeometry(5000, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false,
-    uniforms: { haze: { value: HAZE } },
+    uniforms: { haze: { value: HAZE }, sun: { value: sun }, dusk: { value: DUSK } },
     vertexShader: 'varying vec3 vD; void main() { vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'uniform vec3 haze; varying vec3 vD; void main() { float e = clamp(vD.y, -0.2, 1.0); vec3 top = vec3(0.32, 0.22, 0.16); vec3 c = mix(haze * 1.02, top, smoothstep(0.0, 0.55, e)); gl_FragColor = vec4(c, 1.0); }' }));
+    fragmentShader: SKY + \`varying vec3 vD; void main() {
+      vec3 d = normalize(vD); vec3 c = skyCol(d, 1.0);
+      float a = acos(clamp(dot(d, sun), -1.0, 1.0));
+      c += vec3(0.9, 0.95, 1.0) * smoothstep(0.0034, 0.0026, a) * dusk * 2.0;    // the Sun: 0.35° across from Mars
+      gl_FragColor = vec4(c, 1.0); }\` }));
   scene.add(sky);
   const camera = new THREE.PerspectiveCamera(${shot.fov || 50}, ${W} / ${H}, 0.05, 20000);
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(${W}, ${H}); document.body.appendChild(renderer.domElement);
-  window.__render = (p, l) => { camera.position.set(...p); camera.lookAt(...l); sky.position.copy(camera.position); renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.93); };
+  window.__render = (p, l, sv) => { if (sv) sun.set(...sv).normalize(); camera.position.set(...p); camera.lookAt(...l); sky.position.copy(camera.position); renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.93); };
   window.ready = 1;
 }
 setup();
@@ -112,7 +133,13 @@ function cam(t) {
   await p.waitForFunction(() => window.ready, null, { timeout: 120000 });
   const save = async (t, file) => {
     const [pos, look] = cam(t);
-    const url = await p.evaluate(([a, b]) => window.__render(a, b), [pos, look]);
+    // shot.sunPath: [[azimuth, elevation] at the start, … at the end], degrees (azimuth from north through east)
+    let sv = null;
+    if (shot.sunPath) {
+      const k = t / shot.dur, [[a0, e0], [a1, e1]] = shot.sunPath, az = (a0 + (a1 - a0) * k) * Math.PI / 180, el = (e0 + (e1 - e0) * k) * Math.PI / 180;
+      sv = [Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)];
+    }
+    const url = await p.evaluate(([a, b, c]) => window.__render(a, b, c), [pos, look, sv]);
     fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
   };
   if (mode === 'stills') {

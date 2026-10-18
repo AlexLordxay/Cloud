@@ -21,7 +21,7 @@ THEMIS = USGS + 'Mars_MO_THEMIS-IR-Day_mosaic_global_100m_v12.tif'
 R_MARS = 3389.5e3
 NH, NT = 4096, 8192                  # height / normal grid, colour texture
 # name: (centre latitude, centre east longitude, half size in degrees)
-SITES = {'olympus': (18.4, 226.2, 9.0), 'valles': (-9.0, 293.0, 9.0)}
+SITES = {'olympus': (18.4, 226.2, 9.0), 'valles': (-9.0, 293.0, 9.0), 'gale': (-5.2, 137.8, 2.2)}
 
 
 def cached(name, site, fetch):

@@ -18,4 +18,10 @@ module.exports = {
     { t: 0, pos: [-330, 38, 30], look: [60, -5, 175] },
     { t: 7.2, pos: [-150, 32, 80], look: [230, -5, 215] },
   ] },
+  // Sunset in Gale crater (Curiosity's home): low over the floor east of Mount Sharp, looking west as the Sun goes down
+  // behind it, the blue glow round the Sun
+  sunset: { site: 'gale', dur: 6.4, ex: 2, dusk: 1, fov: 46, fog: 1 / 420, shadowBias: 0.14, sunPath: [[268.5, 6.5], [269.5, 2.6]], keys: [
+    { t: 0, pos: [70, -1.2, 8], look: [-60, -0.6, 0] },
+    { t: 6.4, pos: [58, -1.3, 4], look: [-60, -0.9, -2] },
+  ] },
 };
