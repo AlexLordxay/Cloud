@@ -1,6 +1,6 @@
-# "Знайомся: Марс": captions, cuts and the end card (56.5 s, timed to the voice). The relief flights are 0–4.6, 10.7–19.2,
-# 19.2–26.5 and 42.2–47.6 s (post.py); the rest is the site's Mars.
-DURATION = 56.5
+# "Знайомся: Марс": captions, cuts and the end card (58.5 s, timed to the voice). The relief flights are 0–4.6, 10.7–19.2,
+# 19.2–26.5 and 42.2–49.6 s (post.py); the rest is the site's Mars.
+DURATION = 58.5
 CAPTIONS = [
     (-1.0, 4.4, 'hook', 'На Марсі є гора\nу 2,5 раза вища\nза Еверест'),
     (4.9, 10.4, 'cap', 'Знайомся: Марс. Четверта планета\nвід Сонця, удвічі менша за Землю'),
@@ -9,12 +9,12 @@ CAPTIONS = [
     (26.7, 32.9, 'cap', 'Марс червоний, бо його пил —\nце звичайна іржа: оксид заліза,\nяк на старому цвяху'),
     (33.4, 41.9, 'cap', 'У Марса два супутники — Фобос\nі Деймос. Фобос повільно падає\nна планету: колись його розірве\nна кільце'),
     (42.4, 47.3, 'cap', 'Тут ти важив би майже\nвтричі менше. А захід Сонця\nна Марсі — блакитний'),
-    (47.8, 51.6, 'cap', 'Яку планету показати наступною?\nПиши в коментарях'),
+    (50.0, 53.6, 'cap', 'Яку планету показати наступною?\nПиши в коментарях'),
 ]
 # the relief data: NASA / ESA / USGS, heights ×2.5 (said in the post too)
 CREDITS = [(0.2, 26.4, 'Рельєф: HRSC/MOLA, THEMIS, Viking (ESA, NASA, USGS). Висоти збільшено в 2,5 раза')]
 CUTS = [19.2]               # Olympus → Valles Marineris: a short dip to black
 FADE_IN = 0                 # the volcano is there from the first frame
 HOOK_SIZE = 80
-END_CARD = 51.8
+END_CARD = 53.8
 END_TITLE = 'Знайди Марс\nсам'

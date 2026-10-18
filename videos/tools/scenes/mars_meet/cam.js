@@ -17,7 +17,7 @@
       .addScaledVector(e2, Math.cos(el * D) * Math.sin(az * D) * dist * R)
       .addScaledVector(up, Math.sin(el * D) * dist * R);
   }
-  // [start, end, fn(k, ctx)] — the gaps (0–4.6, 10.7–26.5, 42.2–47.6 s) are covered by the relief flights; there the
+  // [start, end, fn(k, ctx)] — the gaps (0–4.6, 10.7–26.5, 42.2–49.6 s) are covered by the relief flights; there the
   // camera holds a neighbouring shot, so the crossfades never show a jump
   const SHOTS = [
     [0, 4.6, (k, c) => SHOTS[1][2](0, c)],
@@ -28,9 +28,9 @@
     [26.5, 33.1, (k, c) => { const e = ease(k); return { pos: at(c, lerp(20, -5, e), lerp(30, 12, e), lerp(1.75, 1.42, e)), look: at(c, lerp(-5, -25, e), lerp(5, -5, e), 0.75) }; }],
     // Phobos and Deimos: pulled well back, high above their orbits, both moons and their paths in view
     [33.1, 42.2, (k, c) => { const e = ease(k); return { pos: at(c, lerp(60, 35, e), lerp(58, 48, e), lerp(10.5, 8.8, e)), look: c.C }; }],
-    [42.2, 47.6, (k, c) => SHOTS[4][2](1, c)],
+    [42.2, 49.6, (k, c) => SHOTS[4][2](1, c)],
     // closing: Mars drifting away under the end card
-    [47.6, 56.5, (k, c) => { const e = ease(k); return { pos: at(c, lerp(35, 20, e), lerp(14, 20, e), lerp(3.0, 5.2, e)), look: c.C }; }],
+    [49.6, 58.5, (k, c) => { const e = ease(k); return { pos: at(c, lerp(35, 20, e), lerp(14, 20, e), lerp(3.0, 5.2, e)), look: c.C }; }],
   ];
 
   window.__recCam = () => {
