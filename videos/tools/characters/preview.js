@@ -1,6 +1,10 @@
 // A turnaround sheet of a character, to look at it before it goes into a video:
 //
-//   node characters/preview.js [out.jpg] [t]     -> four views (back, back three-quarter, side, front three-quarter)
+//   node characters/preview.js [out.jpg] [t] [pose.json] [views]
+//     -> four views (back, back three-quarter, side, front three-quarter) of the idle at time t;
+//        pose.json (optional): { "elbowL": [x, y, z], "kneeR": [...], … } joint rotations set after the idle, or
+//        { "call": "methodName", "args": [...] } to call a pose method of the character (e.g. a gesture);
+//        views: "full" (default), "hands" (close-ups of both hands, front and back), "limbs" (elbows and knees close)
 //
 // Lit as in the black hole video: a warm key and rim from ahead of the figure (the disc), faint cool light from behind.
 const fs = require('fs'), path = require('path');
@@ -8,6 +12,8 @@ const { chromium } = require(require('child_process').execSync('npm root -g').to
 const TOOLS = path.resolve(__dirname, '..');
 const out = path.resolve(process.argv[2] || path.join(TOOLS, 'work', 'astronaut_sheet.jpg'));
 const t = +(process.argv[3] || 0);
+const poseArg = process.argv[4] && process.argv[4] !== '-' ? JSON.parse(fs.readFileSync(process.argv[4], 'utf8')) : null;
+const viewsMode = process.argv[5] || 'full';
 
 const page = `<!doctype html><html><body style="margin:0;background:#000">
 <script>${fs.readFileSync(path.join(TOOLS, 'node_modules/three/build/three.min.js'), 'utf8')}</script>
@@ -29,13 +35,25 @@ const page = `<!doctype html><html><body style="margin:0;background:#000">
   scene.add(new THREE.HemisphereLight(0x6070a0, 0x2a1a10, 0.1));
   a.rim.color.value.setRGB(0.9, 0.6, 0.32);
   a.pose(${t});
-  const cam = new THREE.PerspectiveCamera(30, (W / 4) / H, 0.05, 100);
-  const views = [[0, 0.9, 5.2], [3.6, 1.0, 3.6], [5.2, 0.3, 0], [-2.0, 0.5, -4.8]];
+  const P = ${JSON.stringify(poseArg)};
+  if (P && P.call) a[P.call](...(P.args || []));
+  else if (P) for (const k in P) if (a.joints[k]) a.joints[k].rotation.set(...P[k]);
+  a.group.updateMatrixWorld(true);
+  const mode = ${JSON.stringify(viewsMode)};
+  const cam = new THREE.PerspectiveCamera(mode === 'full' ? 30 : 18, (W / 4) / H, 0.02, 100);
+  // full: the whole figure from four sides; hands/limbs: close-ups aimed at the joints, from front and back
+  const wp = n => a.joints[n].getWorldPosition(new THREE.Vector3());
+  const hand = n => wp(n).lerp(a.joints[n].localToWorld(new THREE.Vector3(0, -0.15, 0)), 1);   // the middle of the hand
+  const focus = mode === 'hands' ? [hand('wristL'), hand('wristL'), hand('wristR'), hand('wristR')]
+              : mode === 'limbs' ? [wp('elbowL'), wp('elbowR'), wp('kneeL'), wp('kneeR')] : null;
+  const close = mode === 'hands' ? [[-0.45, 0.1, -1.3], [-0.55, 0.15, 1.2], [0.45, 0.1, -1.3], [0.55, 0.15, 1.2]]
+              : [[-1.8, 0.2, -1.6], [1.8, 0.2, -1.6], [-2.4, 0.1, -0.6], [2.4, 0.1, -0.6]];
+  const views = focus ? focus.map((f, i) => [f.x + close[i][0], f.y + close[i][1], f.z + close[i][2], f]) : [[0, 0.9, 5.2], [3.6, 1.0, 3.6], [5.2, 0.3, 0], [-2.0, 0.5, -4.8]];
   a.ready.then(() => {
   ren.setScissorTest(true);
-  views.forEach(([x, y, z], i) => {
+  views.forEach(([x, y, z, f], i) => {
     ren.setViewport(i * W / 4, 0, W / 4, H); ren.setScissor(i * W / 4, 0, W / 4, H);
-    cam.position.set(x, y, z); cam.lookAt(0, 0.05, 0); ren.render(scene, cam);
+    cam.position.set(x, y, z); if (f) cam.lookAt(f); else cam.lookAt(0, 0.05, 0); ren.render(scene, cam);
   });
   window.done = true;
   });
