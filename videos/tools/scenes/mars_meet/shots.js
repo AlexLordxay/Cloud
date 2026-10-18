@@ -3,19 +3,19 @@
 // Olympus: summit 21.2 km at (20, 63); the cliff round its foot is 300 km out (west side x ≈ -270).
 // Valles Marineris: floor about -5 km, plateau +3 km; the canyon runs from (-220, 85) east-south-east to (500, 290).
 module.exports = {
-  // the hook: low over the plain, the volcano's cliff ahead and its flank rising behind
-  hook: { site: 'olympus', dur: 3.4, keys: [
-    { t: 0, pos: [-345, 2.0, 150], look: [-240, 5, 10] },
-    { t: 3.4, pos: [-315, 3.0, 95], look: [-220, 7, -10] },
+  // the hook: from high above, diving toward the whole volcano and its summit calderas (thin haze up here)
+  hook: { site: 'olympus', dur: 3.4, fog: 1 / 1400, sun: [-0.85, 0.24, -0.25], keys: [
+    { t: 0, pos: [20, 250, 430], look: [20, 6, 63] },
+    { t: 3.4, pos: [20, 150, 285], look: [20, 10, 63] },
   ] },
   // Olympus Mons: from far out, rising over the flank toward the summit calderas
   olympus: { site: 'olympus', dur: 7.2, ease: true, sun: [-0.85, 0.24, -0.25], keys: [
     { t: 0, pos: [40, 150, 470], look: [20, 6, 63] },
     { t: 7.2, pos: [30, 85, 260], look: [20, 12, 63] },
   ] },
-  // Valles Marineris: inside the canyon, eastwards along it
-  valles: { site: 'valles', dur: 7.2, keys: [
-    { t: 0, pos: [-210, -0.5, 95], look: [-60, -2.5, 150] },
-    { t: 7.2, pos: [-40, -0.5, 150], look: [120, -2.5, 195] },
+  // Valles Marineris: from above the northern rim, looking east-south-east along the canyon
+  valles: { site: 'valles', dur: 7.2, ex: 3, sun: [0.35, 0.33, -0.85], keys: [
+    { t: 0, pos: [-330, 38, 30], look: [60, -5, 175] },
+    { t: 7.2, pos: [-150, 32, 80], look: [230, -5, 215] },
   ] },
 };
