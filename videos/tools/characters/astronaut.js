@@ -104,24 +104,6 @@
       const g = new THREE.ExtrudeGeometry(s, { depth: Math.max(1e-3, d - 2 * bv), bevelEnabled: true, bevelThickness: bv, bevelSize: bv * 0.9, bevelSegments: 5, curveSegments: 10 });
       g.translate(0, 0, -Math.max(1e-3, d - 2 * bv) / 2); g.computeVertexNormals(); return g;
     }
-    // a puffy limb segment hanging down from its joint: radius r0 → r1 over len, bulging in the middle, rounded ends
-    function limb(len, r0, r1, bulge, ph = 0) {
-      const p = [];
-      for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; p.push([r0 * Math.sin(a), r0 * 0.45 * Math.cos(a)]); }
-      for (let i = 1; i < 30; i++) {
-        const u = i / 30, r = (r0 + (r1 - r0) * u) * (1 + bulge * Math.sin(Math.PI * u)) * (1 - 0.04 * Math.pow(Math.abs(Math.sin(u * 11 + ph)), 6) * Math.sin(Math.PI * u) + 0.012 * Math.sin(u * 29 + 2 * ph));
-        p.push([r, -u * len]);
-      }
-      for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; p.push([r1 * Math.cos(a), -len - r1 * 0.45 * Math.sin(a)]); }
-      return lumpy(lathe(p.reverse(), 64), r0 * 0.085);
-    }
-    // bellows at a bend: n soft ridges
-    function bellows(len, r, n) {
-      const p = [[1e-4, len / 2 + r * 0.3]];
-      for (let i = 0; i <= 40; i++) { const u = i / 40; p.push([r * (0.93 + 0.1 * Math.cos(2 * Math.PI * n * u)), len / 2 - u * len]); }
-      p.push([1e-4, -len / 2 - r * 0.3]);
-      return lumpy(lathe(p.reverse(), 64), r * 0.08, 20);
-    }
     let seed = 0;
     function lumpy(geo, amp, f = 14, weight = null) {
       geo.computeVertexNormals();
@@ -135,8 +117,70 @@
     }
     const shadowed = o => o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
 
+    // ---- the rig ----
+    // The joints are bones of one skeleton. Next to a joint sit helper bones that turn by a fixed share of its rotation
+    // (computed while matrices update, so a scene can set the joints however it likes after pose()). A sleeve vertex in
+    // a bend is spread over [parent, 1/3, 2/3, child] with cubic Bernstein weights: the bend becomes a smooth arc that
+    // keeps the sleeve's thickness (a plain two-bone blend folds it flat like a hose).
+    const bones = [], skinned = [], QI = new THREE.Quaternion();
+    const bone = (p, x, y, z) => { const b = new THREE.Bone(); b.position.set(x, y, z); p.add(b); bones.push(b); return b; };
+    const helper = (src, k, after) => { const h = bone(src.parent, src.position.x, src.position.y, src.position.z);
+      h.updateMatrix = function () { this.quaternion.slerpQuaternions(QI, src.quaternion, k); if (after) after(src); THREE.Object3D.prototype.updateMatrix.call(this); }; return h; };
+    const clamp01 = x => Math.min(1, Math.max(0, x)), sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+    const cubic = t => [(1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3];
+    // bellows ridges across a bend band |d| < B: three soft rings, fading out at the band's ends (0..1)
+    const ridgeS = (d, B) => Math.abs(d) < B ? (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2 * Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
+    // cloth folds on the skinned sleeves (a radius offset): none yet
+    const fold = (y, phi, part) => 0;
+    // the sleeves' cloth: the seamed fabric, shaded per vertex (darker in the bellows' valleys and on the pads)
+    const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05, vertexColors: true });
+    // the row heights of a tube: spans [from, to, step] laid end to end
+    const span = (...sp) => { const out = []; sp.forEach(([a, b, st], i) => { const n = Math.max(1, Math.round((a - b) / st)); for (let k = 0; k < n; k++) out.push(a + (b - a) * k / n); if (i === sp.length - 1) out.push(b); }); return out; };
+    // A skinned tube in body space, built at rest (every limb hanging straight down, so a row is a horizontal slice).
+    // rows: { y, cx, cz, r(phi), w(phi) -> up to 4 [bone, weight], col(phi), phi(j) }; a vertex is
+    // (cx + r sin phi, y, cz + r cos phi), phi = 2 pi j / seg unless the row maps it; the seam column is doubled.
+    // morphFn(row, phi, nx, ny, nz) -> how far to push that vertex along its normal in the corrective shape (morph 0).
+    function skinTube(rows, seg, morphFn) {
+      const N = seg + 1, pos = [], uv = [], col = [], si = [], sw = [], idx = [], phs = [];
+      let v = 0, last = null;
+      for (const rw of rows) {
+        const ring = []; for (let j = 0; j <= seg; j++) { const ph = rw.phi ? rw.phi(j) : 2 * Math.PI * j / seg; ring.push([ph, rw.r(ph)]); }
+        const mr = ring.reduce((a, q) => a + q[1], 0) / N;
+        if (last) v += Math.hypot(last[0] - rw.y, last[1] - mr); last = [rw.y, mr];
+        ring.forEach(([ph, r], j) => {
+          pos.push(rw.cx + r * Math.sin(ph), rw.y, rw.cz + r * Math.cos(ph)); uv.push(j / seg, v / 0.45); phs.push(ph);
+          const c = rw.col ? rw.col(ph) : 1; col.push(c, c, c);
+          const w = rw.w(ph, r).filter(e => e[1] > 1e-5), tot = w.reduce((a, e) => a + e[1], 0);
+          for (let k = 0; k < 4; k++) { si.push(w[k] ? bones.indexOf(w[k][0]) : 0); sw.push(w[k] ? w[k][1] / tot : 0); }
+        });
+      }
+      for (let i = 0; i < rows.length - 1; i++) for (let j = 0; j < seg; j++) { const a = i * N + j, b = a + N; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+      g.setIndex(idx); g.computeVertexNormals();
+      const n = g.attributes.normal, t = new THREE.Vector3();
+      rows.forEach((rw, i) => {   // one normal on both copies of the seam column; a row may correct its own (fixN)
+        const a = i * N, b = a + seg; t.set(n.getX(a) + n.getX(b), n.getY(a) + n.getY(b), n.getZ(a) + n.getZ(b)).normalize();
+        n.setXYZ(a, t.x, t.y, t.z); n.setXYZ(b, t.x, t.y, t.z);
+        if (rw.fixN) rw.fixN(n, a);
+      });
+      if (morphFn) {
+        const mo = [];
+        rows.forEach((rw, i) => { for (let j = 0; j <= seg; j++) { const k = i * N + j, nx = n.getX(k), ny = n.getY(k), nz = n.getZ(k), d = morphFn(rw, phs[k], nx, ny, nz); mo.push(nx * d, ny * d, nz * d); } });
+        g.morphAttributes.position = [new THREE.Float32BufferAttribute(mo, 3)]; g.morphTargetsRelative = true;
+      }
+      // Box3.setFromObject (survive's placeOnGround) reads the rest-pose box and ignores skinning: a tiny box here, and
+      // invisible proxy boxes on the bones stand in for the limbs
+      g.boundingBox = new THREE.Box3(new THREE.Vector3(-0.01, -0.01, -0.01), new THREE.Vector3(0.01, 0.01, 0.01));
+      const m = new THREE.SkinnedMesh(g, limbCloth); m.frustumCulled = false; body.add(m); skinned.push(m); return m;
+    }
+    const proxyMat = new THREE.MeshBasicMaterial({ visible: false });
+    const proxy = (p, w, h, d, y, z = 0) => { const m = mesh(new THREE.BoxGeometry(w, h, d), proxyMat, 0, y, z); m.visible = false; p.add(m); return m; };
+
     const group = new THREE.Group();
-    const body = joint(group, 0, 0, 0);
+    const body = bone(group, 0, 0, 0);
     const J = { body };
 
     /* torso */
