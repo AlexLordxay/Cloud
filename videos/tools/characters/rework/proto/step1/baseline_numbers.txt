@@ -1,0 +1,7 @@
+GROUND {"stand":-1.3668358989103013,"kneel":-0.8239389412610211,"kneelRenderedRigid":-0.8062362742821436,"kneelRenderedSkin":1000000000,"isBone":"body:false,head:false,shoulderL:false,elbowL:false,wristL:false,shoulderR:false,elbowR:false,wristR:false,hipL:false,kneeL:false,ankleL:false,hipR:false,kneeR:false,ankleR:false","keys":14,"verts":212305}
+GROUND {"stand2":-1.3668358989103013,"kneel2":-1.013992138719292,"stand4":-1.3668358989103013,"kneel4":-1.013992138719292,"stand6":-1.3668358989103013,"kneel6":-0.8239389412610211,"idle0":-1.3285817174695504}
+JOINTS 14 body:G head:G shoulderL:G elbowL:G wristL:G shoulderR:G elbowR:G wristR:G hipL:G kneeL:G ankleL:G hipR:G kneeR:G ankleR:G
+VERTS 212305 meshes 165
+HANDS -0.752,0.324,-0.438 | 0.659,0.141,-0.454
+HANDS t=0 wristL -0.779,0.351,-0.503 | wristR 0.686,0.151,-0.523 | ankleL -0.154,-1.002,-0.125 | ankleR 0.253,-1.074,-0.090 | head -0.017,0.623,0.052
+HANDS t=3 wristL -0.750,0.243,-0.511 | wristR 0.615,0.093,-0.511 | ankleL -0.204,-0.971,-0.065 | ankleR 0.157,-1.107,-0.120 | head 0.009,0.622,0.064
