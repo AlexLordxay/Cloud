@@ -7,7 +7,7 @@ TOOLS = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 WORK = os.path.join(TOOLS, 'work', 'moon_meet')
 FPS, XF = 30, 8                                   # crossfade length in frames
 # (shot, first frame on the timeline, fade in from the site, fade out to the site)
-LAYERS = [('hook', 0, False, True), ('apollo', 829, True, True), ('tycho', 1330, True, False), ('earth', 1577, False, True)]
+LAYERS = [('hook', 0, False, True), ('apollo', 829, True, True), ('tycho', 1421, True, False), ('earth', 1668, False, True)]
 
 
 def main():

@@ -6,8 +6,8 @@
   const smooth = window.__smooth, ease = window.__ease, lerp = window.__lerp, D = Math.PI / 180;
   // first quarter: the Moon 90° from the Sun, so beside the Earth both are lit from the same side
   const BASE = Date.parse('2026-10-18T12:00:00Z'), DAY = 86400000;
-  const LOCK = [36.5, 44.333];                       // the tidal-lock shot: the clock runs 14 days through it
-  // after it the clock goes back (unseen: the 3D flights cover 44.33–61.1 s)
+  const LOCK = [36.5, 47.367];                       // the tidal-lock shot: the clock runs 14 days through it
+  // after it the clock goes back (unseen: the 3D flights cover 47.37–64.4 s)
   const simAt = t => t > LOCK[1] + 1 ? BASE : BASE + 14 * DAY * smooth((t - LOCK[0]) / (LOCK[1] - LOCK[0]));
   // the Moon's direction from the Earth at a date, as the site places it (ecliptic, scene axes)
   function moonDir(V, ms) {
@@ -130,7 +130,7 @@
     const pos = c.E.clone().addScaledVector(d, -back).addScaledVector(c.up, height).addScaledVector(side, swing);
     return { pos, look: c.E.clone().lerp(c.M, 0.62) };
   }
-  // [start, end, fn(k, ctx)], timed to the voice; the 3D flights cover 0–4.9, 27.63–36.5 and 44.33–61.1 s
+  // [start, end, fn(k, ctx)], timed to the voice; the 3D flights cover 0–4.9, 27.63–36.5 and 47.37–64.4 s
   const SHOTS = [
     [0, 4.9, (k, c) => SHOTS[1][2](0, c)],
     // the Earth and the Moon (true sizes; the distance between them is shortened), slowly closing in
@@ -143,11 +143,11 @@
     [27.633, 36.5, (k, c) => SHOTS[3][2](1, c)],
     // tidal lock: straight above the Earth, the Moon going half round it with its marked near side always toward the
     // Earth; the half circle fills the tall frame (its ends top and bottom)
-    [36.5, 44.333, (k, c) => { const e = smooth(k), bulge = c.lockMid.clone().multiplyScalar(1.15);
+    [36.5, 47.367, (k, c) => { const e = smooth(k), bulge = c.lockMid.clone().multiplyScalar(1.15);
       return { pos: c.E.clone().add(bulge).addScaledVector(c.up, lerp(12.6, 13.2, e)), look: c.E.clone().add(bulge), up: c.lockChord }; }],
-    [44.333, 61.1, (k, c) => SHOTS[5][2](1, c)],
+    [47.367, 64.4, (k, c) => SHOTS[5][2](1, c)],
     // closing: from beside the Earth, its limb low in the frame, the camera drifting out as the Moon draws away
-    [61.1, 70, (k, c) => { const e = ease(k), d = c.M.clone().sub(c.E).normalize();
+    [64.4, 74.5, (k, c) => { const e = ease(k), d = c.M.clone().sub(c.E).normalize();
       let side = new c.V().crossVectors(c.up, d).normalize(); if (side.dot(c.e1) < 0) side.negate();
       const pos = c.E.clone().addScaledVector(side, lerp(2.3, 3.1, e)).addScaledVector(c.up, lerp(0.9, 1.4, e)).addScaledVector(d, -0.6);
       return { pos, look: c.M.clone().lerp(c.E, 0.12) }; }],
@@ -213,10 +213,10 @@
       }
       wp.needsUpdate = true;
       R.way.material.opacity = 0.95 * smooth((t - 20.9) / 0.4) * (1 - smooth((t - 27.05) / 0.55));
-      R.near.material.opacity = smooth((t - 36.9) / 0.6) * (1 - smooth((t - 43.7) / 0.5));
+      R.near.material.opacity = smooth((t - 36.9) / 0.6) * (1 - smooth((t - 46.7) / 0.5));
     }
     // the Moon's orbit only while it goes round; other orbits and the belts would clutter the frame
-    const showOrbit = smooth((t - 36.7) / 0.8) * (1 - smooth((t - 43.7) / 0.6));
+    const showOrbit = smooth((t - 36.7) / 0.8) * (1 - smooth((t - 46.7) / 0.6));
     for (const x of r.BODIES) if (x.orbitLine) {
       const show = x.id === 'moon' ? showOrbit : 0;
       x.orbitLine.visible = show > 0.01; x.orbitLine.material.opacity = (x.baseOpacity || 0.5) * show * 1.6;

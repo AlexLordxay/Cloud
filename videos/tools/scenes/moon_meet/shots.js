@@ -25,8 +25,8 @@ module.exports = {
   // half lit (the Sun low in the east, on the right); a slow zoom in on it while coming down nearer the ground (so the
   // horizon, which dips ~6° from up high, stays in the frame), Ukraine on its lit side, 40° right of the middle, the
   // north pole leaning 28° toward us (the most the Earth's tilt and the Moon's orbit allow)
-  earth: { site: 'south', dur: 8.533, fov: 26, fovTo: 20, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5, keys: [
+  earth: { site: 'south', dur: 8.8, fov: 26, fovTo: 20, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5, keys: [
     { t: 0, pos: [-60, 9, 95], look: [-58, 2, -150] },
-    { t: 8.533, pos: [-60, 6, 67], look: [-58, 8.3, -150] },
+    { t: 8.8, pos: [-60, 6, 67], look: [-58, 8.3, -150] },
   ] },
 };
