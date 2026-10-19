@@ -178,13 +178,41 @@
     // dawn over Ukraine: Jupiter, the brightest "star", high in the south-east
     dawn: { dur: 8.2,
       frame(J, t) { const u = J.dawn.u; u.k.value = lerp(0.12, 0.42, t / 8.2); u.time.value = t; return { pass: J.dawn }; } },
-    // the end: Jupiter and its moons drawing away
-    outro: { dur: 8.6,
-      setup(J) { SHOTS.moons.setup(J); },
+    // the end, as it really is: seen from the Earth the four moons stand almost on one line through Jupiter (their
+    // orbits are edge-on to us), at their true distances. Positions for 30 October 2026, 5:00 in Kyiv (Meeus' method),
+    // in Jupiter radii west (+) or east (−) of it, and toward us (+) or away. The view is turned so the line runs
+    // corner to corner of the tall frame; the camera pulls back until all four are in.
+    outro: { dur: 8.6, pos: { io: [-5.84, -0.97], europa: [-3.29, -8.85], ganymede: [14.84, 2.15], callisto: [8.03, 25.2] },
+      setup(J) {
+        show(J, 'jupiter', 'io', 'europa', 'ganymede', 'callisto');
+        const RJ = 71.492, P = SHOTS.outro.pos;
+        // from the Earth (600 million km away) there is no parallax: depth only decides what is in front, so it is
+        // kept tiny (a moon nearer than Jupiter just in front of it, a farther one just behind)
+        for (const n of Object.keys(P)) J.bodies[n].position.set(-P[n][0] * RJ, 0, Math.sign(P[n][1]) * 2 * RJ);
+        const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.05; u.drift.value = 0.004;
+        if (!J.moonMarks) {
+          const GLOW = J.canvas(64, 64, g => { const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gr.addColorStop(0, 'rgba(255,250,240,1)'); gr.addColorStop(0.2, 'rgba(255,240,220,0.9)'); gr.addColorStop(0.5, 'rgba(255,230,200,0.2)'); gr.addColorStop(1, 'rgba(255,230,200,0)');
+            g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
+          const names = { io: 'Іо', europa: 'Європа', ganymede: 'Ганімед', callisto: 'Каллісто' };
+          J.moonMarks = Object.keys(names).map(n => ({ n, glow: J.sprite(GLOW), label: J.sprite(J.LABEL(names[n])) }));
+        }
+        J.extra = J.moonMarks;
+      },
       frame(J, t) {
-        const k = ease(t / 8.6);
-        sunAll(J, V(-0.2, 0.15, 1));
-        cam(J, V(lerp(4, 30, k), lerp(1, 20, k), lerp(0, 160, k)), V(2, -2, lerp(-80, -300, k)), 40, V(0, 1, 0), 0.5, 5000);
+        const kk = ease(Math.min(1, t / 4.6)), D = lerp(700, 2800, kk), cx = lerp(0, -322, kk);   // centred on the line's middle
+        const up = V(Math.sin(60 * J.D), Math.cos(60 * J.D), 0);       // the line of moons (x) runs at 60° on screen
+        sunAll(J, V(0.18, 0.05, 1));
+        cam(J, V(cx, 0, D), V(cx, 0, 0), 40, up, 1, 20000);
+        for (const m of J.moonMarks) {
+          const b = J.bodies[m.n].position;
+          m.glow.visible = m.label.visible = true;
+          m.glow.position.copy(b); m.glow.scale.set(J.px(22), J.px(22), 1);
+          m.glow.material.opacity = smooth((D - 900) / 500);
+          // the name beside the moon, off the line (world +y shows up and to the left of it)
+          m.label.position.copy(b).add(V(0, D * 0.04, 0)); m.label.scale.set(J.px(220), J.px(41), 1);
+          m.label.material.opacity = smooth((t - 2.8) / 0.8) * (1 - smooth((t - 6.6) / 0.6));
+        }
       } },
   };
   // one clock for the whole video (as timeline.py lays the shots: each overlaps the next by XF frames), so the turning
@@ -196,6 +224,7 @@
   for (const [n, s] of Object.entries(SHOTS)) {
     const st = s.setup;
     s.setup = async J => { if (J.labels) J.labels.forEach(l => (l.visible = false)); if (J.earthLabel) J.earthLabel.visible = false;
+      if (J.moonMarks) J.moonMarks.forEach(m => { m.glow.visible = m.label.visible = false; });
       const io = J.bodies.io.userData.u; io.spots.value.forEach(v => v.set(0, 0, 0, 0)); io.fogK.value = 0; io.night.value = 0;
       J.bodies.ganymede.userData.u.aur.value = 0; J.bodies.io.scale.set(1, 1, 1); io.exposure.value = 1.25;
       if (st) await st(J); };

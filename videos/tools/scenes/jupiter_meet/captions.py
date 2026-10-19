@@ -28,6 +28,7 @@ for shot, kind, text in _TEXT:
 _o = _S['outro'][0]
 CAPTIONS.append((_o + 1.6, _o + 5.0, 'cap', 'Який супутник Юпітера\nтобі найцікавіший?\nПиши в коментарях'))
 CREDITS = [(0.2, _S['spin'][1], 'Юпітер: Cassini (NASA/JPL)'),
+           (_o + 0.5, _o + 6.0, 'Супутники на справжніх відстанях: так вони стоять 30.10.2026 о 5:00'),
            (_S['moons'][0] + 0.3, _S['ganymede'][1] - 0.3, 'Карти супутників: Galileo, Voyager (NASA/JPL, USGS)')]
 CUTS = []
 FADE_IN = 0                 # the storm is there from the first frame
