@@ -62,7 +62,7 @@
         cam(J, pos, look, 40, V(0, 1, 0), 1, 5000);
       } },
     // a time-lapse of its spin: one turn in six seconds, the bands racing by, the planet visibly squashed
-    spin: { dur: 8.833,
+    spin: { dur: 8.800,
       setup(J) { show(J, 'jupiter'); const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.05; u.drift.value = 0.004; },
       frame(J, t) {
         J.bodies.jupiter.rotation.y = -t / 6 * Math.PI * 2 + 0.8;
@@ -107,7 +107,7 @@
         cam(J, d.clone().multiplyScalar(lerp(14, 11, ease(t / this.dur))), V(lerp(8, 6, ease(t / this.dur)), 0, 0), 40, V(0, 1, 0), 0.05, 5000);
       } },
     // under the yellow haze: low over Io toward Pele — its umbrella plume 300 km high, the red ring of fallout
-    pele: { dur: 8.333, vent: [-18.6, 104.8],
+    pele: { dur: 8.300, vent: [-18.6, 104.8],
       setup(J) { show(J, 'io', 'jupiter'); J.bodies.jupiter.position.set(422, 0, 0); J.plume.visible = true;
         J.bodies.io.scale.set(1, 1, 1); J.bodies.io.userData.u.spots.value[0].set(-18.6 * J.D, 104.8 * J.D, 0.6 * J.D, 0.6); },
       frame(J, t) {
@@ -127,7 +127,7 @@
       } },
     // Loki at night: the lava lake 200 km across glowing; low to the east of it, looking west — Jupiter (half lit)
     // stands 40° up in the sky beyond (Loki is on the side of Io that always faces Jupiter)
-    loki: { dur: 7.133,
+    loki: { dur: 7.167,
       setup(J) { show(J, 'io', 'jupiter'); J.bodies.jupiter.position.set(422, 0, 0); J.bodies.jupiter.rotation.y = Math.PI;
         J.bodies.io.scale.set(1, 1, 1); const u = J.bodies.io.userData.u;
         u.spots.value[0].set(11.3 * J.D, 49.6 * J.D, 3.8 * J.D, 1.0); u.night.value = 0.05; u.fogK.value = 0; },
@@ -173,7 +173,7 @@
         J.clipper.material.rotation = lerp(0.35, 0.15, k);
       } },
     // Ganymede beside Mercury, to scale — the moon is the bigger one — with its auroral ovals glowing
-    ganymede: { dur: 8.200,
+    ganymede: { dur: 8.167,
       async setup(J) {
         show(J, 'ganymede', 'mercury');
         J.bodies.ganymede.position.set(-3.2, 0, 0); J.bodies.mercury.position.set(3.2, -0.2, 0);
@@ -192,7 +192,7 @@
         cam(J, V(0, lerp(10, 8, k), lerp(25, 21, k)), V(0, -0.6, 0), 40, V(0, 1, 0), 0.05, 5000);
       } },
     // dawn over Ukraine: Jupiter, the brightest "star", high in the south-east
-    dawn: { dur: 8.900,
+    dawn: { dur: 8.933,
       frame(J, t) { const u = J.dawn.u; u.k.value = lerp(0.12, 0.42, t / this.dur); u.time.value = t; return { pass: J.dawn }; } },
     // the end, as it really is: seen from the Earth the four moons stand almost on one line through Jupiter (their
     // orbits are edge-on to us), at their true distances. Positions for 30 October 2026, 5:00 in Kyiv (Meeus' method),
