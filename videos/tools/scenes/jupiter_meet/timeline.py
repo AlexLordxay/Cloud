@@ -3,7 +3,7 @@
 import os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FPS, XF = 30, 8
+FPS, XF = 30, 18
 ORDER = ['hook', 'zoom', 'spin', 'dive', 'moons', 'ioapp', 'iobreath', 'pele', 'loki', 'europa', 'clipper', 'ganymede', 'dawn', 'outro']
 
 

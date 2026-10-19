@@ -178,7 +178,7 @@
   // A drawn sprite (canvas), sized in pixels and turned on the screen.
   function canvas(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); return c; }
   function sprite(cv) {
-    const s = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(cv), sizeAttenuation: false, transparent: true, depthWrite: false }));
+    const s = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(cv), sizeAttenuation: false, transparent: true, depthWrite: false, depthTest: false }));
     s.visible = false; scene.add(s); return s;
   }
   const px = n => n / H * 2 * Math.tan(camera.fov * D / 2);
@@ -319,7 +319,7 @@
     const J = window.J, s = window.SHOTS[name];
     const r = s.frame(J, t) || {};
     for (const b of Object.values(J.bodies)) {
-      b.userData.u.time.value = t;
+      b.userData.u.time.value = t + (s.t0 || 0);
       b.updateMatrixWorld(true);
       b.userData.u.rot.value.setFromMatrix4(new J.T.Matrix4().extractRotation(b.matrixWorld));
     }

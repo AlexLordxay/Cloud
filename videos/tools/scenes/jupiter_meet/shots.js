@@ -40,7 +40,9 @@
         const pos = lerpV(near, far, Math.pow(k, 0.7));
         const look = lerpV(onJ(J, GRS[0] + 1.5, GRS[1]), V(0, -14, 0), smooth((t - 0.8) / 6));
         sunAll(J, n.clone().add(V(0.4, 0.2, 0.6)));
-        J.bodies.earth.visible = t > 4.5;
+        if (!J.earthLabel) J.earthLabel = J.sprite(J.LABEL('Земля'));
+        const el = J.earthLabel; el.visible = true; el.position.set(0, -(66.854 + 26) - 13, 0);
+        el.scale.set(J.px(220), J.px(41), 1); el.material.opacity = smooth((t - 4.5) / 1.2);
         cam(J, pos, look, 40, V(0, 1, 0), 1, 5000);
       } },
     // a time-lapse of its spin: one turn in six seconds, the bands racing by, the planet visibly squashed
@@ -82,11 +84,11 @@
     iobreath: { dur: 7.6,
       setup(J) { SHOTS.ioapp.setup(J); },
       frame(J, t) {
-        const s = 1 + 0.02 * Math.sin(t / 7.6 * Math.PI * 4);
+        const s = 1 + 0.02 * Math.sin(t / 7.6 * Math.PI * 4) * smooth(t / 0.8);
         J.bodies.io.scale.set(s, 1 / Math.sqrt(s), 1 / Math.sqrt(s));      // stretched along the line to Jupiter (x)
         sunAll(J, V(-0.35, 0.2, 1));
         const a = lerp(165, 150, ease(t / 7.6)), d = J.dirLL(8, a);
-        cam(J, d.clone().multiplyScalar(lerp(14, 11, ease(t / 7.6))), V(6, 0, 0), 40, V(0, 1, 0), 0.05, 5000);
+        cam(J, d.clone().multiplyScalar(lerp(14, 11, ease(t / 7.6))), V(lerp(8, 6, ease(t / 7.6)), 0, 0), 40, V(0, 1, 0), 0.05, 5000);
       } },
     // under the yellow haze: low over Io toward Pele — its umbrella plume 300 km high, the red ring of fallout
     pele: { dur: 6.6, vent: [-18.6, 104.8],
@@ -185,10 +187,15 @@
         cam(J, V(lerp(4, 30, k), lerp(1, 20, k), lerp(0, 160, k)), V(2, -2, lerp(-80, -300, k)), 40, V(0, 1, 0), 0.5, 5000);
       } },
   };
+  // one clock for the whole video (as timeline.py lays the shots: each overlaps the next by XF frames), so the turning
+  // Spot, the drifting bands and the spin carry on across the cuts instead of starting over
+  const ORDER = ['hook', 'zoom', 'spin', 'dive', 'moons', 'ioapp', 'iobreath', 'pele', 'loki', 'europa', 'clipper', 'ganymede', 'dawn', 'outro'];
+  let at = 0;
+  for (const n of ORDER) { SHOTS[n].t0 = at; at += Math.round(SHOTS[n].dur * 30) / 30 - 18 / 30; }
   // hide the labels in every shot but Ganymede's
   for (const [n, s] of Object.entries(SHOTS)) {
     const st = s.setup;
-    s.setup = async J => { if (J.labels) J.labels.forEach(l => (l.visible = false));
+    s.setup = async J => { if (J.labels) J.labels.forEach(l => (l.visible = false)); if (J.earthLabel) J.earthLabel.visible = false;
       const io = J.bodies.io.userData.u; io.spots.value.forEach(v => v.set(0, 0, 0, 0)); io.fogK.value = 0; io.night.value = 0;
       J.bodies.ganymede.userData.u.aur.value = 0; J.bodies.io.scale.set(1, 1, 1); io.exposure.value = 1.25;
       if (st) await st(J); };
