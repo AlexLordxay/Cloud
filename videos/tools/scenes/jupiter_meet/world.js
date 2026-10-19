@@ -91,7 +91,10 @@
         if (s.w <= 0.0) continue;
         vec3 sd = vec3(cos(s.x) * cos(s.y), sin(s.x), -cos(s.x) * sin(s.y));
         float a = acos(clamp(dot(o, sd), -1.0, 1.0));
-        float m = (1.0 - smoothstep(s.z * 0.45, s.z, a)) * pow(1.0 - lum(texture2D(map, uv).rgb), 3.0);
+        float m = (1.0 - smoothstep(s.z * 0.45, s.z, a)) * smoothstep(0.62, 0.85, 1.0 - lum(texture2D(map, uv).rgb));
+        // the crust is cooled dark; the heat shows along cracks and the shore, flickering
+        float cr = smoothstep(0.45, 0.75, fbm(ll * radius * 40.0 + 3.0)) + 0.6 * smoothstep(0.62, 0.68, 1.0 - lum(texture2D(map, uv).rgb));
+        m *= clamp(cr, 0.0, 1.0);
         float fl = 0.75 + 0.25 * fbm(ll * radius * 6.0 + time * 0.6);
         col += spotCol * s.w * m * fl;
       }
@@ -142,9 +145,9 @@
   pg.setAttribute('position', new T.BufferAttribute(new Float32Array(PN * 3), 3));
   pg.setAttribute('alpha', new T.BufferAttribute(new Float32Array(PN), 1));
   const plumeMat = new T.ShaderMaterial({ transparent: true, depthWrite: false, blending: T.AdditiveBlending,
-    uniforms: { size: { value: 0.010 }, scale: { value: 1372 }, col: { value: new T.Color(0.78, 0.84, 1.0) }, gain: { value: 1 } },
+    uniforms: { size: { value: 0.03 }, scale: { value: 1372 }, col: { value: new T.Color(0.78, 0.84, 1.0) }, gain: { value: 1 } },
     vertexShader: `attribute float alpha; varying float vA; uniform float size, scale;
-      void main() { vA = alpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = clamp(size * scale / max(-mv.z, 0.001), 1.0, 64.0); gl_Position = projectionMatrix * mv; }`,
+      void main() { vA = alpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = clamp(size * scale / max(-mv.z, 0.001), 2.0, 96.0); gl_Position = projectionMatrix * mv; }`,
     fragmentShader: `varying float vA; uniform vec3 col; uniform float gain;
       void main() { vec2 d = gl_PointCoord - 0.5; float r = length(d); if (r > 0.5) discard; gl_FragColor = vec4(col * vA * gain * pow(1.0 - r * 2.0, 1.8), 1.0); }` });
   const plume = new T.Points(pg, plumeMat); plume.frustumCulled = false; plume.visible = false; scene.add(plume);
@@ -168,7 +171,7 @@
       const r = R + Math.max(ver, 0) / 1000;
       const w = dir.multiplyScalar(r).applyMatrix4(bodyMesh.matrixWorld);
       pos[i * 3] = w.x; pos[i * 3 + 1] = w.y; pos[i * 3 + 2] = w.z;
-      al[i] = ver > 0 ? 0.05 * Math.min(1, tau * 8) * Math.min(1, (1 - tau) * 4) : 0;
+      al[i] = ver > 0 ? 0.022 * Math.min(1, tau * 8) * Math.min(1, (1 - tau) * 4) : 0;
     }
     pg.attributes.position.needsUpdate = true; pg.attributes.alpha.needsUpdate = true;
   }
@@ -240,7 +243,7 @@
           float y = -p.y;
           float sh = exp(-dens(p + vec3(0.25, 0.7, 0.1)) * 2.2);          // light from above, shadowed by the cloud
           float sky = exp(-max(y, 0.0) * 0.17);
-          vec3 c = layerCol(y) * (0.12 + 1.05 * sky * (0.35 + 0.65 * sh));
+          vec3 c = layerCol(y) * (0.06 + 1.05 * sky * (0.35 + 0.65 * sh)) + vec3(0.55, 0.13, 0.04) * smoothstep(8.0, 16.0, y) * (1.0 - sh * 0.5) * 0.5;
           float a = d * 0.42;
           col += tr * a * c; tr *= 1.0 - a;
           if (tr < 0.02) break;
@@ -277,8 +280,8 @@
       float r = length(d);
       sky += vec3(1.0, 0.96, 0.88) * (exp(-r * 900.0) * 3.0 + exp(-r * 140.0) * 0.35 + exp(-r * 40.0) * 0.05);
       // the ground: rolling hills and a ragged tree line, in silhouette
-      float hill = 0.2 + 0.03 * sin(p.x * 5.0 + 1.0) + 0.02 * sin(p.x * 13.0) ;
-      float trees = hill + 0.03 * smoothstep(0.3, 0.75, fbm(vec2(p.x * 18.0, 1.0))) + 0.006 * fbm(vec2(p.x * 60.0, 2.0));
+      float hill = 0.19 + 0.018 * sin(p.x * 3.0 + 1.0) + 0.008 * sin(p.x * 9.0);
+      float trees = hill + 0.022 * smoothstep(0.38, 0.62, fbm(vec2(p.x * 7.0, 1.0))) + 0.005 * fbm(vec2(p.x * 70.0, 2.0));
       float g = smoothstep(trees + 0.002, trees - 0.002, h);
       vec3 col = mix(sky, vec3(0.012, 0.014, 0.02) + low * 0.03, g);
       gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);

@@ -96,23 +96,24 @@
         const k = ease(t / 6.6), io = J.bodies.io, R = io.userData.R, [la, lo] = SHOTS.pele.vent;
         const vent = J.dirLL(la, lo), east = V(-Math.sin(lo * J.D), 0, -Math.cos(lo * J.D)), north = V().crossVectors(vent, east).normalize();
         // the camera comes in from the south-west, sinking through the haze
-        const back = 0.95, side = -0.25;
+        const back = 0.42, side = -0.12;
         const g = vent.clone().multiplyScalar(Math.cos(back)).addScaledVector(north, -Math.sin(back) * 0.8).addScaledVector(east, Math.sin(side)).normalize();
-        const pos = g.multiplyScalar(R + lerp(0.55, 0.16, k));
-        const look = vent.clone().multiplyScalar(R + 0.12);
-        io.userData.u.fogK.value = lerp(0.7, 0.08, smooth(t / 4.5));
+        const pos = g.multiplyScalar(R + lerp(0.42, 0.13, k));
+        const look = vent.clone().multiplyScalar(R + lerp(0.05, 0.16, k));
+        io.userData.u.fogK.value = lerp(0.9, 0.05, smooth(t / 4.0));
+        io.userData.u.exposure.value = 1.0;
         io.updateMatrixWorld(true);
         J.updatePlume(io, la, lo, t, 5.0);
         J.plumeMat.uniforms.gain.value = 1.0;
-        sunAll(J, vent.clone().addScaledVector(east, -0.6).addScaledVector(north, -0.5));
-        cam(J, pos, look, 50, vent, 0.005, 5000);
+        sunAll(J, vent.clone().multiplyScalar(0.55).addScaledVector(east, -0.8).addScaledVector(north, 0.3));
+        cam(J, pos, look, 55, vent, 0.003, 5000);
       } },
     // Loki at night: the lava lake 200 km across glowing; low to the east of it, looking west — Jupiter (half lit)
     // stands 40° up in the sky beyond (Loki is on the side of Io that always faces Jupiter)
     loki: { dur: 5.6,
       setup(J) { show(J, 'io', 'jupiter'); J.bodies.jupiter.position.set(422, 0, 0); J.bodies.jupiter.rotation.y = Math.PI;
         J.bodies.io.scale.set(1, 1, 1); const u = J.bodies.io.userData.u;
-        u.spots.value[0].set(11.3 * J.D, 49.6 * J.D, 3.8 * J.D, 3.0); u.night.value = 0.05; u.fogK.value = 0; },
+        u.spots.value[0].set(11.3 * J.D, 49.6 * J.D, 3.8 * J.D, 1.6); u.night.value = 0.05; u.fogK.value = 0; },
       frame(J, t) {
         const k = ease(t / 5.6), io = J.bodies.io, R = io.userData.R;
         const c = J.dirLL(11.3, 49.6), east = V(-Math.sin(49.6 * J.D), 0, -Math.cos(49.6 * J.D)), north = V().crossVectors(c, east).normalize();
@@ -190,7 +191,7 @@
     const st = s.setup;
     s.setup = async J => { if (J.labels) J.labels.forEach(l => (l.visible = false));
       const io = J.bodies.io.userData.u; io.spots.value.forEach(v => v.set(0, 0, 0, 0)); io.fogK.value = 0; io.night.value = 0;
-      J.bodies.ganymede.userData.u.aur.value = 0; J.bodies.io.scale.set(1, 1, 1);
+      J.bodies.ganymede.userData.u.aur.value = 0; J.bodies.io.scale.set(1, 1, 1); io.exposure.value = 1.25;
       if (st) await st(J); };
   }
   window.SHOTS = SHOTS;
