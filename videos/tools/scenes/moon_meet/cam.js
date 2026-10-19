@@ -6,8 +6,8 @@
   const smooth = window.__smooth, ease = window.__ease, lerp = window.__lerp, D = Math.PI / 180;
   // first quarter: the Moon 90° from the Sun, so beside the Earth both are lit from the same side
   const BASE = Date.parse('2026-10-18T12:00:00Z'), DAY = 86400000;
-  const LOCK = [35.2, 42.2];                       // the tidal-lock shot: the clock runs 14 days through it
-  // after it the clock goes back (unseen: the 3D flights cover 42.2–58.4 s)
+  const LOCK = [36.5, 44.333];                       // the tidal-lock shot: the clock runs 14 days through it
+  // after it the clock goes back (unseen: the 3D flights cover 44.33–61.1 s)
   const simAt = t => t > LOCK[1] + 1 ? BASE : BASE + 14 * DAY * smooth((t - LOCK[0]) / (LOCK[1] - LOCK[0]));
   // the Moon's direction from the Earth at a date, as the site places it (ecliptic, scene axes)
   function moonDir(V, ms) {
@@ -99,13 +99,13 @@
     for (const m of E.tiltGroup.children) if (m.geometry && m.geometry.parameters && Math.abs(m.geometry.parameters.radius - E.radius * 1.025) < 1e-6) m.visible = false;
   };
 
-  // Kondratyuk's scheme in the ring's frame (unit = the ring's radius, 1.45 Moon radii): the ship circles; at 13 s the
-  // lander leaves it, goes down, sits on the Moon for a second, climbs back and meets the ship again at 19 s.
+  // Kondratyuk's scheme in the ring's frame (unit = the ring's radius, 1.45 Moon radii): the ship circles; at 13.27 s
+  // the lander leaves it, goes down, sits on the Moon for a second, climbs back and meets the ship again at 19.27 s.
   const RING = 1.45, W = 0.30;                     // ring radius (Moon radii), ship's angular speed (rad/s)
-  const shipAng = t => -0.6 + W * (t - 11.2);
-  const A_DOWN = shipAng(13) + 0.55;
+  const shipAng = t => -0.6 + W * (t - 11.467);
+  const A_DOWN = shipAng(13.27) + 0.55;
   function landerAt(t) {
-    const T0 = 13, T1 = 15.3, T2 = 16.3, T3 = 19;
+    const T0 = 13.27, T1 = 15.57, T2 = 16.57, T3 = 19.27;
     if (t < T0 || t > T3) return [shipAng(t), RING];
     const aDown = A_DOWN;                            // where it lands: a little ahead along the track
     if (t < T1) { const k = smooth((t - T0) / (T1 - T0)); return [lerp(shipAng(T0), aDown, Math.sqrt(k)), lerp(RING, 1.005, k)]; }
@@ -130,25 +130,24 @@
     const pos = c.E.clone().addScaledVector(d, -back).addScaledVector(c.up, height).addScaledVector(side, swing);
     return { pos, look: c.E.clone().lerp(c.M, 0.62) };
   }
-  // [start, end, fn(k, ctx)]; the 3D flights cover 0–4.6, 27.8–35.2 and 42.2–58.4 s
-  // [start, end, fn(k, ctx)]; the 3D flights cover 0–4.6, 27.8–35.2 and 42.2–58.4 s
+  // [start, end, fn(k, ctx)], timed to the voice; the 3D flights cover 0–4.9, 27.63–36.5 and 44.33–61.1 s
   const SHOTS = [
-    [0, 4.6, (k, c) => SHOTS[1][2](0, c)],
+    [0, 4.9, (k, c) => SHOTS[1][2](0, c)],
     // the Earth and the Moon (true sizes; the distance between them is shortened), slowly closing in
-    [4.6, 11.2, (k, c) => { const e = ease(k); return pair(c, lerp(2.6, 2.2, e), lerp(6.6, 5.6, e), lerp(4.6, 4.2, e)); }],
+    [4.9, 11.467, (k, c) => { const e = ease(k); return pair(c, lerp(2.6, 2.2, e), lerp(6.6, 5.6, e), lerp(4.6, 4.2, e)); }],
     // Kondratyuk's route round the Moon: close in, the lit side toward us, the ring seen a little from above
-    [11.2, 20.2, (k, c) => { const e = ease(k);
+    [11.467, 20.5, (k, c) => { const e = ease(k);
       return { pos: at(c, c.M, c.mr, lerp(40, 25, e), lerp(32, 26, e), lerp(5.6, 5.0, e)), look: c.M }; }],
     // the way from the Earth: both in the frame, the curve drawing itself out to the Moon
-    [20.2, 27.8, (k, c) => { const e = ease(k); return pair(c, lerp(3.0, 3.4, e), lerp(7.0, 7.6, e), lerp(4.2, 3.8, e)); }],
-    [27.8, 35.2, (k, c) => SHOTS[3][2](1, c)],
+    [20.5, 27.633, (k, c) => { const e = ease(k); return pair(c, lerp(3.0, 3.4, e), lerp(7.0, 7.6, e), lerp(4.2, 3.8, e)); }],
+    [27.633, 36.5, (k, c) => SHOTS[3][2](1, c)],
     // tidal lock: straight above the Earth, the Moon going half round it with its marked near side always toward the
     // Earth; the half circle fills the tall frame (its ends top and bottom)
-    [35.2, 42.2, (k, c) => { const e = smooth(k), bulge = c.lockMid.clone().multiplyScalar(1.15);
+    [36.5, 44.333, (k, c) => { const e = smooth(k), bulge = c.lockMid.clone().multiplyScalar(1.15);
       return { pos: c.E.clone().add(bulge).addScaledVector(c.up, lerp(12.6, 13.2, e)), look: c.E.clone().add(bulge), up: c.lockChord }; }],
-    [42.2, 58.4, (k, c) => SHOTS[5][2](1, c)],
+    [44.333, 61.1, (k, c) => SHOTS[5][2](1, c)],
     // closing: from beside the Earth, its limb low in the frame, the camera drifting out as the Moon draws away
-    [58.4, 67, (k, c) => { const e = ease(k), d = c.M.clone().sub(c.E).normalize();
+    [61.1, 70, (k, c) => { const e = ease(k), d = c.M.clone().sub(c.E).normalize();
       let side = new c.V().crossVectors(c.up, d).normalize(); if (side.dot(c.e1) < 0) side.negate();
       const pos = c.E.clone().addScaledVector(side, lerp(2.3, 3.1, e)).addScaledVector(c.up, lerp(0.9, 1.4, e)).addScaledVector(d, -0.6);
       return { pos, look: c.M.clone().lerp(c.E, 0.12) }; }],
@@ -171,14 +170,14 @@
     for (const sh of SHOTS) if (t < sh[1]) { shot = sh; break; }
     const { pos, look, up: camUp } = shot[2](Math.min(1, Math.max(0, (t - shot[0]) / (shot[1] - shot[0]))), ctx);
 
-    // the drawings: the ring and dots during the route (11.2–27.8 s), the way from the Earth from 20.2 s
+    // the drawings: the ring and craft during the route (11.47–27.63 s), the way from the Earth from 20.5 s
     if (route) {
-      const R = route, inR = smooth((t - 11.4) / 0.8) * (1 - smooth((t - 27.2) / 0.6));
+      const R = route, inR = smooth((t - 11.67) / 0.8) * (1 - smooth((t - 27.05) / 0.55));
       R.g.position.copy(M); R.g.scale.setScalar(mo.radius);
       // the ring a little tilted, and turned so the lander comes down on the middle of the side we look at (where the
-      // camera will be at the landing, 15.3 s)
+      // camera will be at the landing, 15.57 s)
       const q0 = new r.THREE.Quaternion().setFromUnitVectors(new V(0, 1, 0), new V(0.18, 1, 0.1).normalize());
-      const camL = SHOTS[2][2]((15.3 - SHOTS[2][0]) / (SHOTS[2][1] - SHOTS[2][0]), ctx).pos.sub(M).applyQuaternion(q0.clone().invert());
+      const camL = SHOTS[2][2]((15.57 - SHOTS[2][0]) / (SHOTS[2][1] - SHOTS[2][0]), ctx).pos.sub(M).applyQuaternion(q0.clone().invert());
       const beta = A_DOWN - Math.atan2(camL.z, camL.x);
       R.g.quaternion.copy(q0).multiply(new r.THREE.Quaternion().setFromAxisAngle(new V(0, 1, 0), beta));
       R.ring.scale.setScalar(RING); R.ring.material.opacity = 0.85 * inR;
@@ -187,16 +186,16 @@
       const [la, lr] = landerAt(t);
       R.lander.position.set(Math.cos(la) * lr, 0, Math.sin(la) * lr);
       // the lander shows once it leaves the ship and is gone again once it has docked
-      R.lander.material.opacity = smooth((t - 12.85) / 0.25) * (1 - smooth((t - 19.0) / 0.3)) * inR;
+      R.lander.material.opacity = smooth((t - 13.12) / 0.25) * (1 - smooth((t - 19.27) / 0.3)) * inR;
       // the lander's track, from where it left the ship
       const tp = R.trail.geometry.attributes.position, n = tp.count;
-      const tEnd = Math.min(t, 19), tBeg = 13;
+      const tEnd = Math.min(t, 19.27), tBeg = 13.27;
       for (let i = 0; i < n; i++) {
         const [a, rr] = landerAt(tBeg + (tEnd - tBeg) * i / (n - 1));
         tp.setXYZ(i, Math.cos(a) * rr, 0, Math.sin(a) * rr);
       }
       tp.needsUpdate = true;
-      R.trail.material.opacity = t > 13 ? 0.8 * inR : 0;
+      R.trail.material.opacity = t > 13.27 ? 0.8 * inR : 0;
       // the way out from the Earth: leaves low orbit on the far side of the Earth from the Moon's direction, swings out
       // and meets the ring
       const wp = R.way.geometry.attributes.position, wn = wp.count, toM = M.clone().sub(C).normalize();
@@ -205,7 +204,7 @@
       const B = M.clone().addScaledVector(side, mo.radius * RING);
       const P1 = C.clone().addScaledVector(side, -E.radius * 2.2).addScaledVector(toM, E.radius * 1.5);
       const P2 = M.clone().addScaledVector(side, mo.radius * 3.0).addScaledVector(toM, -mo.radius * 2.5);
-      const grow = smooth((t - 20.8) / 3.2);
+      const grow = smooth((t - 21.1) / 3.2);
       for (let i = 0; i < wn; i++) {
         const u = grow * i / (wn - 1), v = 1 - u;
         wp.setXYZ(i, v * v * v * A.x + 3 * v * v * u * P1.x + 3 * v * u * u * P2.x + u * u * u * B.x,
@@ -213,11 +212,11 @@
           v * v * v * A.z + 3 * v * v * u * P1.z + 3 * v * u * u * P2.z + u * u * u * B.z);
       }
       wp.needsUpdate = true;
-      R.way.material.opacity = 0.95 * smooth((t - 20.6) / 0.4) * (1 - smooth((t - 27.2) / 0.6));
-      R.near.material.opacity = smooth((t - 35.6) / 0.6) * (1 - smooth((t - 41.6) / 0.5));
+      R.way.material.opacity = 0.95 * smooth((t - 20.9) / 0.4) * (1 - smooth((t - 27.05) / 0.55));
+      R.near.material.opacity = smooth((t - 36.9) / 0.6) * (1 - smooth((t - 43.7) / 0.5));
     }
     // the Moon's orbit only while it goes round; other orbits and the belts would clutter the frame
-    const showOrbit = smooth((t - 35.4) / 0.8) * (1 - smooth((t - 41.6) / 0.6));
+    const showOrbit = smooth((t - 36.7) / 0.8) * (1 - smooth((t - 43.7) / 0.6));
     for (const x of r.BODIES) if (x.orbitLine) {
       const show = x.id === 'moon' ? showOrbit : 0;
       x.orbitLine.visible = show > 0.01; x.orbitLine.material.opacity = (x.baseOpacity || 0.5) * show * 1.6;
@@ -229,7 +228,7 @@
     if (Math.abs(cam.near - near) > near * 0.02) { cam.near = near; cam.updateProjectionMatrix(); }
     // turn the drawn ship on the screen nose-first along its orbit; the lander stays upright on the screen (it comes
     // down on the side facing us, where "up" from the ground points at the viewer — drawn that way it read as upside down)
-    if (route && t > 11 && t < 28) {
+    if (route && t > 11.3 && t < 28) {
       cam.updateMatrixWorld(true); route.g.updateMatrixWorld(true);
       const W = route.renderer || (route.renderer = r.renderer.domElement), hw = W.width / 2, hh = W.height / 2;
       const scr = v => { const p = v.clone().project(cam); return [p.x * hw, p.y * hh]; };

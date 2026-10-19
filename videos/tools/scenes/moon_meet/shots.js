@@ -7,26 +7,26 @@
 module.exports = {
   // the hook: from high in the south, diving toward the crater with the morning shadows inside it; aimed past the
   // centre so the crater sits low in the frame, clear of the big title
-  hook: { site: 'copernicus', dur: 4.6, keys: [
+  hook: { site: 'copernicus', dur: 4.9, keys: [
     { t: 0, pos: [-10, 150, 175], look: [0, -2, -20] },
-    { t: 4.6, pos: [-6, 75, 100], look: [0, -2, -12] },
+    { t: 4.9, pos: [-6, 75, 100], look: [0, -2, -12] },
   ] },
   // Apollo 11: coming down from the north toward the landing site (marked), the Sun low in the east (on the left)
-  apollo: { site: 'tranquility', dur: 7.4, ease: true, marker: [0, 0], keys: [
+  apollo: { site: 'tranquility', dur: 8.867, ease: true, marker: [0, 0], keys: [
     { t: 0, pos: [6, 24, -55], look: [0, -1.9, 0] },
-    { t: 7.4, pos: [2, 6, -14], look: [0, -1.9, 0] },
+    { t: 8.867, pos: [2, 6, -14], look: [0, -1.9, 0] },
   ] },
   // Tycho: in from the south over the rim, the evening shadows across the floor and the central peak
-  tycho: { site: 'tycho', dur: 8.2, keys: [
+  tycho: { site: 'tycho', dur: 8.233, keys: [
     { t: 0, pos: [-8, 32, 105], look: [0, -3, 5] },
-    { t: 8.2, pos: [-2, 20, 36], look: [0, -3, -26] },
+    { t: 8.233, pos: [-2, 20, 36], look: [0, -3, -26] },
   ] },
   // the Earth over the horizon: near the south pole, gliding north over a plain, the Earth ~4.5° up straight ahead and
   // half lit (the Sun low in the east, on the right); a slow zoom in on it while coming down nearer the ground (so the
   // horizon, which dips ~6° from up high, stays in the frame), Ukraine on its lit side, 40° right of the middle, the
   // north pole leaning 28° toward us (the most the Earth's tilt and the Moon's orbit allow)
-  earth: { site: 'south', dur: 8.0, fov: 26, fovTo: 20, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5, keys: [
+  earth: { site: 'south', dur: 8.533, fov: 26, fovTo: 20, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5, keys: [
     { t: 0, pos: [-60, 9, 95], look: [-58, 2, -150] },
-    { t: 8.0, pos: [-60, 6, 67], look: [-58, 8.3, -150] },
+    { t: 8.533, pos: [-60, 6, 67], look: [-58, 8.3, -150] },
   ] },
 };
