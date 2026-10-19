@@ -76,24 +76,62 @@ async function setup() {
   const stars = new THREE.Points(sg, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
   // the Earth, if the shot has it: [azimuth from north through east, elevation], 1.9° across as seen from the Moon,
-  // lit by the same Sun (its phase is the Moon's turned inside out)
-  let earth = null;
+  // lit by the same Sun (its phase is the Moon's turned inside out). Drawn from the site's maps: the day side with
+  // clouds, the ocean's glint and a blue haze toward the rim, city lights on the night side, a thin glowing atmosphere
+  // round the edge. It is turned so that a chosen place faces us on the lit side (shot.earthFace: [lat, lon], and how
+  // far right of the middle it sits), its north pole leaning toward us by shot.earthLean degrees.
+  let earth = null, halo = null, earthFrame = null;
   const EARTH = ${JSON.stringify(shot.earth || null)};
   if (EARTH) {
-    const tex = await load('/site/earth_day_2k.jpg');
-    earth = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), new THREE.ShaderMaterial({
-      uniforms: { tex: { value: tex }, sun: { value: sun } },
-      vertexShader: 'varying vec2 vUv; varying vec3 vN; void main() { vUv = uv; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: \`uniform sampler2D tex; uniform vec3 sun; varying vec2 vUv; varying vec3 vN;
-        void main() { vec3 c = pow(texture2D(tex, vUv).rgb, vec3(2.2));
-          float d = dot(normalize(vN), sun);
-          vec3 lit = c * 1.7 * smoothstep(-0.05, 0.25, d) + vec3(0.25, 0.45, 0.9) * 0.12 * smoothstep(-0.1, 0.3, d);
-          gl_FragColor = vec4(pow(lit, vec3(1.0 / 2.2)), 1.0); }\` }));
-    const a = EARTH[0] * Math.PI / 180, e = EARTH[1] * Math.PI / 180, D = 8000;
-    earth.userData.dir = new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e));
-    earth.scale.setScalar(D * Math.tan(0.95 * Math.PI / 180));
-    earth.rotation.y = ${shot.earthSpin || 0};
-    scene.add(earth);
+    const [day, night, clouds, spec] = await Promise.all(['earth_day.jpg', 'earth_night.jpg', 'earth_clouds.png', 'earth_specular.jpg'].map(f => load('/site/' + f)));
+    const U = { day: { value: day }, night: { value: night }, clouds: { value: clouds }, spec: { value: spec }, sun: { value: sun },
+      A: { value: new THREE.Vector3() }, F: { value: new THREE.Vector3() }, E: { value: new THREE.Vector3() },
+      lon0: { value: 0 }, C: { value: new THREE.Vector3() }, R: { value: 1 } };
+    const VS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
+    earth = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), new THREE.ShaderMaterial({ uniforms: U, vertexShader: VS,
+      fragmentShader: \`uniform sampler2D day, night, clouds, spec; uniform vec3 sun, A, F, E, C; uniform float lon0;
+        varying vec3 vW;
+        void main() {
+          vec3 n = normalize(vW - C), V = normalize(cameraPosition - vW);
+          float lat = asin(clamp(dot(n, A), -1.0, 1.0)), lon = lon0 + atan(dot(n, E), dot(n, F));
+          vec2 uv = vec2(fract((lon + 3.14159265) / 6.2831853), (lat + 1.5707963) / 3.14159265);
+          vec3 c = pow(texture2D(day, uv).rgb, vec3(2.2));
+          float cl = texture2D(clouds, uv).r, sea = texture2D(spec, uv).r;
+          float mu = dot(n, sun), dif = max(mu, 0.0), dayK = smoothstep(-0.10, 0.10, mu);
+          float rim = pow(1.0 - max(dot(n, V), 0.0), 2.5);
+          vec3 col = c * dif * 1.9;
+          // the air: a blue veil that thickens toward the rim
+          col = mix(col, vec3(0.30, 0.52, 0.95) * dif * 1.4, 0.10 + 0.55 * rim);
+          col = mix(col, vec3(1.0, 0.99, 0.97) * dif * 2.1, cl * 0.85);              // clouds over everything
+          vec3 H = normalize(sun + V);
+          col += vec3(1.0, 0.95, 0.85) * pow(max(dot(n, H), 0.0), 70.0) * sea * (1.0 - cl) * dif * 1.6;
+          // city lights only (the map's faint land colour is left out): the brightest specks, warm
+          float lights = smoothstep(0.35, 0.9, dot(texture2D(night, uv).rgb, vec3(0.3, 0.59, 0.11)));
+          col += vec3(1.0, 0.75, 0.45) * lights * 0.35 * (1.0 - dayK) * (1.0 - 0.8 * cl);
+          gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+        }\` }));
+    // the atmosphere seen edge-on: a thin glow just outside the limb on the sunlit side
+    halo = new THREE.Mesh(new THREE.SphereGeometry(1.06, 96, 48), new THREE.ShaderMaterial({ uniforms: U, vertexShader: VS,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      fragmentShader: \`uniform vec3 sun, C; uniform float R; varying vec3 vW;
+        void main() {
+          vec3 d = normalize(vW - cameraPosition), oc = C - cameraPosition;
+          vec3 near = cameraPosition + d * dot(oc, d);                                  // closest point to the centre
+          float b = length(near - C) / R;
+          if (b < 1.0) discard;
+          float g = exp(-(b - 1.0) / 0.012) * smoothstep(-0.25, 0.35, dot(normalize(near - C), sun));
+          gl_FragColor = vec4(vec3(0.35, 0.6, 1.0) * g * 0.9, 1.0);
+        }\` }));
+    const a = EARTH[0] * Math.PI / 180, e = EARTH[1] * Math.PI / 180;
+    const dir = new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e));
+    const FACE = ${JSON.stringify(shot.earthFace || [0, 0, 0])}, LEAN = ${shot.earthLean || 0} * Math.PI / 180;
+    const F0 = dir.clone().negate(), Ax = new THREE.Vector3(0, 1, 0).multiplyScalar(Math.cos(LEAN)).addScaledVector(F0, Math.sin(LEAN)).normalize();
+    U.A.value.copy(Ax); U.F.value.copy(F0).addScaledVector(Ax, -F0.dot(Ax)).normalize();
+    U.E.value.crossVectors(dir, Ax).normalize();
+    U.lon0.value = (FACE[1] - FACE[2]) * Math.PI / 180;        // the middle of the disc: the place's longitude minus its offset
+    earthFrame = { dir, D: 8000, R: 8000 * Math.tan(0.95 * Math.PI / 180), U };
+    earth.scale.setScalar(earthFrame.R); halo.scale.setScalar(earthFrame.R);
+    scene.add(earth, halo);
   }
   // a marked place (Apollo 11): a bright dot on the ground and a thin line up from it
   const MARK = ${JSON.stringify(shot.marker || null)};
@@ -101,16 +139,24 @@ async function setup() {
     const gi = Math.round(MARK[0] / dx + (N - 1) / 2), gj = Math.round(MARK[1] / dy + (N - 1) / 2);
     const y = hb[gj * N + gi] / 1000 * EX - (MARK[0] * MARK[0] + MARK[1] * MARK[1]) / (2 * R);
     const pg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(MARK[0], y + 0.02, MARK[1])]);
-    scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 9, sizeAttenuation: false, color: 0xffd27a, depthTest: false })));
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const gx = cv.getContext('2d'), gr = gx.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,250,235,1)'); gr.addColorStop(0.18, 'rgba(255,214,130,1)'); gr.addColorStop(0.45, 'rgba(255,190,90,0.35)'); gr.addColorStop(1, 'rgba(255,190,90,0)');
+    gx.fillStyle = gr; gx.fillRect(0, 0, 64, 64);
+    scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 26, sizeAttenuation: false, map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false, depthWrite: false })));
     const lg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(MARK[0], y, MARK[1]), new THREE.Vector3(MARK[0], y + 2.5, MARK[1])]);
     scene.add(new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.8, depthTest: false })));
   }
   const camera = new THREE.PerspectiveCamera(${shot.fov || 50}, ${W} / ${H}, 0.05, 20000);
   const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(${W}, ${H}); document.body.appendChild(renderer.domElement);
-  window.__render = (p, l) => {
+  window.__render = (p, l, fov) => {
+    if (fov && Math.abs(camera.fov - fov) > 1e-4) { camera.fov = fov; camera.updateProjectionMatrix(); }
     camera.position.set(...p); camera.lookAt(...l); stars.position.copy(camera.position);
-    if (earth) earth.position.copy(camera.position).addScaledVector(earth.userData.dir, 8000);
+    if (earth) {
+      earth.position.copy(camera.position).addScaledVector(earthFrame.dir, earthFrame.D); halo.position.copy(earth.position);
+      earthFrame.U.C.value.copy(earth.position); earthFrame.U.R.value = earthFrame.R;
+    }
     renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.93);
   };
   window.ready = 1;
@@ -129,7 +175,10 @@ function cam(t) {
   const f = key => [0, 1, 2].map(j => cr(k0[key][j], k1[key][j], k2[key][j], k3[key][j]));
   // keyframes give the real altitude in km; the scene's heights are exaggerated and bent to the Moon's curvature
   const place = ([x, a, z]) => [x, a * EX - (x * x + z * z) / (2 * RKM), z];
-  return [place(f('pos')), place(f('look'))];
+  // a slow zoom (shot.fovTo), eased over the whole shot
+  const z = Math.min(1, Math.max(0, t / shot.dur)), ze = z * z * (3 - 2 * z);
+  const fov = shot.fovTo ? (shot.fov || 50) + (shot.fovTo - (shot.fov || 50)) * ze : (shot.fov || 50);
+  return [place(f('pos')), place(f('look')), fov];
 }
 
 (async () => {
@@ -151,8 +200,8 @@ function cam(t) {
   await p.goto(`http://127.0.0.1:${srv.address().port}/`);
   await p.waitForFunction(() => window.ready, null, { timeout: 120000 });
   const save = async (t, file) => {
-    const [pos, look] = cam(t);
-    const url = await p.evaluate(([a, b]) => window.__render(a, b), [pos, look]);
+    const [pos, look, fov] = cam(t);
+    const url = await p.evaluate(([a, b, c]) => window.__render(a, b, c), [pos, look, fov]);
     fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
   };
   if (mode === 'stills') {

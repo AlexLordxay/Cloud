@@ -17,6 +17,53 @@
   const GOLD = 0xffc24a;
   let route = null;
 
+  // Little drawn craft instead of dots (canvases, drawn big and shown small, so the edges stay smooth):
+  // the Apollo command and service module, nose to the right, and the lunar module, upright, in gold foil.
+  function canvas(w, h, draw) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); draw(g, w, h); return c;
+  }
+  const SHIP = canvas(256, 96, (g) => {
+    g.shadowColor = 'rgba(200,225,255,0.9)'; g.shadowBlur = 14;
+    // engine bell
+    g.fillStyle = '#6f7378'; g.beginPath(); g.moveTo(52, 36); g.lineTo(18, 22); g.lineTo(18, 74); g.lineTo(52, 60); g.closePath(); g.fill();
+    // service module: a silver cylinder with a darker band and a radiator stripe
+    const sm = g.createLinearGradient(0, 24, 0, 72); sm.addColorStop(0, '#f4f6f8'); sm.addColorStop(0.5, '#c9ced4'); sm.addColorStop(1, '#8d939a');
+    g.fillStyle = sm; g.fillRect(50, 24, 108, 48);
+    g.shadowBlur = 0; g.fillStyle = 'rgba(60,64,70,0.55)'; g.fillRect(96, 24, 10, 48); g.fillRect(130, 24, 4, 48);
+    // command module: the cone, a touch warmer
+    g.shadowBlur = 14;
+    const cm = g.createLinearGradient(0, 24, 0, 72); cm.addColorStop(0, '#ffffff'); cm.addColorStop(0.55, '#d8d6cf'); cm.addColorStop(1, '#9c9a94');
+    g.fillStyle = cm; g.beginPath(); g.moveTo(158, 22); g.lineTo(226, 42); g.quadraticCurveTo(236, 48, 226, 54); g.lineTo(158, 74); g.closePath(); g.fill();
+    g.shadowBlur = 0; g.fillStyle = '#4a4d52'; g.fillRect(186, 40, 6, 6);    // a window
+  });
+  const LANDER = canvas(160, 160, (g) => {
+    g.shadowColor = 'rgba(255,205,120,0.9)'; g.shadowBlur = 12; g.lineCap = 'round';
+    // legs and footpads
+    g.strokeStyle = '#c9b48a'; g.lineWidth = 6;
+    for (const sx of [-1, 1]) {
+      g.beginPath(); g.moveTo(80 + sx * 30, 92); g.lineTo(80 + sx * 58, 136); g.stroke();
+      g.beginPath(); g.moveTo(80 + sx * 22, 106); g.lineTo(80 + sx * 50, 124); g.stroke();
+      g.fillStyle = '#d8c79f'; g.beginPath(); g.ellipse(80 + sx * 60, 138, 12, 4, 0, 0, Math.PI * 2); g.fill();
+    }
+    // descent stage: an octagonal box in gold foil
+    const ds = g.createLinearGradient(0, 74, 0, 112); ds.addColorStop(0, '#ffe08a'); ds.addColorStop(0.5, '#e0a93a'); ds.addColorStop(1, '#a8741f');
+    g.fillStyle = ds; g.beginPath(); g.moveTo(46, 80); g.lineTo(56, 72); g.lineTo(104, 72); g.lineTo(114, 80); g.lineTo(114, 104);
+    g.lineTo(104, 112); g.lineTo(56, 112); g.lineTo(46, 104); g.closePath(); g.fill();
+    // ascent stage: grey and angular, a dark triangular window
+    const as = g.createLinearGradient(0, 30, 0, 74); as.addColorStop(0, '#f0f1f2'); as.addColorStop(1, '#9ea3a8');
+    g.fillStyle = as; g.beginPath(); g.moveTo(56, 72); g.lineTo(52, 50); g.lineTo(64, 34); g.lineTo(98, 34); g.lineTo(110, 48); g.lineTo(104, 72); g.closePath(); g.fill();
+    g.shadowBlur = 0; g.fillStyle = '#3c4046'; g.beginPath(); g.moveTo(66, 44); g.lineTo(78, 44); g.lineTo(70, 56); g.closePath(); g.fill();
+    g.fillStyle = '#8a8f95'; g.fillRect(78, 22, 4, 12);                    // the antenna mast
+  });
+  const GLOW = canvas(64, 64, (g) => {
+    const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,250,235,1)'); gr.addColorStop(0.18, 'rgba(255,214,130,1)'); gr.addColorStop(0.45, 'rgba(255,190,90,0.35)'); gr.addColorStop(1, 'rgba(255,190,90,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  });
+  // sprite scale for a size in pixels (sizeAttenuation off: the scale is a fraction of the view's height at distance 1)
+  const px = (r, n) => n / r.renderer.domElement.height * 2 * Math.tan(r.camera.fov * D / 2);
+
   window.__sceneSetup = async (r) => {
     const s = r.state, T = r.THREE, mo = r.byId.moon;
     s.index = r.BODIES.indexOf(mo); s.mode = 'focus'; s.flight = null;
@@ -27,7 +74,9 @@
     const ring = new T.Line(new T.BufferGeometry().setFromPoints(ringPts), new T.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0 }));
     const dot = (size, color) => new T.Points(new T.BufferGeometry().setFromPoints([new T.Vector3()]),
       new T.PointsMaterial({ size, sizeAttenuation: false, color, transparent: true, opacity: 0, depthWrite: false }));
-    const ship = dot(15, 0xffffff), lander = dot(11, GOLD);
+    const sprite = (cv) => new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(cv), sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false }));
+    const ship = sprite(SHIP), lander = sprite(LANDER);
+    ship.scale.set(px(r, 120), px(r, 45), 1); lander.scale.set(px(r, 72), px(r, 72), 1);
     const trail = new T.Line(new T.BufferGeometry().setFromPoints(new Array(240).fill(0).map(() => new T.Vector3())),
       new T.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0 }));
     g.add(ring, ship, lander, trail);
@@ -36,7 +85,7 @@
       new T.LineBasicMaterial({ color: GOLD, transparent: true, opacity: 0 }));
     r.scene.add(way);
     // a mark on the middle of the near side, fixed to the Moon's surface: it keeps facing the Earth as the Moon goes round
-    const near = dot(13, GOLD); near.material.depthTest = true;
+    const near = dot(30, 0xffffff); near.material.map = new T.CanvasTexture(GLOW); near.material.depthTest = true;
     mo.tiltGroup.add(near);
     const toE = r.byId.earth.world.clone().sub(mo.world).normalize();
     mo.tiltGroup.updateMatrixWorld(true);
@@ -52,12 +101,13 @@
 
   // Kondratyuk's scheme in the ring's frame (unit = the ring's radius, 1.45 Moon radii): the ship circles; at 13 s the
   // lander leaves it, goes down, sits on the Moon for a second, climbs back and meets the ship again at 19 s.
-  const RING = 1.45, W = 0.55;                     // ring radius (Moon radii), ship's angular speed (rad/s)
+  const RING = 1.45, W = 0.30;                     // ring radius (Moon radii), ship's angular speed (rad/s)
   const shipAng = t => -0.6 + W * (t - 11.2);
+  const A_DOWN = shipAng(13) + 0.55;
   function landerAt(t) {
     const T0 = 13, T1 = 15.3, T2 = 16.3, T3 = 19;
     if (t < T0 || t > T3) return [shipAng(t), RING];
-    const aDown = shipAng(T0) + 0.55;                // where it lands: a little ahead along the track
+    const aDown = A_DOWN;                            // where it lands: a little ahead along the track
     if (t < T1) { const k = smooth((t - T0) / (T1 - T0)); return [lerp(shipAng(T0), aDown, Math.sqrt(k)), lerp(RING, 1.005, k)]; }
     if (t < T2) return [aDown, 1.005];
     const k = smooth((t - T2) / (T3 - T2));
@@ -125,13 +175,19 @@
     if (route) {
       const R = route, inR = smooth((t - 11.4) / 0.8) * (1 - smooth((t - 27.2) / 0.6));
       R.g.position.copy(M); R.g.scale.setScalar(mo.radius);
-      R.g.quaternion.setFromUnitVectors(new V(0, 1, 0), new V(0.18, 1, 0.1).normalize());   // the ring a little tilted
+      // the ring a little tilted, and turned so the lander comes down on the middle of the side we look at (where the
+      // camera will be at the landing, 15.3 s)
+      const q0 = new r.THREE.Quaternion().setFromUnitVectors(new V(0, 1, 0), new V(0.18, 1, 0.1).normalize());
+      const camL = SHOTS[2][2]((15.3 - SHOTS[2][0]) / (SHOTS[2][1] - SHOTS[2][0]), ctx).pos.sub(M).applyQuaternion(q0.clone().invert());
+      const beta = A_DOWN - Math.atan2(camL.z, camL.x);
+      R.g.quaternion.copy(q0).multiply(new r.THREE.Quaternion().setFromAxisAngle(new V(0, 1, 0), beta));
       R.ring.scale.setScalar(RING); R.ring.material.opacity = 0.85 * inR;
       const sa = shipAng(t);
       R.ship.position.set(Math.cos(sa) * RING, 0, Math.sin(sa) * RING); R.ship.material.opacity = inR;
       const [la, lr] = landerAt(t);
       R.lander.position.set(Math.cos(la) * lr, 0, Math.sin(la) * lr);
-      R.lander.material.opacity = smooth((t - 12.6) / 0.4) * inR;
+      // the lander shows once it leaves the ship and is gone again once it has docked
+      R.lander.material.opacity = smooth((t - 12.85) / 0.25) * (1 - smooth((t - 19.0) / 0.3)) * inR;
       // the lander's track, from where it left the ship
       const tp = R.trail.geometry.attributes.position, n = tp.count;
       const tEnd = Math.min(t, 19), tBeg = 13;
@@ -171,5 +227,16 @@
     r.controls.target.copy(look);
     const near = Math.max(0.003, Math.min(0.3, Math.min(pos.distanceTo(C) - E.radius * 1.1, pos.distanceTo(M) - mo.radius) * 0.3));
     if (Math.abs(cam.near - near) > near * 0.02) { cam.near = near; cam.updateProjectionMatrix(); }
+    // turn the drawn ship on the screen nose-first along its orbit; the lander stays upright on the screen (it comes
+    // down on the side facing us, where "up" from the ground points at the viewer — drawn that way it read as upside down)
+    if (route && t > 11 && t < 28) {
+      cam.updateMatrixWorld(true); route.g.updateMatrixWorld(true);
+      const W = route.renderer || (route.renderer = r.renderer.domElement), hw = W.width / 2, hh = W.height / 2;
+      const scr = v => { const p = v.clone().project(cam); return [p.x * hw, p.y * hh]; };
+      const angle = (a, b) => { const [x0, y0] = scr(a), [x1, y1] = scr(b); return Math.atan2(y1 - y0, x1 - x0); };
+      const at = (ang, rr) => route.g.localToWorld(new V(Math.cos(ang) * rr, 0, Math.sin(ang) * rr));
+      const sa = shipAng(t);
+      route.ship.material.rotation = angle(at(sa, RING), at(sa + 0.02, RING));
+    }
   };
 })();

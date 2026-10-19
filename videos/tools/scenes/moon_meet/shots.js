@@ -22,9 +22,11 @@ module.exports = {
     { t: 8.2, pos: [-2, 20, 36], look: [0, -3, -26] },
   ] },
   // the Earth over the horizon: near the south pole, gliding north over a plain, the Earth ~4.5° up straight ahead and
-  // half lit (the Sun low in the east, on the right)
-  earth: { site: 'south', dur: 8.0, fov: 26, earth: [0, 4.5], earthSpin: -0.5, earthshine: 2.5, keys: [
+  // half lit (the Sun low in the east, on the right); a slow zoom in on it while coming down nearer the ground (so the
+  // horizon, which dips ~6° from up high, stays in the frame), Ukraine on its lit side, 40° right of the middle, the
+  // north pole leaning 28° toward us (the most the Earth's tilt and the Moon's orbit allow)
+  earth: { site: 'south', dur: 8.0, fov: 26, fovTo: 20, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5, keys: [
     { t: 0, pos: [-60, 9, 95], look: [-58, 2, -150] },
-    { t: 8.0, pos: [-60, 8, 67], look: [-58, 2, -150] },
+    { t: 8.0, pos: [-60, 6, 67], look: [-58, 8.3, -150] },
   ] },
 };
