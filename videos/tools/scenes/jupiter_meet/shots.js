@@ -18,21 +18,34 @@
   const JR = 71.492, JF = 66.854 / 71.492;
   const onJ = (J, lat, lon, h = 0) => { const d = J.dirLL(lat, lon); return V(d.x * (JR + h), d.y * (JR * JF + h), d.z * (JR + h)); };
   const GRS = [-20.5, -46.9];
+  // the Earth for scale: hovering just beside the Great Red Spot (the storm is ~16 000 km across, the Earth 12 742),
+  // drawn so it looks the size it would be lying at the Spot's own distance from the camera
+  const EARTH_AT = [-31, -43, 7.5];                 // below and to the side of the Spot, in the pale zone
+  function placeEarth(J, camPos) {
+    const e = J.bodies.earth, p = onJ(J, ...EARTH_AT);
+    e.position.copy(p);
+    e.scale.setScalar(camPos.distanceTo(p) / camPos.distanceTo(onJ(J, GRS[0], GRS[1])));
+    // turned so Europe and Africa (longitude 20° E) face the camera
+    const d = camPos.clone().sub(p), lonCam = Math.atan2(-d.z, d.x);
+    e.rotation.y = lonCam - 20 * J.D;
+  }
 
   const SHOTS = {
     // The Great Red Spot, filling the frame, turning; the camera sinks slowly toward it (time-lapse: days in seconds)
     hook: { dur: 4.6,
-      setup(J) { show(J, 'jupiter'); const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.22; u.drift.value = 0.012; },
+      setup(J) { show(J, 'jupiter', 'earth'); const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.22; u.drift.value = 0.012;
+        },
       frame(J, t) {
         const k = smooth(t / 4.6), P = onJ(J, GRS[0] + 1.5, GRS[1]), n = J.dirLL(GRS[0], GRS[1]);
         const pos = onJ(J, GRS[0] - 12, GRS[1] + 1, lerp(80, 64, k));
+        placeEarth(J, pos);
         sunAll(J, n.clone().add(V(0.5, 0.6, 0.2)));
         cam(J, pos, P, 40, V(0, 1, 0), 1, 5000);
       } },
     // pulling back to the whole planet; the Earth, to scale, appears below its south pole
     zoom: { dur: 8.6,
       setup(J) { show(J, 'jupiter', 'earth'); const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.22; u.drift.value = 0.012;
-        J.bodies.earth.position.set(0, -(66.854 + 26), 0); J.bodies.earth.rotation.y = 2.4; },
+        },
       frame(J, t) {
         const k = ease(t / 8.6), n = J.dirLL(GRS[0], GRS[1]);
         const far = J.dirLL(-6, GRS[1] + 4).multiplyScalar(400);
@@ -40,9 +53,12 @@
         const pos = lerpV(near, far, Math.pow(k, 0.7));
         const look = lerpV(onJ(J, GRS[0] + 1.5, GRS[1]), V(0, -14, 0), smooth((t - 0.8) / 6));
         sunAll(J, n.clone().add(V(0.4, 0.2, 0.6)));
+        placeEarth(J, pos);
         if (!J.earthLabel) J.earthLabel = J.sprite(J.LABEL('Земля'));
-        const el = J.earthLabel; el.visible = true; el.position.set(0, -(66.854 + 26) - 13, 0);
-        el.scale.set(J.px(220), J.px(41), 1); el.material.opacity = smooth((t - 4.5) / 1.2);
+        // the name just under the Earth, the same few pixels below it however far the camera is
+        const el = J.earthLabel, ep = J.bodies.earth.position;
+        el.visible = true; el.position.copy(ep).addScaledVector(V(0, -1, 0), 6.4 * J.bodies.earth.scale.x + pos.distanceTo(ep) * 0.035);
+        el.scale.set(J.px(220), J.px(41), 1); el.material.opacity = smooth((t - 0.4) / 0.8);
         cam(J, pos, look, 40, V(0, 1, 0), 1, 5000);
       } },
     // a time-lapse of its spin: one turn in six seconds, the bands racing by, the planet visibly squashed
