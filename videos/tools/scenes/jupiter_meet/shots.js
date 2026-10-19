@@ -62,7 +62,7 @@
         cam(J, pos, look, 40, V(0, 1, 0), 1, 5000);
       } },
     // a time-lapse of its spin: one turn in six seconds, the bands racing by, the planet visibly squashed
-    spin: { dur: 6.633,
+    spin: { dur: 8.833,
       setup(J) { show(J, 'jupiter'); const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.05; u.drift.value = 0.004; },
       frame(J, t) {
         J.bodies.jupiter.rotation.y = -t / 6 * Math.PI * 2 + 0.8;

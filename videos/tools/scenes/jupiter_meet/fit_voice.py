@@ -2,6 +2,8 @@
 # laid 0.45 s apart (2 s before the closing question) at the voice's own pace (TEMPO 1: the author does not want it
 # sped up), one phrase per shot; each shot is lengthened or shortened so the cut sits in the middle of the pause after
 # its phrase (shots crossfade over timeline.XF frames).
+# voice_all.mp3 = voice.mp3, 1 s of silence, fix1.mp3 (the spin and Europa phrases re-recorded 19.10: new wording,
+# «води́»), so phrases 3 and 10 come from the end of the file.
 # Writes the narration into scene.json and the shot lengths into shots.js (the "dur: …" of each shot).
 #
 #   python3 scenes/jupiter_meet/fit_voice.py
@@ -11,8 +13,8 @@ sys.path.insert(0, HERE)
 from timeline import ORDER, FPS, XF
 
 TEMPO, GAP, LAST_GAP, LEAD, TAIL = 1.0, 0.45, 2.0, 0.15, 4.4
-PHRASES = [(0.00, 4.77), (4.98, 15.06), (15.42, 21.00), (21.24, 32.48), (32.74, 40.36), (40.66, 44.34), (44.61, 54.39),
-           (54.58, 61.86), (62.10, 68.20), (68.49, 76.07), (76.30, 82.59), (82.98, 90.11), (90.45, 97.75), (98.00, 102.40)]
+PHRASES = [(0.00, 4.77), (4.98, 15.06), (103.45, 111.23), (21.24, 32.48), (32.74, 40.36), (40.66, 44.34), (44.61, 54.39),
+           (54.58, 61.86), (62.10, 68.20), (111.50, 119.08), (76.30, 82.59), (82.98, 90.11), (90.45, 97.75), (98.00, 102.40)]
 
 
 def plan():
@@ -36,7 +38,7 @@ def plan():
 if __name__ == '__main__':
     parts, ends, frames, total = plan()
     sj = os.path.join(HERE, 'scene.json'); d = json.load(open(sj))
-    d['narration'] = {'file': 'voice.mp3', 'level': 1.0, 'tempo': TEMPO, 'parts': parts}
+    d['narration'] = {'file': 'voice_all.mp3', 'level': 1.0, 'tempo': TEMPO, 'parts': parts}
     d['duration'] = round(total, 2)
     json.dump(d, open(sj, 'w'), ensure_ascii=False, indent=2); open(sj, 'a').write('\n')
     src = open(os.path.join(HERE, 'shots.js'), encoding='utf-8').read()
