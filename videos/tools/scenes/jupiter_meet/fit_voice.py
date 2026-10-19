@@ -1,6 +1,7 @@
 # Sets "Знайомся: Юпітер" to the author's voice: the fourteen phrases (seconds in voice.mp3, found from its pauses) are
-# laid 0.45 s apart (2 s before the closing question), sped up by TEMPO, one phrase per shot; each shot is lengthened or
-# shortened so the cut sits in the middle of the pause after its phrase (shots crossfade over timeline.XF frames).
+# laid 0.45 s apart (2 s before the closing question) at the voice's own pace (TEMPO 1: the author does not want it
+# sped up), one phrase per shot; each shot is lengthened or shortened so the cut sits in the middle of the pause after
+# its phrase (shots crossfade over timeline.XF frames).
 # Writes the narration into scene.json and the shot lengths into shots.js (the "dur: …" of each shot).
 #
 #   python3 scenes/jupiter_meet/fit_voice.py
@@ -9,7 +10,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from timeline import ORDER, FPS, XF
 
-TEMPO, GAP, LAST_GAP, LEAD, TAIL = 1.07, 0.45, 2.0, 0.15, 4.4
+TEMPO, GAP, LAST_GAP, LEAD, TAIL = 1.0, 0.45, 2.0, 0.15, 4.4
 PHRASES = [(0.00, 4.77), (4.98, 15.06), (15.42, 21.00), (21.24, 32.48), (32.74, 40.36), (40.66, 44.34), (44.61, 54.39),
            (54.58, 61.86), (62.10, 68.20), (68.49, 76.07), (76.30, 82.59), (82.98, 90.11), (90.45, 97.75), (98.00, 102.40)]
 

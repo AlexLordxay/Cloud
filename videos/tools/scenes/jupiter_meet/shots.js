@@ -32,7 +32,7 @@
 
   const SHOTS = {
     // The Great Red Spot, filling the frame, turning; the camera sinks slowly toward it (time-lapse: days in seconds)
-    hook: { dur: 5.133,
+    hook: { dur: 5.433,
       setup(J) { show(J, 'jupiter', 'earth'); const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.22; u.drift.value = 0.012;
         },
       frame(J, t) {
@@ -43,7 +43,7 @@
         cam(J, pos, P, 40, V(0, 1, 0), 1, 5000);
       } },
     // pulling back to the whole planet; the Earth, to scale, appears below its south pole
-    zoom: { dur: 10.467,
+    zoom: { dur: 11.133,
       setup(J) { show(J, 'jupiter', 'earth'); const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.22; u.drift.value = 0.012;
         },
       frame(J, t) {
@@ -62,7 +62,7 @@
         cam(J, pos, look, 40, V(0, 1, 0), 1, 5000);
       } },
     // a time-lapse of its spin: one turn in six seconds, the bands racing by, the planet visibly squashed
-    spin: { dur: 6.267,
+    spin: { dur: 6.633,
       setup(J) { show(J, 'jupiter'); const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.05; u.drift.value = 0.004; },
       frame(J, t) {
         J.bodies.jupiter.rotation.y = -t / 6 * Math.PI * 2 + 0.8;
@@ -70,10 +70,10 @@
         cam(J, V(0, 6, 300), V(0, 0, 0), 40, V(0, 1, 0), 1, 5000);
       } },
     // the dive: down through the cloud decks into the dark
-    dive: { dur: 11.567,
+    dive: { dur: 12.300,
       frame(J, t) { const u = J.dive.u; u.depth.value = lerp(-1.5, 17, Math.pow(t / this.dur, 1.15)); u.time.value = t; return { pass: J.dive }; } },
     // the four big moons in a row in front of the giant, the camera gliding past them (sizes true, spacing shortened)
-    moons: { dur: 8.167,
+    moons: { dur: 8.667,
       setup(J) {
         show(J, 'jupiter', 'io', 'europa', 'ganymede', 'callisto');
         J.bodies.jupiter.position.set(6, 2, -300);
@@ -88,7 +88,7 @@
         cam(J, V(lerp(-1.5, 1.5, k), lerp(-0.5, 0.5, k), lerp(3, 0, k)), V(lerp(0.2, 1.2, k), 0, -60), 40, V(0, 1, 0), 0.5, 5000);
       } },
     // toward Io: yellow, orange and red, Jupiter huge behind it
-    ioapp: { dur: 4.500,
+    ioapp: { dur: 4.733,
       setup(J) { show(J, 'io', 'jupiter'); J.bodies.jupiter.position.set(422, 0, 0); J.bodies.jupiter.rotation.y = Math.PI;
         const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.03; u.drift.value = 0.002; },
       frame(J, t) {
@@ -97,7 +97,7 @@
         cam(J, d.clone().multiplyScalar(lerp(60, 14, k)), V(lerp(30, 8, k), 0, 0), 40, V(0, 1, 0), 0.05, 5000);
       } },
     // Io squeezed by Jupiter's pull: it swells and settles toward the planet (shown many times over)
-    iobreath: { dur: 10.167,
+    iobreath: { dur: 10.833,
       setup(J) { SHOTS.ioapp.setup(J); },
       frame(J, t) {
         const s = 1 + 0.02 * Math.sin(t / this.dur * Math.PI * 4) * smooth(t / 0.8);
@@ -107,7 +107,7 @@
         cam(J, d.clone().multiplyScalar(lerp(14, 11, ease(t / this.dur))), V(lerp(8, 6, ease(t / this.dur)), 0, 0), 40, V(0, 1, 0), 0.05, 5000);
       } },
     // under the yellow haze: low over Io toward Pele — its umbrella plume 300 km high, the red ring of fallout
-    pele: { dur: 7.867, vent: [-18.6, 104.8],
+    pele: { dur: 8.333, vent: [-18.6, 104.8],
       setup(J) { show(J, 'io', 'jupiter'); J.bodies.jupiter.position.set(422, 0, 0); J.plume.visible = true;
         J.bodies.io.scale.set(1, 1, 1); J.bodies.io.userData.u.spots.value[0].set(-18.6 * J.D, 104.8 * J.D, 0.6 * J.D, 0.6); },
       frame(J, t) {
@@ -127,7 +127,7 @@
       } },
     // Loki at night: the lava lake 200 km across glowing; low to the east of it, looking west — Jupiter (half lit)
     // stands 40° up in the sky beyond (Loki is on the side of Io that always faces Jupiter)
-    loki: { dur: 6.733,
+    loki: { dur: 7.133,
       setup(J) { show(J, 'io', 'jupiter'); J.bodies.jupiter.position.set(422, 0, 0); J.bodies.jupiter.rotation.y = Math.PI;
         J.bodies.io.scale.set(1, 1, 1); const u = J.bodies.io.userData.u;
         u.spots.value[0].set(11.3 * J.D, 49.6 * J.D, 3.8 * J.D, 1.0); u.night.value = 0.05; u.fogK.value = 0; },
@@ -142,7 +142,7 @@
         cam(J, pos, look, 72, g, 0.002, 5000);
       } },
     // Europa: low over the ice, flying west over the rusty cracks, a low Sun from the north; Jupiter on the horizon
-    europa: { dur: 8.133,
+    europa: { dur: 8.633,
       setup(J) { show(J, 'europa', 'jupiter'); J.bodies.jupiter.position.copy(J.dirLL(4, 168).multiplyScalar(671));
         const u = J.bodies.jupiter.userData.u; u.grsSpin.value = 0.03; u.drift.value = 0.002; },
       frame(J, t) {
@@ -156,7 +156,7 @@
         cam(J, pos, look, 55, up, 0.002, 5000);
       } },
     // the Europa Clipper on its way: the probe crossing in front of the ice moon, Jupiter behind
-    clipper: { dur: 6.933,
+    clipper: { dur: 7.333,
       setup(J) { show(J, 'europa', 'jupiter'); J.bodies.jupiter.position.copy(J.dirLL(-10, 74).multiplyScalar(671)); J.clipper.visible = true; },
       frame(J, t) {
         const k = t / this.dur;
@@ -173,7 +173,7 @@
         J.clipper.material.rotation = lerp(0.35, 0.15, k);
       } },
     // Ganymede beside Mercury, to scale — the moon is the bigger one — with its auroral ovals glowing
-    ganymede: { dur: 7.733,
+    ganymede: { dur: 8.200,
       async setup(J) {
         show(J, 'ganymede', 'mercury');
         J.bodies.ganymede.position.set(-3.2, 0, 0); J.bodies.mercury.position.set(3.2, -0.2, 0);
@@ -192,13 +192,13 @@
         cam(J, V(0, lerp(10, 8, k), lerp(25, 21, k)), V(0, -0.6, 0), 40, V(0, 1, 0), 0.05, 5000);
       } },
     // dawn over Ukraine: Jupiter, the brightest "star", high in the south-east
-    dawn: { dur: 8.433,
+    dawn: { dur: 8.900,
       frame(J, t) { const u = J.dawn.u; u.k.value = lerp(0.12, 0.42, t / this.dur); u.time.value = t; return { pass: J.dawn }; } },
     // the end, as it really is: seen from the Earth the four moons stand almost on one line through Jupiter (their
     // orbits are edge-on to us), at their true distances. Positions for 30 October 2026, 5:00 in Kyiv (Meeus' method),
     // in Jupiter radii west (+) or east (−) of it, and toward us (+) or away. The view is turned so the line runs
     // corner to corner of the tall frame; the camera pulls back until all four are in.
-    outro: { dur: 10.000, pos: { io: [-5.84, -0.97], europa: [-3.29, -8.85], ganymede: [14.84, 2.15], callisto: [8.03, 25.2] },
+    outro: { dur: 10.300, pos: { io: [-5.84, -0.97], europa: [-3.29, -8.85], ganymede: [14.84, 2.15], callisto: [8.03, 25.2] },
       setup(J) {
         show(J, 'jupiter', 'io', 'europa', 'ganymede', 'callisto');
         const RJ = 71.492, P = SHOTS.outro.pos;
