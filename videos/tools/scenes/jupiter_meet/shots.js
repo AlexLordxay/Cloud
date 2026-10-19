@@ -142,8 +142,8 @@
       setup(J) { show(J, 'europa', 'jupiter'); J.bodies.jupiter.position.copy(J.dirLL(-10, 74).multiplyScalar(671)); J.clipper.visible = true; },
       frame(J, t) {
         const k = t / 5.2;
-        const cd = J.dirLL(5, -120), right = V().crossVectors(cd, V(0, 1, 0)).normalize().negate();
-        sunAll(J, cd.clone().add(right.clone().multiplyScalar(1.3)).add(V(0, 0.3, 0)));
+        const cd = J.dirLL(5, -120), side = V().crossVectors(cd, V(0, 1, 0)).normalize().negate();
+        sunAll(J, cd.clone().add(side.clone().multiplyScalar(1.3)).add(V(0, 0.3, 0)));
         const pos = cd.clone().multiplyScalar(lerp(9, 7.5, ease(k)));
         cam(J, pos, V(0, -0.6, 0), 40, V(0, 1, 0), 0.05, 5000);
         // the probe: in front of the camera, sliding up and in, a little smaller as it goes
