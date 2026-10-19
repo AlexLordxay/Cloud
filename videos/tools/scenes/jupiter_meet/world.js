@@ -91,9 +91,9 @@
         if (s.w <= 0.0) continue;
         vec3 sd = vec3(cos(s.x) * cos(s.y), sin(s.x), -cos(s.x) * sin(s.y));
         float a = acos(clamp(dot(o, sd), -1.0, 1.0));
-        float m = (1.0 - smoothstep(s.z * 0.45, s.z, a)) * smoothstep(0.62, 0.85, 1.0 - lum(texture2D(map, uv).rgb));
+        float m = (1.0 - smoothstep(s.z * 0.45, s.z, a)) * smoothstep(0.70, 0.9, 1.0 - lum(texture2D(map, uv).rgb));
         // the crust is cooled dark; the heat shows along cracks and the shore, flickering
-        float cr = smoothstep(0.45, 0.75, fbm(ll * radius * 40.0 + 3.0)) + 0.6 * smoothstep(0.62, 0.68, 1.0 - lum(texture2D(map, uv).rgb));
+        float cr = 0.25 + 0.75 * smoothstep(0.55, 0.8, fbm(ll * radius * 55.0 + 3.0));
         m *= clamp(cr, 0.0, 1.0);
         float fl = 0.75 + 0.25 * fbm(ll * radius * 6.0 + time * 0.6);
         col += spotCol * s.w * m * fl;
@@ -117,7 +117,7 @@
       detail: { value: opts.detail || 0 }, radius: { value: R }, amb: { value: opts.amb != null ? opts.amb : 0.002 },
       ambCol: { value: new T.Color(opts.ambCol || 0xffffff) }, exposure: { value: opts.exposure || 1.6 },
       jup: { value: opts.jup ? 1 : 0 }, grs: { value: new T.Vector3() }, grsSpin: { value: 0 }, drift: { value: 0 },
-      spots: { value: [0, 1, 2, 3].map(() => new T.Vector4(0, 0, 0, 0)) }, spotCol: { value: new T.Color(1.0, 0.42, 0.12) },
+      spots: { value: [0, 1, 2, 3].map(() => new T.Vector4(0, 0, 0, 0)) }, spotCol: { value: new T.Color(1.0, 0.32, 0.07) },
       aur: { value: 0 }, aurLat: { value: 0 }, atmoCol: { value: new T.Color(0.35, 0.55, 1.0) }, atmo: { value: opts.atmo || 0 },
       fogCol: { value: new T.Color(0.9, 0.8, 0.45) }, fogK: { value: 0 }, night: { value: 0 }, rot: { value: new T.Matrix3() },
     };
@@ -152,7 +152,7 @@
       void main() { vec2 d = gl_PointCoord - 0.5; float r = length(d); if (r > 0.5) discard; gl_FragColor = vec4(col * vA * gain * pow(1.0 - r * 2.0, 1.8), 1.0); }` });
   const plume = new T.Points(pg, plumeMat); plume.frustumCulled = false; plume.visible = false; scene.add(plume);
   const pp = [];
-  for (let i = 0; i < PN; i++) pp.push({ ph: rnd(), az: rnd() * Math.PI * 2, el: (63 + (rnd() - 0.5) * 12) * D, v: 1.0 + (rnd() - 0.5) * 0.12 });
+  for (let i = 0; i < PN; i++) { const el = (38 + 46 * rnd()) * D; pp.push({ ph: rnd(), az: rnd() * Math.PI * 2, el, v: (0.92 + 0.12 * rnd()) * Math.sin(63.4 * D) / Math.sin(el) }); }
   function updatePlume(bodyMesh, lat, lon, t, loop) {
     const R = bodyMesh.userData.R;
     plumeMat.uniforms.scale.value = H / (2 * Math.tan(camera.fov * D / 2));
@@ -160,10 +160,9 @@
     const north = new T.Vector3().crossVectors(up, east).normalize();
     const pos = pg.attributes.position.array, al = pg.attributes.alpha.array;
     const v0 = 1.16, gk = 1.796e-3;                                 // km/s, km/s²
-    const Tf = 2 * v0 * Math.sin(63.4 * D) / gk;                    // ~1150 s of real flight
     for (let i = 0; i < PN; i++) {
       const q = pp[i], tau = ((q.ph + t / loop) % 1);
-      const s = tau * Tf, v = v0 * q.v;
+      const v = v0 * q.v, s = tau * 2 * v * Math.sin(q.el) / gk;     // each path's own flight time
       const hor = v * Math.cos(q.el) * s, ver = v * Math.sin(q.el) * s - gk * s * s / 2;   // km
       const ang = hor / (R * 1000);                                  // radians along the ground
       const dir = new T.Vector3().copy(up).multiplyScalar(Math.cos(ang))
@@ -243,7 +242,7 @@
           float y = -p.y;
           float sh = exp(-dens(p + vec3(0.25, 0.7, 0.1)) * 2.2);          // light from above, shadowed by the cloud
           float sky = exp(-max(y, 0.0) * 0.17);
-          vec3 c = layerCol(y) * (0.06 + 1.05 * sky * (0.35 + 0.65 * sh)) + vec3(0.55, 0.13, 0.04) * smoothstep(8.0, 16.0, y) * (1.0 - sh * 0.5) * 0.5;
+          vec3 c = layerCol(y) * (0.05 + 1.05 * sky * (0.35 + 0.65 * sh)) + vec3(0.5, 0.11, 0.03) * smoothstep(9.0, 16.0, y) * (1.0 - sh * 0.5) * 0.14;
           float a = d * 0.42;
           col += tr * a * c; tr *= 1.0 - a;
           if (tr < 0.02) break;
@@ -251,7 +250,7 @@
       }
       float up = smoothstep(-0.2, 0.5, rd.y);
       vec3 above = mix(vec3(0.62, 0.56, 0.5), vec3(0.08, 0.1, 0.18), smoothstep(-1.0, -4.0, -depth));
-      vec3 below = mix(vec3(0.5, 0.55, 0.65) * exp(-depth * 0.15), vec3(0.16, 0.035, 0.02), smoothstep(9.0, 16.0, depth));
+      vec3 below = mix(vec3(0.5, 0.55, 0.65) * exp(-depth * 0.15), vec3(0.09, 0.02, 0.012), smoothstep(9.0, 16.0, depth));
       col += tr * mix(below, above * exp(-max(depth, 0.0) * 0.12), up);
       float fl = step(0.982, h21(vec2(floor(time * 7.0), 3.0))) * smoothstep(5.0, 9.0, depth);
       col += vec3(0.75, 0.8, 1.0) * fl * 0.6 * exp(-length(q - vec2(0.15, -0.15)) * 2.5);

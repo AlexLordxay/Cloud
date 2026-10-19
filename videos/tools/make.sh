@@ -17,7 +17,8 @@ python3 -c "import PIL, imageio_ffmpeg" 2>/dev/null || pip install -q pillow ima
 ffmpeg=$(python3 -c "import imageio_ffmpeg as i; print(i.get_ffmpeg_exe())")
 
 if [ "$mode" != sound ]; then
-  node rec.js "$scene" video
+  # a scene may draw its frames itself (scenes/<scene>/frames.sh) instead of recording the site
+  if [ -f "scenes/$scene/frames.sh" ]; then bash "scenes/$scene/frames.sh"; else node rec.js "$scene" video; fi
   # a scene may finish its frames itself (e.g. lay them over a photo)
   [ -f "scenes/$scene/post.py" ] && python3 "scenes/$scene/post.py"
   python3 compose.py "$scene"

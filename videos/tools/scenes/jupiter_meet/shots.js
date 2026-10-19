@@ -101,10 +101,9 @@
         const pos = g.multiplyScalar(R + lerp(0.42, 0.13, k));
         const look = vent.clone().multiplyScalar(R + lerp(0.05, 0.16, k));
         io.userData.u.fogK.value = lerp(0.9, 0.05, smooth(t / 4.0));
-        io.userData.u.exposure.value = 1.0;
         io.updateMatrixWorld(true);
         J.updatePlume(io, la, lo, t, 5.0);
-        J.plumeMat.uniforms.gain.value = 1.0;
+        J.plumeMat.uniforms.gain.value = 1.5;
         sunAll(J, vent.clone().multiplyScalar(0.55).addScaledVector(east, -0.8).addScaledVector(north, 0.3));
         cam(J, pos, look, 55, vent, 0.003, 5000);
       } },
@@ -113,7 +112,7 @@
     loki: { dur: 5.6,
       setup(J) { show(J, 'io', 'jupiter'); J.bodies.jupiter.position.set(422, 0, 0); J.bodies.jupiter.rotation.y = Math.PI;
         J.bodies.io.scale.set(1, 1, 1); const u = J.bodies.io.userData.u;
-        u.spots.value[0].set(11.3 * J.D, 49.6 * J.D, 3.8 * J.D, 1.6); u.night.value = 0.05; u.fogK.value = 0; },
+        u.spots.value[0].set(11.3 * J.D, 49.6 * J.D, 3.8 * J.D, 1.0); u.night.value = 0.05; u.fogK.value = 0; },
       frame(J, t) {
         const k = ease(t / 5.6), io = J.bodies.io, R = io.userData.R;
         const c = J.dirLL(11.3, 49.6), east = V(-Math.sin(49.6 * J.D), 0, -Math.cos(49.6 * J.D)), north = V().crossVectors(c, east).normalize();
