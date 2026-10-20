@@ -210,27 +210,65 @@
         X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
         X.U.cloudLon.value = 0.02;
       } },
-    // the crater forming, its first ten minutes in ten seconds (T = 600·(t/10)² s), seen from ~75 km up to the
-    // south-east: the bowl opening, the floor rebounding into a peak, the peak falling into a ring, the walls slumping
+    // the crater forming, its first ten minutes in ten seconds (T = 600·(t/10)² s), seen from ~28 km up just outside
+    // the rim to the south-east, drifting in: the bowl opening, the floor rebounding into a peak higher than Everest,
+    // the peak falling into a ring, the walls slumping; round it the sea churning against the ejecta. Alive with steam
+    // where water meets hot rock, glowing debris still falling, lightning in the dust cloud overhead (as in volcanic
+    // ash). Steam, debris and lightning run on the film's own clock, not T.
     crater: { dur: 10,
       T(t) { return 600 * Math.pow(Math.max(t, 0) / this.dur, 2); },
       setup(X) {
         const S = site(X); this.S = S;
         const CU = X.CU; CU.C0.value.copy(S.I); CU.eE.value.copy(S.east); CU.eN.value.copy(S.north); CU.eU.value.copy(S.up);
-        X.crater.visible = true; X.U.hole.value.set(S.up.x, S.up.y, S.up.z, 0.240 / X.ER);
+        X.crater.visible = true; X.skydome.visible = true; X.stars.visible = false;
+        X.U.hole.value.set(S.up.x, S.up.y, S.up.z, 0.240 / X.ER);
+        const r = X.rnd, at = (km, az, hkm) => S.I.clone().addScaledVector(horiz(S, az), km / 1000).addScaledVector(S.up, hkm / 1000);
+        // steam: rising where the sea meets the hot ejecta and off the melt, billowing, lit from below
+        const ST = this.steam = this.steam || X.fx(2600, false);
+        for (let i = 0; i < ST.n; i++) {
+          // most off the melt in the middle (a column lit from below); some off the far shore (not round the camera)
+          const shore = r() < 0.12, km = shore ? 110 + 40 * r() : 38 * Math.sqrt(r()), az = shore ? 300 + 60 * r() : r() * 360;
+          const vel = S.up.clone().multiplyScalar((1.5 + 3 * r()) / 1000).addScaledVector(horiz(S, r() * 360), 0.8 * r() / 1000);
+          ST.set(i, at(km, az, shore ? 0.3 : 2), vel, -6 + 16 * r(), 5 + 6 * r(), 0.002, 0.006 + 0.007 * r(), r());
+        }
+        ST.u.drag.value = 0.15; ST.u.shade.value = 1; ST.u.ldir.value.set(0.0, -0.8); ST.u.gain.value = 0.14;
+        ST.u.smoke.value.setRGB(0.55, 0.36, 0.26);
+        // hot debris still coming down: small glowing bits falling out of the dark
+        const DB = this.debris = this.debris || X.fx(1200, true);
+        for (let i = 0; i < DB.n; i++) {
+          const km = 230 * Math.sqrt(r()), az = r() * 360;
+          const vel = S.up.clone().multiplyScalar(-(4 + 5 * r()) / 1000).addScaledVector(horiz(S, r() * 360), 1.5 * r() / 1000);
+          DB.set(i, at(km, az, 6 + 20 * r()), vel, -3 + 13 * r(), 2 + 3 * r(), 0.0005, 0.0002, r());
+        }
+        DB.u.drag.value = 0.05; DB.u.heat.value = 0.8; DB.u.gain.value = 0.5;
+        ST.points.visible = DB.points.visible = true;
+        // lightning: a few strokes, each a quick double flicker, somewhere in the cloud
+        this.bolts = [];
+        for (let k = 0; k < 7; k++) this.bolts.push({ t: 0.6 + 9 * r(), az: r() * 360, el: 15 + 50 * r() });
       },
       frame(X, t) {
-        const S = this.S, T = this.T(t), CU = X.CU; CU.T.value = T;
-        // light from the glowing cloud above, a little downrange; fading as it cools and the dust thickens
-        CU.key.value.copy(S.up).addScaledVector(horiz(S, 225), 1.0).normalize();
+        const S = this.S, T = this.T(t), CU = X.CU; CU.T.value = T; CU.vt.value = t;
+        CU.key.value.copy(S.up).addScaledVector(horiz(S, 225), 0.7).normalize();
+        CU.keyI.value = 0.9 * Math.exp(-T / 300) + 0.25; CU.melt.value = 1.5;
         // the final basin is shallow (1–2 km over 180 km): its relief is drawn 3× as it settles (said in a caption)
         CU.ex.value = 1 + 2 * smooth((T - 200) / 360);
-        CU.keyI.value = 1.1 * Math.exp(-T / 350) + 0.35; CU.melt.value = 1.6;
-        const az = 150 - 12 * t / this.dur, d = lerp(0.15, 0.17, t / this.dur);
-        const pos = S.I.clone().addScaledVector(horiz(S, az), d).normalize().multiplyScalar(X.ER + 0.075);
-        cam(X, pos, S.I.clone().addScaledVector(S.up, -0.008), 52, S.up.clone(), 0.002);
+        let fl = 0, dir = S.up.clone();
+        for (const b of this.bolts) {
+          const u = t - b.t; if (u < 0 || u > 0.35) continue;
+          const f = Math.exp(-u / 0.05) + 0.7 * Math.exp(-Math.abs(u - 0.14) / 0.03);
+          if (f > fl) { fl = f; dir = horiz(S, b.az).multiplyScalar(Math.cos(b.el * X.D)).addScaledVector(S.up, Math.sin(b.el * X.D)); }
+        }
+        CU.flash.value = 0.35 * fl; X.SKY.fl.value.set(dir.x, dir.y, dir.z, 0.8 * fl);
+        // the camera: ~45 km up, coming in from ~135 to ~115 km out, swinging a little round
+        const k = smooth(t / this.dur), az = 150 - 14 * k, d = lerp(0.135, 0.115, k);
+        const pos = S.I.clone().addScaledVector(horiz(S, az), d).normalize().multiplyScalar(X.ER + 0.045);
+        cam(X, pos, S.I.clone().addScaledVector(S.up, -0.010).addScaledVector(horiz(S, az), 0.015), 58, S.up.clone(), 0.0005);
+        X.skydome.position.copy(X.camera.position);
+        const fc = X.CU.fogC.value, kk = 0.5 + CU.keyI.value * 0.7;
+        X.U.dfog.value.set(fc.r * kk, fc.g * kk, fc.b * kk, CU.fogK.value);
+        const pxScale = X.H / (2 * Math.tan(X.camera.fov * X.D / 2));
+        for (const F of [this.steam, this.debris]) { F.u.time.value = t; F.u.scale.value = pxScale; }
         X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
-        X.U.cloudLon.value = 0.02;
       } },
     // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
     site_top: { dur: 2,

@@ -39,6 +39,8 @@ const page = `<!doctype html><html><head><meta charset="utf-8"></head><body styl
   } else {
     const dur = await p.evaluate(n => { const s = window.SHOTS[n]; if (!s) throw new Error('no shot ' + n); return s.dur; }, name);
     await p.evaluate(async n => { await window.startShot(n); }, name);
+    // CX_EVAL: a line of JS run in the page after the shot is set up (for checks: hide a layer, change a value)
+    if (process.env.CX_EVAL) await p.evaluate(src => { (new Function('X', 'SHOTS', src))(window.X, window.SHOTS); }, process.env.CX_EVAL);
     const save = async (t, file) => {
       const url = await p.evaluate(([n, tt]) => window.renderShot(n, tt), [name, t]);
       fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));

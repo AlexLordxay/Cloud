@@ -27,10 +27,10 @@
     fball: { value: new T.Vector4(0, 0, 0, 0) }, haze: { value: 1 }, atm: { value: 1.2 },
     pcol: { value: pcol }, prel: { value: prel }, pbox: { value: new T.Vector4(...PBOX) },
     shock: { value: new T.Vector4(1, 0, 0, 0) }, shock2: { value: new T.Vector4(0, 0, 0, 0) },
-    hole: { value: new T.Vector4(1, 0, 0, 0) } };
+    hole: { value: new T.Vector4(1, 0, 0, 0) }, dfog: { value: new T.Vector4(0, 0, 0, 0) } };
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
     fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel; uniform vec4 pbox; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
-      uniform vec4 fball, shock, shock2, hole; uniform float haze, atm;
+      uniform vec4 fball, shock, shock2, hole, dfog; uniform float haze, atm;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       float vn(vec3 p) {
@@ -127,6 +127,7 @@
           float f = fball.w * max(dot(n, L / dl), 0.0) / (1.0 + dl * dl / 0.006);
           col += vec3(1.0, 0.62, 0.30) * f * mix(c * 3.0 + 0.02, vec3(0.9), cl);
         }
+        if (dfog.a > 0.0) col = mix(col, dfog.rgb, 1.0 - exp(-length(cameraPosition - vW) * 1000.0 * dfog.a));   // dust about the crater
         col = vec3(1.0) - exp(-col * exposure);                                 // soft shoulder: bright clouds don't clip
         gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
       }` }));
@@ -358,96 +359,147 @@
   // (IODP 364, Morgan et al. 2016) and models of it: a transient bowl ~100 km wide and ~28 km deep in the first minute,
   // its walls showing the layers it cut (limestone, anhydrite, then granite); the floor rebounding into a central peak
   // higher than Everest; the peak falling outward into a ring of mountains ~80 km across while the walls slump in
-  // terraces to a rim ~180 km across — a basin a kilometre or two deep, its middle a lake of melt. Dressed in ejecta,
-  // lit from above by the glowing cloud and from below by the melt; dust in the air. The Earth's own surface has a hole
-  // here (U.hole) so the two do not fight.
+  // terraces to a rim ~180 km across — a basin a kilometre or two deep, its middle a lake of melt. It struck a shallow
+  // sea: round the crater a blanket of ejecta, thinning outward until the churned, dark water takes over. Lit by the
+  // melt (a warm light from the middle that falls on the walls facing it), by the glowing cloud above, and by
+  // lightning; dust in the air. The Earth's own surface has a hole here (U.hole) so the two do not fight.
   const CU = { T: { value: 0 }, ex: { value: 1 }, C0: { value: new T.Vector3() }, eE: { value: new T.Vector3() },
     eN: { value: new T.Vector3() }, eU: { value: new T.Vector3() }, key: { value: new T.Vector3(0, 1, 0) },
-    keyI: { value: 1 }, melt: { value: 1 }, fogC: { value: new T.Color(0.10, 0.06, 0.035) }, fogK: { value: 0.0016 },
-    sun: U.sun };
+    keyI: { value: 1 }, melt: { value: 1 }, fogC: { value: new T.Color(0.05, 0.021, 0.008) }, fogK: { value: 0.0028 },
+    flash: { value: 0 }, vt: { value: 0 }, sun: U.sun };
   const CRATER_GLSL = `
     uniform float T, ex; uniform vec3 C0, eE, eN, eU;
     float ch(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(ch(i), ch(i + vec2(1, 0)), f.x), mix(ch(i + vec2(0, 1)), ch(i + vec2(1, 1)), f.x), f.y) * 2.0 - 1.0; }
     float cf(vec2 p) { return 0.5 * cn(p) + 0.25 * cn(p * 2.07) + 0.13 * cn(p * 4.13) + 0.07 * cn(p * 8.3) + 0.04 * cn(p * 16.7); }
+    // ridged noise: sharp crests and gullies, for broken rock
+    float rf(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { float v = 1.0 - abs(cn(p)); s += a * v * v; p *= 2.11; a *= 0.5; } return s; }
     // stages (0…1): the bowl growing, the floor rebounding, the collapse into the final form
     float sGrow() { float g = clamp(T / 70.0, 0.0, 1.0); return 1.0 - (1.0 - g) * (1.0 - g); }
     float sRise() { return smoothstep(70.0, 190.0, T); }
     float sColl() { return smoothstep(200.0, 560.0, T); }
-    // height in km at p (km east, north of the centre)
+    float rimR() { return mix(50.0 * sqrt(sGrow()) + 0.5, 92.0, sColl()); }
+    // height in km at p (km east, north of the centre); the old sea floor ~150 m down
     float craterH(vec2 p) {
       float r = length(p), a = atan(p.y, p.x);
       float g = sGrow(), Rt = 50.0 * sqrt(g) + 0.5, Dt = 28.0 * g;
       float bowl = r < Rt ? -Dt * (1.0 - r * r / (Rt * Rt)) : 0.0;
-      float rim = (r < Rt ? pow(r / Rt, 8.0) : pow(Rt / r, 3.0)) * 2.2 * g;
-      float wall = cf(p * 0.06 + 3.0) * 1.6 * g * exp(-pow((r - Rt * 0.8) / (Rt * 0.5), 2.0));
+      float rim = (r < Rt ? pow(r / Rt, 8.0) : pow(Rt / r, 3.0)) * 2.4 * g;
+      float wallZone = exp(-pow((r - Rt * 0.75) / (Rt * 0.45), 2.0));
+      float wall = (rf(p * 0.07 + 3.0) - 0.45) * 3.2 * g * wallZone;
       // the rebound: the bowl shallows and a central peak rises past the old ground, then spreads and falls
       float rise = sRise(), coll = sColl();
       float pk = 15.0 * rise * (1.0 - smoothstep(190.0, 420.0, T)), pkS = 13.0 + 18.0 * smoothstep(190.0, 420.0, T);
-      float mid = (bowl + wall) * (1.0 - 0.75 * rise) + rim + pk * exp(-r * r / (pkS * pkS)) * (1.0 + 0.15 * cf(p * 0.15));
-      // the final crater: a melt-filled middle, the peak ring, a trough, walls in slumped terraces up to the rim
+      float peak = pk * exp(-r * r / (pkS * pkS)) * (0.85 + 0.35 * rf(p * 0.12));
+      float mid = (bowl + wall) * (1.0 - 0.75 * rise) + rim + peak;
+      // the final crater: a melt-filled middle, the peak ring, a trough, walls in slumped blocks up to the rim
       float rr = r / (1.0 + 0.035 * sin(3.0 * a + 1.0) + 0.025 * sin(7.0 * a + 2.0) + 0.02 * cf(p * 0.02));
-      float ring = 1.9 * exp(-pow((rr - 40.0) / 6.0, 2.0)) * (0.7 + 0.6 * (cf(p * 0.09 + 7.0) * 0.5 + 0.5));
+      float ring = 1.9 * exp(-pow((rr - 40.0) / 6.0, 2.0)) * (0.6 + 0.8 * rf(p * 0.09 + 7.0));
       float s = clamp((rr - 50.0) / 42.0, 0.0, 1.0), st = (floor(s * 5.0) + smoothstep(0.0, 0.65, fract(s * 5.0))) / 5.0;
       float fin = rr < 92.0 ? mix(-1.3, mix(-1.7, 0.7, st), smoothstep(46.0, 54.0, rr)) + ring
-                            : 0.7 * pow(92.0 / rr, 3.0);
-      fin += cf(p * 0.12 + 11.0) * 0.18 + (rr < 34.0 ? cf(p * 0.3) * 0.05 : 0.0);
-      return mix(mid, fin, coll);
+                            : 0.75 * pow(92.0 / rr, 3.0);
+      fin += (rf(p * 0.1 + 11.0) - 0.4) * 0.35 * smoothstep(40.0, 70.0, rr);
+      float h = mix(mid, fin, coll);
+      // outside: the sea floor, under a blanket of ejecta that thins away from the rim, rubbly
+      float R = rimR(), ej = r > R ? 0.9 * pow(R / r, 2.6) * (0.8 + 0.4 * rf(p * 0.05)) : 0.0;
+      return h + (r > R ? -0.15 + ej : 0.0) * smoothstep(0.0, 0.05, g);
     }
     vec3 cpos(vec2 p) {                     // world position: km in the site frame → units, bent to the curve
       float h = craterH(p) * ex; vec2 u = p / 1000.0;
       return C0 + eE * u.x + eN * u.y + eU * (h / 1000.0 - dot(u, u) / (2.0 * 6.371));
     }`;
-  const crater = new T.Mesh(new T.PlaneGeometry(500, 500, 640, 640), new T.ShaderMaterial({ uniforms: CU,
+  const crater = new T.Mesh(new T.PlaneGeometry(500, 500, 700, 700), new T.ShaderMaterial({ uniforms: CU,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     vertexShader: CRATER_GLSL + `
       varying vec2 vP; varying vec3 vW, vN; varying float vH;
       void main() {
         vec2 p = position.xy; vP = p;
-        vec3 w = cpos(p), wx = cpos(p + vec2(0.6, 0.0)), wy = cpos(p + vec2(0.0, 0.6));
+        vec3 w = cpos(p), wx = cpos(p + vec2(0.5, 0.0)), wy = cpos(p + vec2(0.0, 0.5));
         vN = normalize(cross(wx - w, wy - w)); vW = w; vH = craterH(p);
         gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
       }`,
     fragmentShader: CRATER_GLSL + `
-      uniform vec3 key, sun, fogC; uniform float keyI, melt, fogK;
+      uniform vec3 key, sun, fogC; uniform float keyI, melt, fogK, flash, vt;
       varying vec2 vP; varying vec3 vW, vN; varying float vH;
       void main() {
         float r = length(vP); if (r > 245.0) discard;
         vec3 n = normalize(vN); vec3 V = normalize(cameraPosition - vW);
-        float g = sGrow(), coll = sColl(), rise = sRise();
-        // ground: ejecta over everything near, thinning out with distance; rays of it
+        float g = sGrow(), coll = sColl(), rise = sRise(), R = rimR();
         float a = atan(vP.y, vP.x), ray = 0.5 + 0.5 * cn(vec2(a * 9.0, 0.3)) * cn(vec2(a * 23.0, 1.7));
-        vec3 ej = vec3(0.17, 0.13, 0.10) * (0.8 + 0.4 * cf(vP * 0.05)) * (0.85 + 0.3 * ray);
-        vec3 sea = vec3(0.025, 0.04, 0.05);
-        vec3 c = mix(ej, sea, smoothstep(120.0, 230.0, r) * 0.7);
-        // the cut layers: limestone and anhydrite light, then granite (pinkish grey) below ~4 km
+        // rock and ejecta: dark grey-browns, broken up — pale shattered limestone in patches, darker rubble in hollows
+        float rub = rf(vP * 0.4 + 2.0), pal = smoothstep(0.15, 0.45, cf(vP * 0.03 + 9.0));
+        vec3 c = mix(vec3(0.10, 0.085, 0.07), vec3(0.30, 0.27, 0.23), pal * 0.7) * (0.7 + 0.5 * rub) * (0.85 + 0.3 * ray);
+        // the cut layers on the bowl's walls: limestone and anhydrite pale, then pinkish granite below ~4 km
         float dep = -vH;
-        if (dep > 0.3 && coll < 0.9) {
-          float band = 0.5 + 0.5 * cn(vec2(dep * 1.1 + cf(vP * 0.04) * 1.8, 0.37) + vP * 0.004);   // uneven strata
-          vec3 lay = dep < 4.0 ? mix(vec3(0.40, 0.38, 0.34), vec3(0.54, 0.52, 0.48), band) : vec3(0.34, 0.27, 0.25) * (0.8 + 0.3 * band);
-          lay *= 0.75 + 0.5 * (cf(vP * 0.25 + dep) * 0.5 + 0.5);
+        if (dep > 0.3 && coll < 0.9 && r < R + 2.0) {
+          float band = 0.5 + 0.5 * cn(vec2(dep * 1.1 + cf(vP * 0.04) * 1.8, 0.37) + vP * 0.004);
+          vec3 lay = dep < 4.0 ? mix(vec3(0.34, 0.32, 0.28), vec3(0.52, 0.50, 0.45), band) : vec3(0.32, 0.24, 0.22) * (0.8 + 0.3 * band);
+          lay *= 0.6 + 0.6 * rub;
           c = mix(c, lay, smoothstep(0.3, 1.5, dep) * (1.0 - coll));
         }
-        // light: the glowing cloud above (warm, from high up), faint twilight, the melt's own glow
-        float dif = max(dot(n, key), 0.0), amb = 0.5 + 0.5 * dot(n, eU);
-        vec3 col = c * (vec3(1.0, 0.55, 0.28) * dif * keyI * 2.8 + vec3(0.03, 0.035, 0.05) * amb);
-        // melt: the floor of the bowl at first, then the middle of the final crater; crusting into dark plates with
-        // glowing cracks as it cools
-        // in the end the melt lies in the low ground — the middle and the trough — and the peak ring stands out of it
+        // the sea: churned, dark and muddy, foam at the edge of the ejecta and in streaks
+        bool water = vH < 0.0 && r > R + 1.0;
+        float wv = cf(vP * 0.6 + vec2(vt * 0.7, -vt * 0.4)) * 0.5 + 0.5;
+        vec3 nw = normalize(eU + (eE * cn(vP * 0.9 + vt) + eN * cn(vP * 0.9 - vt + 4.0)) * 0.12);
+        // light: the melt's glow from the middle (on whatever faces it), the cloud above, a flicker of lightning
+        vec3 L = (C0 + eU * 0.004) - vW; float dl = length(L) * 1000.0; L = normalize(L);
+        float meltI = melt * (0.6 + 0.6 * (1.0 - coll * 0.4)) * smoothstep(0.0, 0.2, g);
+        vec3 nn = water ? nw : n;
+        vec3 Lm = vec3(1.0, 0.42, 0.10) * meltI * 4.0 / (1.0 + pow(dl / 55.0, 2.0)) * max(dot(nn, L), 0.0);
+        vec3 Lk = vec3(1.0, 0.50, 0.22) * keyI * max(dot(nn, key), 0.0) * 0.8;
+        vec3 Lf = vec3(0.7, 0.75, 1.0) * flash * (0.4 + 0.6 * max(dot(nn, eU), 0.0));
+        vec3 amb = vec3(0.035, 0.02, 0.015) * (0.6 + 0.4 * dot(nn, eU));
+        vec3 col = c * (Lm + Lk + Lf + amb);
+        if (water) {
+          vec3 wc = vec3(0.015, 0.02, 0.018) * (0.7 + 0.6 * wv);
+          float fr = 0.03 + 0.97 * pow(1.0 - max(dot(nw, V), 0.0), 5.0);
+          vec3 sky = fogC * (0.6 + keyI) + vec3(0.6, 0.7, 1.0) * flash * 0.6;
+          // the melt and the cloud mirrored on the water
+          vec3 Hm = normalize(L + V); float spec = pow(max(dot(nw, Hm), 0.0), 60.0) * meltI / (1.0 + pow(dl / 70.0, 2.0));
+          col = wc * (Lk + amb * 3.0) + sky * fr * 0.8 + vec3(1.0, 0.5, 0.15) * spec * 2.0;
+          float foam = smoothstep(-0.06, 0.0, vH) * (0.5 + 0.5 * wv) + smoothstep(0.62, 0.8, wv) * 0.25;
+          col = mix(col, vec3(0.45, 0.40, 0.36) * (Lm + Lk + amb * 4.0 + Lf), clamp(foam, 0.0, 1.0) * 0.8);
+        }
+        // melt: the floor of the bowl at first, then the low ground of the final crater (the middle and the trough), the
+        // peak ring standing out of it; a churning, glowing surface
         float lowf = 1.0 - smoothstep(-1.15, -0.75, vH);
-        float mz = mix(1.0 - smoothstep(0.0, 0.45, r / (50.0 * sqrt(g) + 1.0)), lowf * (1.0 - smoothstep(48.0, 60.0, r)), coll);
-        float tb = cf(vP * 0.08 + 5.0) * 0.5 + 0.5, tf = cf(vP * 0.5 - 3.0) * 0.5 + 0.5;
-        float hot = melt * mz * (0.45 + 0.55 * tb) * (0.8 + 0.4 * tf) * mix(1.0, 0.6, smoothstep(150.0, 600.0, T));
-        col = mix(col, col * 0.3, mz * coll);
-        col += hot * mix(vec3(0.55, 0.06, 0.01), vec3(1.0, 0.45, 0.08), tb * tf);
-        // dust in the air: the far ground sinks into an orange-brown haze
+        float mz = mix(1.0 - smoothstep(0.0, 0.5, r / (50.0 * sqrt(g) + 1.0)), lowf * (1.0 - smoothstep(48.0, 60.0, r)), coll);
+        float tb = cf(vP * 0.08 + 5.0 + vt * 0.05) * 0.5 + 0.5, tf = cf(vP * 0.5 - 3.0 - vt * 0.2) * 0.5 + 0.5;
+        float crust = smoothstep(0.35, 0.7, cf(vP * 0.18 + 1.0 + vt * 0.03) * 0.5 + 0.5) * smoothstep(200.0, 600.0, T);
+        float hot = melt * mz * (0.4 + 0.6 * tb) * (0.75 + 0.5 * tf) * (1.0 - 0.7 * crust);
+        col = mix(col, col * 0.25, mz);
+        col += hot * mix(vec3(0.6, 0.07, 0.01), vec3(1.0, 0.55, 0.12), tb * tf) * 1.4;
+        // dust in the air: the far ground sinks into the glowing haze, thicker low down
         float dist = length(cameraPosition - vW) * 1000.0;
-        col = mix(col, fogC * (0.4 + keyI * 0.8), 1.0 - exp(-dist * fogK));
-        col = vec3(1.0) - exp(-col * 1.6);
+        vec3 fc = fogC * (0.5 + keyI * 0.7) + vec3(0.5, 0.55, 0.7) * flash * 0.4;
+        col = mix(col, fc, 1.0 - exp(-dist * fogK));
+        col = vec3(1.0) - exp(-col * 1.7);
         gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
       }` }));
   crater.frustumCulled = false; crater.visible = false; scene.add(crater);
+  // the sky over the crater: the underside of the dust cloud, glowing from below near the horizon, dark and lumpy
+  // overhead, lit up now and then by lightning (flash: direction, strength)
+  const SKY = { up: CU.eU, fogC: CU.fogC, keyI: CU.keyI, vt: CU.vt, fl: { value: new T.Vector4(0, 1, 0, 0) } };
+  const skydome = new T.Mesh(new T.SphereGeometry(1, 64, 32), new T.ShaderMaterial({ uniforms: SKY, side: T.BackSide,
+    depthWrite: false, depthTest: false,
+    vertexShader: 'varying vec3 vD; void main() { vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: `uniform vec3 up, fogC; uniform float keyI, vt; uniform vec4 fl; varying vec3 vD;
+      float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float vn(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h3(i), h3(i + vec3(1, 0, 0)), f.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), f.x), f.y),
+                   mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
+      void main() {
+        vec3 d = normalize(vD); float el = dot(d, up);
+        float b = 0.5 * vn(d * 5.0 + vt * 0.04) + 0.3 * vn(d * 13.0 - vt * 0.06) + 0.2 * vn(d * 31.0);
+        vec3 hor = fogC * (0.5 + keyI * 0.7);
+        vec3 c = mix(hor * vec3(1.2, 0.9, 0.7), vec3(0.004, 0.003, 0.002), smoothstep(-0.03, 0.12, el)) * (0.35 + 1.3 * b);
+        float fa = max(dot(d, normalize(fl.xyz)), 0.0);
+        c += vec3(0.75, 0.8, 1.0) * fl.w * (0.15 * b + 1.2 * pow(fa, 40.0) + 0.3 * pow(fa, 6.0));
+        c = vec3(1.0) - exp(-c * 1.7);
+        gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
+      }` }));
+  skydome.renderOrder = -10; skydome.visible = false; skydome.scale.setScalar(2); scene.add(skydome);
 
   // ---- stars ----------------------------------------------------------------------------------------------------
   const sp = [], sc = [];
@@ -460,12 +512,12 @@
   const stars = new T.Points(sg, new T.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
 
-  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU };
+  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false;
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0);
     head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };
