@@ -220,7 +220,7 @@
       setup(X) {
         const S = site(X); this.S = S;
         const CU = X.CU; CU.C0.value.copy(S.I); CU.eE.value.copy(S.east); CU.eN.value.copy(S.north); CU.eU.value.copy(S.up);
-        X.crater.visible = true; X.skydome.visible = true; X.stars.visible = false;
+        X.crater.visible = true; X.skydome.visible = true; X.stars.visible = false; CU.Lin.value = -100; CU.Aw.value = 0;
         X.U.hole.value.set(S.up.x, S.up.y, S.up.z, 0.240 / X.ER);
         const r = X.rnd, at = (km, az, hkm) => S.I.clone().addScaledVector(horiz(S, az), km / 1000).addScaledVector(S.up, hkm / 1000);
         // steam: rising where the sea meets the hot ejecta and off the melt, billowing, lit from below
@@ -290,11 +290,13 @@
         }
         SP.u.drag.value = 0.4; SP.u.shade.value = 1; SP.u.ldir.value.set(0.0, 0.6); SP.u.gain.value = 0.28;
         SP.u.smoke.value.setRGB(0.85, 0.78, 0.72); SP.points.visible = true;
-        SHOTS.crater.debris.points.visible = false;
+        SHOTS.crater.debris.points.visible = false; X.CU.Lin.value = -4.6;
       },
       frame(X, t) {
         const S = this.S, CU = X.CU, C = SHOTS.crater;
         CU.T.value = 900; CU.vt.value = 10 + t; CU.ex.value = 3; CU.Rw.value = this.Rw(t);
+        // meanwhile the sea pours back into the crater: the trough first, then the floor round the peak ring
+        CU.Lin.value = lerp(-4.6, -1.0, t / this.dur);
         CU.key.value.copy(S.up).addScaledVector(horiz(S, 225), 0.7).normalize(); CU.keyI.value = 0.3; CU.melt.value = 1.3;
         let fl = 0, dir = S.up.clone();
         for (const b of C.bolts) {
@@ -302,7 +304,7 @@
           const f = Math.exp(-u / 0.05) + 0.7 * Math.exp(-Math.abs(u - 0.14) / 0.03);
           if (f > fl) { fl = f; dir = horiz(S, b.az).multiplyScalar(Math.cos(b.el * X.D)).addScaledVector(S.up, Math.sin(b.el * X.D)); }
         }
-        CU.flash.value = 0.35 * fl; X.SKY.fl.value.set(dir.x, dir.y, dir.z, 0.8 * fl);
+        CU.flash.value = 0.15 * fl; X.SKY.fl.value.set(dir.x, dir.y, dir.z, 0.4 * fl);
         // the camera: low over the sea, looking back toward the crater; rising a little as the wave comes under
         // the camera: ~35 km up over the sea ~200 km out, looking back down at the ring coming across the water
         const k = smooth(t / this.dur);
