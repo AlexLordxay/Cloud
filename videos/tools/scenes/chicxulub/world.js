@@ -366,9 +366,9 @@
   const CU = { T: { value: 0 }, ex: { value: 1 }, C0: { value: new T.Vector3() }, eE: { value: new T.Vector3() },
     eN: { value: new T.Vector3() }, eU: { value: new T.Vector3() }, key: { value: new T.Vector3(0, 1, 0) },
     keyI: { value: 1 }, melt: { value: 1 }, fogC: { value: new T.Color(0.05, 0.021, 0.008) }, fogK: { value: 0.0028 },
-    flash: { value: 0 }, vt: { value: 0 }, sun: U.sun };
+    flash: { value: 0 }, vt: { value: 0 }, Rw: { value: 0 }, Aw: { value: 0 }, sun: U.sun };
   const CRATER_GLSL = `
-    uniform float T, ex; uniform vec3 C0, eE, eN, eU;
+    uniform float T, ex, Rw, Aw; uniform vec3 C0, eE, eN, eU;
     float ch(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float cn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(ch(i), ch(i + vec2(1, 0)), f.x), mix(ch(i + vec2(0, 1)), ch(i + vec2(1, 1)), f.x), f.y) * 2.0 - 1.0; }
@@ -399,29 +399,42 @@
       float s = clamp((rr - 50.0) / 42.0, 0.0, 1.0), st = (floor(s * 5.0) + smoothstep(0.0, 0.65, fract(s * 5.0))) / 5.0;
       float fin = rr < 92.0 ? mix(-1.3, mix(-1.7, 0.7, st), smoothstep(46.0, 54.0, rr)) + ring
                             : 0.75 * pow(92.0 / rr, 3.0);
-      fin += (rf(p * 0.1 + 11.0) - 0.4) * 0.35 * smoothstep(40.0, 70.0, rr);
+      fin += (rf(p * 0.1 + 11.0) - 0.4) * 0.35 * smoothstep(40.0, 70.0, rr) * (1.0 - smoothstep(100.0, 130.0, rr));
       float h = mix(mid, fin, coll);
       // outside: the sea floor, under a blanket of ejecta that thins away from the rim, rubbly
-      float R = rimR(), ej = r > R ? 0.9 * pow(R / r, 2.6) * (0.8 + 0.4 * rf(p * 0.05)) : 0.0;
+      float R = rimR(), ej = r > R ? 0.9 * pow(R / r, 3.6) * (0.8 + 0.4 * rf(p * 0.05)) : 0.0;
       return h + (r > R ? -0.15 + ej : 0.0) * smoothstep(0.0, 0.05, g);
     }
+    // the tsunami (Rw: how far its crest has got, km; Aw: its height, km): a steep front, a long back, a trough behind;
+    // over water only, outside the rim; never exaggerated (the crater's relief is, inside ~100 km)
+    float waveH(vec2 p) {
+      if (Aw <= 0.0) return -100.0;
+      float r = length(p), a = atan(p.y, p.x), x = r - Rw;
+      float A = Aw * (1.0 + 0.18 * cf(vec2(a * 14.0, 2.0)) + 0.08 * cf(p * 0.05));
+      return A * (x > 0.0 ? exp(-pow(x / 3.5, 2.0)) : exp(-pow(x / 16.0, 2.0))) - 0.35 * Aw * exp(-pow((x + 34.0) / 14.0, 2.0))
+             + 0.03 * cf(p * 0.8 + vec2(T * 0.01, 0.0));
+    }
+    float surfH(vec2 p, out float isWater) {
+      float r = length(p), g = craterH(p) * mix(ex, 1.0, smoothstep(95.0, 110.0, r)), w = r > rimR() + 2.0 ? waveH(p) : -100.0;
+      isWater = w > g ? 1.0 : 0.0; return max(g, w);
+    }
     vec3 cpos(vec2 p) {                     // world position: km in the site frame → units, bent to the curve
-      float h = craterH(p) * ex; vec2 u = p / 1000.0;
+      float iw; float h = surfH(p, iw); vec2 u = p / 1000.0;
       return C0 + eE * u.x + eN * u.y + eU * (h / 1000.0 - dot(u, u) / (2.0 * 6.371));
     }`;
   const crater = new T.Mesh(new T.PlaneGeometry(500, 500, 700, 700), new T.ShaderMaterial({ uniforms: CU,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     vertexShader: CRATER_GLSL + `
-      varying vec2 vP; varying vec3 vW, vN; varying float vH;
+      varying vec2 vP; varying vec3 vW, vN; varying float vH, vWet;
       void main() {
         vec2 p = position.xy; vP = p;
         vec3 w = cpos(p), wx = cpos(p + vec2(0.5, 0.0)), wy = cpos(p + vec2(0.0, 0.5));
-        vN = normalize(cross(wx - w, wy - w)); vW = w; vH = craterH(p);
+        vN = normalize(cross(wx - w, wy - w)); vW = w; vH = surfH(p, vWet);
         gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
       }`,
     fragmentShader: CRATER_GLSL + `
       uniform vec3 key, sun, fogC; uniform float keyI, melt, fogK, flash, vt;
-      varying vec2 vP; varying vec3 vW, vN; varying float vH;
+      varying vec2 vP; varying vec3 vW, vN; varying float vH, vWet;
       void main() {
         float r = length(vP); if (r > 245.0) discard;
         vec3 n = normalize(vN); vec3 V = normalize(cameraPosition - vW);
@@ -439,9 +452,10 @@
           c = mix(c, lay, smoothstep(0.3, 1.5, dep) * (1.0 - coll));
         }
         // the sea: churned, dark and muddy, foam at the edge of the ejecta and in streaks
-        bool water = vH < 0.0 && r > R + 1.0;
+        bool water = (vH < 0.0 && r > R + 1.0) || vWet > 0.5;
         float wv = cf(vP * 0.6 + vec2(vt * 0.7, -vt * 0.4)) * 0.5 + 0.5;
         vec3 nw = normalize(eU + (eE * cn(vP * 0.9 + vt) + eN * cn(vP * 0.9 - vt + 4.0)) * 0.12);
+        if (vWet > 0.5) nw = normalize(n + (eE * cn(vP * 1.7 + vt) + eN * cn(vP * 1.7 - vt + 4.0)) * 0.08);
         // light: the melt's glow from the middle (on whatever faces it), the cloud above, a flicker of lightning
         vec3 L = (C0 + eU * 0.004) - vW; float dl = length(L) * 1000.0; L = normalize(L);
         float meltI = melt * (0.6 + 0.6 * (1.0 - coll * 0.4)) * smoothstep(0.0, 0.2, g);
@@ -458,8 +472,21 @@
           // the melt and the cloud mirrored on the water
           vec3 Hm = normalize(L + V); float spec = pow(max(dot(nw, Hm), 0.0), 60.0) * meltI / (1.0 + pow(dl / 70.0, 2.0));
           col = wc * (Lk + amb * 3.0) + sky * fr * 0.8 + vec3(1.0, 0.5, 0.15) * spec * 2.0;
-          float foam = smoothstep(-0.06, 0.0, vH) * (0.5 + 0.5 * wv) + smoothstep(0.62, 0.8, wv) * 0.25;
-          col = mix(col, vec3(0.45, 0.40, 0.36) * (Lm + Lk + amb * 4.0 + Lf), clamp(foam, 0.0, 1.0) * 0.8);
+          float foam = smoothstep(-0.06, 0.0, vH) * (0.5 + 0.5 * wv) * (1.0 - vWet) + smoothstep(0.62, 0.8, wv) * 0.25;
+          if (Aw > 0.0) {
+            // the wave: white water on its crest and streaked down its face, the glow behind showing through the crest
+            float x = r - Rw;
+            float crest = exp(-pow((x + 0.6) / 1.8, 2.0)), face = smoothstep(-1.0, 3.0, x) * (1.0 - smoothstep(3.0, 7.0, x));
+            float streak = smoothstep(0.35, 0.8, cf(vec2(atan(vP.y, vP.x) * 70.0, x * 0.6)) * 0.5 + 0.5);
+            float toe = exp(-pow((x - 4.0) / 2.5, 2.0)) * (0.6 + 0.4 * cf(vP * 0.7 + vt));      // white water at its foot
+            foam += crest * 0.9 + face * streak * 0.3 + toe * 0.7;
+            col += vec3(1.0, 0.45, 0.12) * meltI * crest * 0.25 / (1.0 + pow(dl / 120.0, 2.0));
+          }
+          if (vWet > 0.5) {
+            // the wave's body: dark green-grey water, the sky glinting off its face
+            col = vec3(0.012, 0.03, 0.028) * (Lk + amb * 4.0 + Lm * 0.5) + sky * fr * 0.6;
+          }
+          col = mix(col, vec3(0.62, 0.58, 0.54) * (Lm + Lk + amb * 5.0 + Lf + 0.04), clamp(foam, 0.0, 1.0) * 0.85);
         }
         // melt: the floor of the bowl at first, then the low ground of the final crater (the middle and the trough), the
         // peak ring standing out of it; a churning, glowing surface

@@ -270,6 +270,51 @@
         for (const F of [this.steam, this.debris]) { F.u.time.value = t; F.u.scale.value = pxScale; }
         X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
       } },
+    // the mega-tsunami (Range et al. 2022: ~1.5 km high within minutes; out of the Gulf within an hour; round the
+    // world's coasts within 48 h; ~30 000× the energy of the 2004 Indian Ocean tsunami). From ~35 km up over the sea
+    // ~200 km out: the ring of water comes across the dark sea out of the glow and passes beneath, foam on its crest,
+    // spray blown off it. From ~10 to ~40 minutes after the impact, in 8 seconds (the crest from 115 to 235 km out).
+    tsunami: { dur: 8,
+      Rw(t) { return 100 + 105 * t / this.dur; },
+      setup(X) {
+        SHOTS.crater.setup.call(SHOTS.crater, X);
+        const S = this.S = SHOTS.crater.S, r = X.rnd;
+        X.CU.Aw.value = 1.5;
+        // spray off the crest, carried along with it
+        const SP = this.spray = this.spray || X.fx(3000, false);
+        for (let i = 0; i < SP.n; i++) {
+          const b = -1 + (this.dur + 1) * r(), az = 150 + 70 * (r() - 0.5), h = horiz(S, az);
+          const p = S.I.clone().addScaledVector(h, this.Rw(Math.max(b, 0)) / 1000).addScaledVector(S.up, (1.2 + 0.5 * r()) / 1000);
+          const v = h.clone().multiplyScalar(13 / 1000 * (0.9 + 0.2 * r())).addScaledVector(S.up, (0.2 + 0.5 * r()) / 1000);
+          SP.set(i, p, v, b, 1.2 + 1.8 * r(), 0.001, 0.004 + 0.003 * r(), r());
+        }
+        SP.u.drag.value = 0.4; SP.u.shade.value = 1; SP.u.ldir.value.set(0.0, 0.6); SP.u.gain.value = 0.28;
+        SP.u.smoke.value.setRGB(0.85, 0.78, 0.72); SP.points.visible = true;
+        SHOTS.crater.debris.points.visible = false;
+      },
+      frame(X, t) {
+        const S = this.S, CU = X.CU, C = SHOTS.crater;
+        CU.T.value = 900; CU.vt.value = 10 + t; CU.ex.value = 3; CU.Rw.value = this.Rw(t);
+        CU.key.value.copy(S.up).addScaledVector(horiz(S, 225), 0.7).normalize(); CU.keyI.value = 0.3; CU.melt.value = 1.3;
+        let fl = 0, dir = S.up.clone();
+        for (const b of C.bolts) {
+          const u = t + 2 - b.t; if (u < 0 || u > 0.35) continue;
+          const f = Math.exp(-u / 0.05) + 0.7 * Math.exp(-Math.abs(u - 0.14) / 0.03);
+          if (f > fl) { fl = f; dir = horiz(S, b.az).multiplyScalar(Math.cos(b.el * X.D)).addScaledVector(S.up, Math.sin(b.el * X.D)); }
+        }
+        CU.flash.value = 0.35 * fl; X.SKY.fl.value.set(dir.x, dir.y, dir.z, 0.8 * fl);
+        // the camera: low over the sea, looking back toward the crater; rising a little as the wave comes under
+        // the camera: ~35 km up over the sea ~200 km out, looking back down at the ring coming across the water
+        const k = smooth(t / this.dur);
+        const pos = S.I.clone().addScaledVector(horiz(S, 150 - 8 * k), lerp(0.215, 0.205, k)).normalize().multiplyScalar(X.ER + 0.035);
+        cam(X, pos, S.I.clone().addScaledVector(horiz(S, 150), 0.06).addScaledVector(S.up, -0.01), 55, S.up.clone(), 0.0005);
+        X.skydome.position.copy(X.camera.position);
+        const fc = CU.fogC.value, kk = 0.5 + CU.keyI.value * 0.7;
+        X.U.dfog.value.set(fc.r * kk, fc.g * kk, fc.b * kk, CU.fogK.value);
+        const pxScale = X.H / (2 * Math.tan(X.camera.fov * X.D / 2));
+        for (const F of [C.steam, this.spray]) { F.u.time.value = t; F.u.scale.value = pxScale; }
+        X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
+      } },
     // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
     site_top: { dur: 2,
       frame(X, t) {
