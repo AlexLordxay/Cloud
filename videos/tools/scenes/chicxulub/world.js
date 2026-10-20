@@ -27,10 +27,11 @@
     fball: { value: new T.Vector4(0, 0, 0, 0) }, haze: { value: 1 }, atm: { value: 1.2 },
     pcol: { value: pcol }, prel: { value: prel }, pbox: { value: new T.Vector4(...PBOX) },
     shock: { value: new T.Vector4(1, 0, 0, 0) }, shock2: { value: new T.Vector4(0, 0, 0, 0) },
-    hole: { value: new T.Vector4(1, 0, 0, 0) }, dfog: { value: new T.Vector4(0, 0, 0, 0) } };
+    hole: { value: new T.Vector4(1, 0, 0, 0) }, dfog: { value: new T.Vector4(0, 0, 0, 0) },
+    tsu: { value: new T.Vector4(1, 0, 0, 0) }, tsu2: { value: new T.Vector4(0, 0, 0, 0) } };
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
     fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel; uniform vec4 pbox; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
-      uniform vec4 fball, shock, shock2, hole, dfog; uniform float haze, atm;
+      uniform vec4 fball, shock, shock2, hole, dfog, tsu, tsu2; uniform float haze, atm;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       float vn(vec3 p) {
@@ -68,6 +69,32 @@
           c = mix(c, pow(texture2D(pcol, pu).rgb, vec3(2.2)), pw);
           w = mix(w, pr.b, pw);
         }
+        // the tsunami seen from space (tsu: its source and how far, as an angle, its front has run; tsu2: strength, dust
+        // pall radius): rings of white water running out over the oceans, weaker as they spread, partly shadowed by the
+        // land they have had to pass; behind them a brown pall of dust spreading from the Gulf
+        float tsuRing = 0.0, tsuDark = 0.0, pall = 0.0;
+        if (tsu2.x > 0.0) {
+          float ang = acos(clamp(dot(n, tsu.xyz), -1.0, 1.0));
+          float shade = 1.0;
+          if (ang > 0.12 && ang < 3.0) {
+            float landN = 0.0;
+            for (int k = 1; k <= 10; k++) {
+              float f = 0.12 / ang + (1.0 - 0.12 / ang) * float(k) / 11.0;
+              vec3 q = normalize(mix(tsu.xyz, n, f));
+              landN += 1.0 - texture2D(sea, uvOf(q, 0.0)).r;
+            }
+            shade = 1.0 - 0.55 * clamp(landN / 5.0, 0.0, 1.0);                      // waves bend round small land
+          }
+          float amp = tsu2.x * shade * (0.8 + 0.2 * exp(-ang / 0.6));
+          float wob = fb(n * 30.0 + 2.0) * 0.012, brk = 0.55 + 0.45 * fb(n * 90.0 + 5.0);
+          for (int k = 0; k < 3; k++) {
+            float x = ang + wob - (tsu.w - float(k) * 0.08);
+            tsuRing += amp * exp(-pow(x / 0.022, 2.0)) * (1.0 - 0.3 * float(k));
+            tsuDark += amp * exp(-pow((x + 0.04) / 0.022, 2.0)) * (1.0 - 0.3 * float(k));
+          }
+          tsuRing *= step(ang, tsu.w + 0.04) * brk; tsuDark *= step(ang, tsu.w + 0.04);
+          pall = (1.0 - smoothstep(tsu2.y * 0.5, tsu2.y, ang + fb(n * 12.0) * 0.1)) * 0.92 * (0.75 + 0.25 * fb(n * 40.0));
+        }
         vec3 nb = normalize(n - bump * (s.x * E + s.y * N));
         float mu = dot(n, sun), day = smoothstep(-0.12, 0.08, mu);
         // finer than the map: fields, woods and gullies at 1–30 km, fading out where they would only shimmer
@@ -95,6 +122,7 @@
         vec3 ns = normalize(n + sun * 0.0018 / max(mu, 0.15));
         float sh = texture2D(clouds, uvOf(ns, cloudLon)).r;
         col *= 1.0 - 0.55 * sh;
+        if (tsu2.x > 0.0) col = mix(col, col * 0.5, clamp(tsuDark, 0.0, 1.0) * w);
         // the water's glint: a sharp sun and a broad sheen
         vec3 Hh = normalize(sun + V);
         float g = pow(max(dot(n, Hh), 0.0), 600.0) * 0.45 + pow(max(dot(n, Hh), 0.0), 40.0) * 0.035;
@@ -102,12 +130,18 @@
         float cmu = max(mu, 0.0);
         vec3 cloudCol = vec3(1.0, 0.99, 0.97) * (pow(cmu, 0.8) * 2.4) * sunT(0.01, mu + 0.03) * smoothstep(-0.05, 0.03, mu);
         col = mix(col, cloudCol, cl * 0.92);
+        // the tsunami's white crests show through the gaps and, faintly, through the cloud
+        if (tsu2.x > 0.0) {
+          col += vec3(0.75, 0.9, 1.0) * clamp(tsuRing, 0.0, 1.5) * w * 1.3 * (1.0 - 0.5 * cl) * (0.2 + 0.8 * max(mu, 0.0));
+        }
         // the air between us and the ground: it dims what is below and adds its own sunlit blue (all of it near the
         // horizon, where we look through the most air); the light it scatters is the Sun's, reddened like the ground's
         vec3 Tv = exp(-BETA * HS * airmass(max(dot(n, V), 0.0)) * haze);
         float cs = dot(-V, sun), ph = 0.75 * (1.0 + cs * cs) + 0.5 * pow(max(cs, 0.0), 8.0);
         vec3 sunA = sunT(0.008, mu + 0.02) * smoothstep(-0.03, 0.05, mu) * mix(0.45, 1.0, smoothstep(0.0, 0.3, mu));
         col = col * Tv + (1.0 - Tv) * sunA * ph * atm * 0.75;
+        // the dust and soot ride high, above the weather and most of the air: a brown veil over everything
+        if (pall > 0.0) col = mix(col, vec3(0.16, 0.085, 0.035) * (0.15 + 0.85 * max(mu, 0.0)) * sunG, pall);
         if (shock.w > 0.0) {
           float dn = fb(n * 900.0 + 3.0) * 0.5 + 0.5;
           col = mix(col, vec3(0.16, 0.12, 0.09) * (0.15 + 0.85 * max(mu, 0.0)) * (0.7 + 0.6 * dn), inside * shock2.w);
@@ -365,7 +399,7 @@
   // lightning; dust in the air. The Earth's own surface has a hole here (U.hole) so the two do not fight.
   const CU = { T: { value: 0 }, ex: { value: 1 }, C0: { value: new T.Vector3() }, eE: { value: new T.Vector3() },
     eN: { value: new T.Vector3() }, eU: { value: new T.Vector3() }, key: { value: new T.Vector3(0, 1, 0) },
-    keyI: { value: 1 }, melt: { value: 1 }, fogC: { value: new T.Color(0.05, 0.021, 0.008) }, fogK: { value: 0.0028 },
+    keyI: { value: 1 }, melt: { value: 1 }, fogC: { value: new T.Color(0.05, 0.021, 0.008) }, fogK: { value: 0.0018 },
     flash: { value: 0 }, vt: { value: 0 }, Rw: { value: 0 }, Aw: { value: 0 }, sun: U.sun };
   const CRATER_GLSL = `
     uniform float T, ex, Rw, Aw; uniform vec3 C0, eE, eN, eU;
@@ -398,11 +432,12 @@
       float ring = 1.9 * exp(-pow((rr - 40.0) / 6.0, 2.0)) * (0.6 + 0.8 * rf(p * 0.09 + 7.0));
       float s = clamp((rr - 50.0) / 42.0, 0.0, 1.0), st = (floor(s * 5.0) + smoothstep(0.0, 0.65, fract(s * 5.0))) / 5.0;
       float fin = rr < 92.0 ? mix(-1.3, mix(-1.7, 0.7, st), smoothstep(46.0, 54.0, rr)) + ring
-                            : 0.75 * pow(92.0 / rr, 3.0);
+                            : 0.75 * pow(92.0 / rr, 6.0);
       fin += (rf(p * 0.1 + 11.0) - 0.4) * 0.35 * smoothstep(40.0, 70.0, rr) * (1.0 - smoothstep(100.0, 130.0, rr));
       float h = mix(mid, fin, coll);
       // outside: the sea floor, under a blanket of ejecta that thins away from the rim, rubbly
-      float R = rimR(), ej = r > R ? 0.9 * pow(R / r, 3.6) * (0.8 + 0.4 * rf(p * 0.05)) : 0.0;
+      // (most of the ejecta fell into the sea: only the rim and a band just outside it stand above the water)
+      float R = rimR(), ej = r > R ? 0.9 * pow(R / r, 6.0) * (0.8 + 0.4 * rf(p * 0.05)) : 0.0;
       return h + (r > R ? -0.15 + ej : 0.0) * smoothstep(0.0, 0.05, g);
     }
     // the tsunami (Rw: how far its crest has got, km; Aw: its height, km): a steep front, a long back, a trough behind;
@@ -454,7 +489,10 @@
         // the sea: churned, dark and muddy, foam at the edge of the ejecta and in streaks
         bool water = (vH < 0.0 && r > R + 1.0) || vWet > 0.5;
         float wv = cf(vP * 0.6 + vec2(vt * 0.7, -vt * 0.4)) * 0.5 + 0.5;
-        vec3 nw = normalize(eU + (eE * cn(vP * 0.9 + vt) + eN * cn(vP * 0.9 - vt + 4.0)) * 0.12);
+        // the sea's surface: swell and chop (big and small waves), so the glow breaks up on it in glints
+        vec2 sw = vec2(cf(vP * 0.25 + vec2(vt * 0.3, 0.0)), cf(vP * 0.25 + vec2(4.0, -vt * 0.25))) * 0.16
+                + vec2(cn(vP * 1.6 + vt), cn(vP * 1.6 - vt + 4.0)) * 0.07;
+        vec3 nw = normalize(eU + eE * sw.x + eN * sw.y);
         if (vWet > 0.5) nw = normalize(n + (eE * cn(vP * 1.7 + vt) + eN * cn(vP * 1.7 - vt + 4.0)) * 0.08);
         // light: the melt's glow from the middle (on whatever faces it), the cloud above, a flicker of lightning
         vec3 L = (C0 + eU * 0.004) - vW; float dl = length(L) * 1000.0; L = normalize(L);
@@ -466,13 +504,14 @@
         vec3 amb = vec3(0.035, 0.02, 0.015) * (0.6 + 0.4 * dot(nn, eU));
         vec3 col = c * (Lm + Lk + Lf + amb);
         if (water) {
-          vec3 wc = vec3(0.015, 0.02, 0.018) * (0.7 + 0.6 * wv);
+          vec3 wc = vec3(0.006, 0.018, 0.03) * (0.7 + 0.6 * wv);
           float fr = 0.03 + 0.97 * pow(1.0 - max(dot(nw, V), 0.0), 5.0);
           vec3 sky = fogC * (0.6 + keyI) + vec3(0.6, 0.7, 1.0) * flash * 0.6;
-          // the melt and the cloud mirrored on the water
-          vec3 Hm = normalize(L + V); float spec = pow(max(dot(nw, Hm), 0.0), 60.0) * meltI / (1.0 + pow(dl / 70.0, 2.0));
-          col = wc * (Lk + amb * 3.0) + sky * fr * 0.8 + vec3(1.0, 0.5, 0.15) * spec * 2.0;
-          float foam = smoothstep(-0.06, 0.0, vH) * (0.5 + 0.5 * wv) * (1.0 - vWet) + smoothstep(0.62, 0.8, wv) * 0.25;
+          // the melt and the glowing cloud mirrored on the water: a long broken path of light toward us
+          vec3 Hm = normalize(L + V); float hm = max(dot(nw, Hm), 0.0);
+          float spec = (pow(hm, 120.0) * 6.0 + pow(hm, 20.0) * 0.6) * meltI / (1.0 + pow(dl / 160.0, 2.0));
+          col = wc * (Lk + amb * 3.0 + 0.05) + sky * fr * 0.9 + vec3(1.0, 0.55, 0.2) * spec * 2.0;
+          float foam = smoothstep(-0.06, 0.0, vH) * (0.5 + 0.5 * wv) * (1.0 - vWet) + smoothstep(0.7, 0.85, wv) * 0.08;
           if (Aw > 0.0) {
             // the wave: white water on its crest and streaked down its face, the glow behind showing through the crest
             float x = r - Rw;
@@ -544,7 +583,7 @@
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0);
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0); U.tsu.value.set(1, 0, 0, 0); U.tsu2.value.set(0, 0, 0, 0);
     head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };

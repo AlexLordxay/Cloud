@@ -315,6 +315,22 @@
         for (const F of [C.steam, this.spray]) { F.u.time.value = t; F.u.scale.value = pxScale; }
         X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
       } },
+    // the tsunami from space: its rings running out of the Gulf over the oceans of the world, from the impact to ~30 h
+    // after (deep-ocean speed ~720 km/h, ~0.113 rad an hour; it meets itself on the far side of the Earth after ~28 h),
+    // the pall of dust spreading behind. 8 seconds; the camera follows the front round the world.
+    tsunami_globe: { dur: 8,
+      setup(X) { this.S = site(X); },
+      frame(X, t) {
+        const S = this.S, H = 30 * t / this.dur, ang = Math.min(0.113 * H, 3.12);
+        X.U.tsu.value.set(S.up.x, S.up.y, S.up.z, ang);
+        X.U.tsu2.value.set(1.6, 0.08 + 0.55 * Math.min(H / 30, 1), 0, 0);
+        // the camera follows the front, a little behind it, along the great circle from the Gulf over the Atlantic and
+        // Africa to the far side of the world, where the rings close in on each other
+        const a = S.up, m = X.dirLL(0, 18), b = m.clone().addScaledVector(a, -m.dot(a)).normalize();
+        const phi = Math.max(0, ang - 0.55) * 0.95, p = a.clone().multiplyScalar(Math.cos(phi)).addScaledVector(b, Math.sin(phi)).multiplyScalar(40);
+        cam(X, p, V(0, 0, 0), 30);
+        sunFrom(X, p, -38, 12); X.U.cloudLon.value = 0.02 + t * 0.002;
+      } },
     // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
     site_top: { dur: 2,
       frame(X, t) {
