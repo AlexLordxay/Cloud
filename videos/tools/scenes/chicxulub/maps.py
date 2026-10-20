@@ -5,10 +5,12 @@
 #                                   world (dry near 25° and far from the sea), mountains bare, seas by depth
 #   work/chicxulub/maps/relief.png  8192×4096: the land's slopes east and north (R, G; 128 = flat), for the shading
 #   work/chicxulub/maps/sea.png     4096×2048: 1 over water (the glint)
-#   work/chicxulub/maps/clouds.png  4096×2048: clouds drawn on the sphere (no seam, no pinch at the poles): the
-#                                   equatorial towers, the clear subtropics, swirling storm belts further out
+#   work/chicxulub/maps/clouds.jpg  8192×4096: real weather — NASA's Blue Marble cloud map (Visible Earth, NASA
+#                                   Goddard) — with the ice it also shows (Antarctica, Greenland, the Arctic pack, Tibet's
+#                                   snow: none of it there in an ice-free world) faded into clouds drawn on the sphere
+#                                   (domain-warped noise, cover by latitude: equatorial towers, clear subtropics, storm belts)
 #
-#   python3 scenes/chicxulub/maps.py          (fetches the DEM from Zenodo into work/chicxulub/dl the first time)
+#   python3 scenes/chicxulub/maps.py          (fetches the DEM from Zenodo and the clouds from NASA the first time)
 #   python3 scenes/chicxulub/maps.py clouds   (only the clouds again)
 import os, sys, subprocess, numpy as np, h5py
 from PIL import Image
@@ -16,6 +18,7 @@ from scipy import ndimage
 
 TOOLS = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..'))
 WORK = os.path.join(TOOLS, 'work', 'chicxulub'); DL = os.path.join(WORK, 'dl'); OUT = os.path.join(WORK, 'maps')
+CLOUDS = 'https://eoimages.gsfc.nasa.gov/images/imagerecords/57000/57747/cloud_combined_8192.tif'
 ZIP = 'https://zenodo.org/api/records/5460860/files/Scotese_Wright_2018_Maps_1-88_6minX6min_PaleoDEMS_nc.zip/content'
 W, H = 8192, 4096
 
@@ -158,7 +161,6 @@ if __name__ == '__main__':
         Image.fromarray(rel.astype(np.uint8)).save(os.path.join(OUT, 'relief.png'))
         Image.fromarray((~land[::2, ::2] * 255).astype(np.uint8)).save(os.path.join(OUT, 'sea.png'))
 
-    # clouds, on the sphere: domain-warped noise, the cover set by latitude
     def clouds(P, la):
         a = np.degrees(np.abs(la))
         # zonal shear: each latitude turned about the axis by its own angle, so the swirls are drawn out east–west
@@ -176,6 +178,19 @@ if __name__ == '__main__':
         sp = np.clip((fbm(P, 90, 3, 73) - 0.30) / 0.3, 0, 1) * np.exp(-((a - 18) / 14) ** 2) * 0.22
         sp = sp * np.clip(fbm(P, 9, 3, 79) * 2.5 + 0.2, 0, 1)                 # in fields, not everywhere
         return np.clip(np.maximum(c, sp), 0, 1)
-    cld = field(4096, 2048, clouds)
-    Image.fromarray((cld * 255).astype(np.uint8)).save(os.path.join(OUT, 'clouds.png'))
+    tif = os.path.join(WORK, 'nasa', 'cloud_combined_8192.tif')
+    if not os.path.exists(tif):
+        os.makedirs(os.path.dirname(tif), exist_ok=True)
+        subprocess.run(['curl', '-sS', '-C', '-', '-o', tif, CLOUDS], check=True)
+    Image.MAX_IMAGE_PIXELS = None
+    nasa = np.asarray(Image.open(tif).convert('L')).astype(np.float32) / 255
+    nasa = np.clip((nasa - 0.04) / 0.9, 0, 1)
+    la = np.degrees(sphere(1, H)[1][:, :1]); lo = ((np.arange(W) + 0.5) / W - 0.5)[None, :] * 360
+    blob = lambda a, o, ra, ro: np.clip(1.6 - 1.6 * np.hypot((la - a) / ra, (lo - o) / ro), 0, 1) ** 1.5
+    # the polar ice gives way to drawn clouds; Greenland's sheet and Tibet's snow simply to clear sky
+    ice = np.clip(np.clip((-58 - la) / 9, 0, 1) + np.clip((la - 71) / 7, 0, 1), 0, 1)
+    snow = np.clip(blob(73, -41, 15, 26) + 0.6 * blob(33, 87, 9, 18), 0, 1)
+    proc = up(field(2048, 1024, clouds), W, H, order=1)
+    cld = (nasa * (1 - snow)) * (1 - ice) + proc * ice
+    Image.fromarray((cld * 255).astype(np.uint8)).save(os.path.join(OUT, 'clouds.jpg'), quality=93)
     print('clouds', cld.mean())

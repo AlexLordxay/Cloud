@@ -14,7 +14,7 @@
   const scene = new T.Scene(), camera = new T.PerspectiveCamera(30, W / H, 0.01, 3000);
   const dirLL = (lat, lon) => new T.Vector3(Math.cos(lat * D) * Math.cos(lon * D), Math.sin(lat * D), -Math.cos(lat * D) * Math.sin(lon * D));
   const load = url => new Promise((res, rej) => new T.TextureLoader().load(url, t => { t.anisotropy = 8; res(t); }, undefined, rej));
-  const [color, relief, sea, clouds] = await Promise.all(['color.jpg', 'relief.png', 'sea.png', 'clouds.png'].map(f => load('/maps/' + f)));
+  const [color, relief, sea, clouds] = await Promise.all(['color.jpg', 'relief.png', 'sea.png', 'clouds.jpg'].map(f => load('/maps/' + f)));
   for (const t of [color, relief, clouds]) { t.wrapS = T.RepeatWrapping; t.minFilter = T.LinearMipmapLinearFilter; }
 
   const VS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
@@ -58,7 +58,7 @@
         col *= 1.0 - 0.55 * sh;
         // the water's glint: a sharp sun and a broad sheen
         vec3 Hh = normalize(sun + V);
-        float g = pow(max(dot(n, Hh), 0.0), 420.0) * 1.3 + pow(max(dot(n, Hh), 0.0), 30.0) * 0.05;
+        float g = pow(max(dot(n, Hh), 0.0), 600.0) * 0.45 + pow(max(dot(n, Hh), 0.0), 40.0) * 0.035;
         col += vec3(1.0, 0.93, 0.80) * g * w * (1.0 - cl) * day;
         float cmu = max(mu, 0.0);
         vec3 cloudCol = vec3(1.0, 0.99, 0.97) * (pow(cmu, 0.8) * 2.4) * mix(vec3(1.0, 0.55, 0.30), vec3(1.0), smoothstep(0.0, 0.25, mu));
