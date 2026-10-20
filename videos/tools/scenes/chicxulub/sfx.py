@@ -76,26 +76,43 @@ def make():
     e = np.tanh(e * 1.6) / 1.6
     out[:ne] += pan(0.45 * e, env(tv, [(0, 0.7), (7.5, -0.3)]))
 
-    # the impact, heard at HIT: a moment's hush before it, then the blow
-    ti = t - HIT; post = ti >= 0
-    tt = np.maximum(ti, 0)
-    click = rng.standard_normal(n) * np.exp(-tt / 0.006) * post
-    sub = np.sin(2 * np.pi * (55 * tt - 15 * tt ** 2 / 2.5) * (tt < 2.5) + 2 * np.pi * 21 * tt * (tt >= 2.5)) * np.exp(-tt / 2.2) * post
-    blast = filt(rng.standard_normal(n), 'low', 1800) * np.exp(-tt / 0.9) * post
-    # phones can't play the sub-bass: its overtones (a driven sub) and a low-mid boom carry the blow on small speakers
-    subH = np.tanh(3.5 * sub) - 0.6 * sub
-    boom = filt(filt(rng.standard_normal(n), 'high', 90), 'low', 450) * np.exp(-tt / 1.4) * post
-    body = sweep_bp(rng.standard_normal(n), t, 1200, 90, q=0.7) * np.exp(-tt / 2.8) * post
-    rum_env = np.exp(-tt / 7.0) * (0.7 + 0.3 * filt(rng.standard_normal(n), 'low', 0.6, 2) * 8)
-    rumble = filt(brown(n), 'low', 110) * np.clip(rum_env, 0, 1.2) * post
+    # the impact, heard at HIT — built like a real far-off blast, not a film bang: the shock front's double crack
+    # (N-waves: the pressure leaps up, falls through, snaps back) and a slow whump; the ground's thump; echoes of the
+    # crack off the land, the sea floor and the layers of the air, later, fainter, duller; then the rumble rolling in
+    # from all round — hundreds of short low bursts at random moments and places, thinning out over seconds, as thunder
+    # rolls; the ground trembling; the highs lost on the way. After it the blast's rush, the fireball's roar, debris.
+    ti = t - HIT; post = ti >= 0; tt = np.maximum(ti, 0)
+
+    def nwave(at, dur, amp):
+        x = np.zeros(n); i0 = int((HIT + at) * SR); m = min(int(dur * SR), n - i0)
+        x[i0:i0 + m] = amp * np.linspace(1, -1, m); return x
+    crack = filt(nwave(0, 0.09, 1.0) + nwave(0.21, 0.13, 0.7) + nwave(0.02, 0.45, 0.6), 'low', 3500, 2)
+    echo = np.zeros(n)
+    for d, gn, lp in ((0.33, 0.45, 2200), (0.78, 0.32, 1500), (1.45, 0.22, 1000), (2.4, 0.15, 700), (3.6, 0.1, 500)):
+        k = int(d * SR); e = np.zeros(n); e[k:] = crack[:n - k]; echo += gn * filt(e, 'low', lp, 2)
+    thump = filt(rng.standard_normal(n), 'low', 70) * np.exp(-tt / 1.6) * post
+    roll = np.zeros((n, 2))
+    for g in range(800):
+        at = rng.exponential(1.8) if rng.random() < 0.85 else rng.uniform(0, 9)
+        i0 = int((HIT + at) * SR)
+        if i0 >= n - SR // 10: continue
+        L = rng.uniform(0.06, 0.5); m = min(int(L * SR), n - i0); k = np.arange(m)
+        fc = 50 * np.exp(rng.uniform(0, np.log(12)))                        # 50–600 Hz, evenly per octave
+        burst = rng.standard_normal(m) * np.exp(-k / (SR * L / 3.5)) * (1 - np.exp(-k / (SR * 0.004)))
+        burst = filt(burst, 'band', [fc / 1.6, fc * 1.6], 2) * np.exp(-at / 3.0) * rng.lognormal(0, 0.6)
+        ang = (rng.uniform(-0.9, 0.9) + 1) * np.pi / 4
+        roll[i0:i0 + m, 0] += burst * np.cos(ang); roll[i0:i0 + m, 1] += burst * np.sin(ang)
+    quake = filt(brown(n), 'low', 160) * (0.6 + 0.4 * np.sin(2 * np.pi * 11 * tt + 3 * np.sin(2 * np.pi * 0.7 * tt))) * np.exp(-tt / 5) * post
     rush = sweep_bp(rng.standard_normal(n), t, 2500, 300, q=1.2) * env(ti, [(0, 0), (0.8, 0), (1.6, 0.8), (3.5, 0.2), (6, 0)])
     roarF = filt(rng.standard_normal(n), 'low', 380) * env(ti, [(0, 0), (0.5, 0.6), (4, 0.45), (10, 0.15)])
     debris = filt(crackle(n, 120), 'high', 900) * env(ti, [(0, 0), (1.5, 0), (3, 0.6), (8, 0.3), (10, 0.1)])
-    imp = (0.9 * click + 0.55 * sub + 0.9 * subH + 1.7 * boom / np.max(np.abs(boom)) + 1.3 * blast / np.max(np.abs(blast))
-           + 1.3 * body / np.max(np.abs(body)) + 0.6 * rumble + 0.5 * rush / np.max(np.abs(rush))
-           + 0.45 * roarF / np.max(np.abs(roarF)) + 0.35 * debris / np.max(np.abs(debris)))
-    imp = np.tanh(imp * 2.2) / 2.2                                    # driven harder: denser, louder on small speakers
-    out += pan(imp, 0.05 * np.sin(2 * np.pi * 0.11 * t))
+    nm = lambda x: x / np.max(np.abs(x))
+    cm = np.max(np.abs(crack))
+    mono = (1.0 * crack / cm + 0.7 * echo / cm + 0.9 * nm(thump) + 0.35 * nm(quake)
+            + 0.3 * nm(rush) + 0.28 * nm(roarF) + 0.22 * nm(debris))
+    imp = 1.0 * roll / np.max(np.abs(roll)) + pan(mono, 0.05 * np.sin(2 * np.pi * 0.11 * t))
+    imp = np.tanh(imp * 1.15) / 1.15                                 # only the very peaks rounded: the blast keeps its punch
+    out += imp
     # the hush: everything drops for the last ~0.15 s before contact
     out *= (1 - 0.85 * env(t, [(0, 0), (HIT - 0.16, 0), (HIT - 0.06, 1), (HIT, 1), (HIT + 0.001, 0), (total, 0)]))[:, None]
 
