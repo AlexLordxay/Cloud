@@ -318,18 +318,28 @@
     // the tsunami from space: its rings running out of the Gulf over the oceans of the world, from the impact to ~30 h
     // after (deep-ocean speed ~720 km/h, ~0.113 rad an hour; it meets itself on the far side of the Earth after ~28 h),
     // the pall of dust spreading behind. 8 seconds; the camera follows the front round the world.
-    tsunami_globe: { dur: 8,
+    tsunami_globe: { dur: 9,
       setup(X) { this.S = site(X); },
       frame(X, t) {
-        const S = this.S, H = 30 * t / this.dur, ang = Math.min(0.113 * H, 3.12);
+        // time runs slow at first (the wave leaving the Gulf), then fast: ~30 h in 9 s
+        const S = this.S, u = t / this.dur, H = 30 * Math.pow(u, 1.8), ang = Math.min(0.113 * H, 3.12);
         X.U.tsu.value.set(S.up.x, S.up.y, S.up.z, ang);
-        X.U.tsu2.value.set(1.6, 0.08 + 0.55 * Math.min(H / 30, 1), 0, 0);
-        // the camera follows the front, a little behind it, along the great circle from the Gulf over the Atlantic and
-        // Africa to the far side of the world, where the rings close in on each other
+        X.U.tsu2.value.set(1.6, 0.06 + 0.55 * Math.min(H / 30, 1), 0, 0);
+        // the camera: first ~2000 km over the Gulf, the rings leaving it; then drawing back to ~22 000 km while swinging
+        // after the front along the great circle over the Atlantic and Africa; at the end over the far side of the
+        // world (the Indian Ocean of the time), where the rings close in on each other
         const a = S.up, m = X.dirLL(0, 18), b = m.clone().addScaledVector(a, -m.dot(a)).normalize();
-        const phi = Math.max(0, ang - 0.55) * 0.95, p = a.clone().multiplyScalar(Math.cos(phi)).addScaledVector(b, Math.sin(phi)).multiplyScalar(40);
-        cam(X, p, V(0, 0, 0), 30);
-        sunFrom(X, p, -38, 12); X.U.cloudLon.value = 0.02 + t * 0.002;
+        const phi = lerp(0, 2.75, smooth((u - 0.22) / 0.78));
+        const back = smooth((u - 0.2) / 0.45) - 0.35 * smooth((u - 0.7) / 0.3);
+        const dist = X.ER * lerp(1.32, 4.6, back);
+        const dir = a.clone().multiplyScalar(Math.cos(phi)).addScaledVector(b, Math.sin(phi));
+        cam(X, dir.clone().multiplyScalar(dist), dir.clone().multiplyScalar(X.ER * lerp(0.6, 0, back)), lerp(58, 34, back), S.north.clone(), 0.01);
+        sunFrom(X, X.camera.position.clone(), -35, 14); X.U.cloudLon.value = 0.02 + t * 0.002;
+        // the crater still glowing at the start
+        const glowPt = S.I.clone().addScaledVector(S.up, 0.01);
+        X.head.core.visible = X.head.halo.visible = true;
+        X.head.core.position.copy(glowPt); X.head.core.scale.setScalar(0.12);
+        X.head.halo.position.copy(glowPt); X.head.halo.scale.setScalar(0.45);
       } },
     // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
     site_top: { dur: 2,

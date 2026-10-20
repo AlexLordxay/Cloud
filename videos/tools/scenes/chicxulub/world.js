@@ -51,6 +51,13 @@
         float lat = asin(clamp(n.y, -1.0, 1.0)), lon = atan(-n.z, n.x) + lonOff;
         return vec2(fract((lon + 3.14159265) / 6.2831853), (lat + 1.5707963) / 3.14159265);
       }
+      // water (1) or land (0) at a point: the detailed map inside the impact region, the global one elsewhere
+      float seaAt(vec3 q) {
+        vec2 pu = vec2((atan(-q.z, q.x) - pbox.z) / (pbox.w - pbox.z), (asin(clamp(q.y, -1.0, 1.0)) - pbox.x) / (pbox.y - pbox.x));
+        float pw = smoothstep(0.0, 0.07, min(min(pu.x, 1.0 - pu.x), min(pu.y, 1.0 - pu.y)));
+        float g = texture2D(sea, uvOf(q, 0.0)).r;
+        return pw > 0.0 ? mix(g, texture2D(prel, pu).b, pw) : g;
+      }
       void main() {
         vec3 n = normalize(vW - C), V = normalize(cameraPosition - vW);
         if (hole.w > 0.0 && length(n - hole.xyz) < hole.w) discard;            // the crater mesh is drawn here instead
@@ -72,7 +79,7 @@
         // the tsunami seen from space (tsu: its source and how far, as an angle, its front has run; tsu2: strength, dust
         // pall radius): rings of white water running out over the oceans, weaker as they spread, partly shadowed by the
         // land they have had to pass; behind them a brown pall of dust spreading from the Gulf
-        float tsuRing = 0.0, tsuDark = 0.0, pall = 0.0;
+        float tsuRing = 0.0, tsuDark = 0.0, pall = 0.0, surf = 0.0;
         if (tsu2.x > 0.0) {
           float ang = acos(clamp(dot(n, tsu.xyz), -1.0, 1.0));
           float shade = 1.0;
@@ -87,13 +94,22 @@
           }
           float amp = tsu2.x * shade * (0.8 + 0.2 * exp(-ang / 0.6));
           float wob = fb(n * 30.0 + 2.0) * 0.012, brk = 0.55 + 0.45 * fb(n * 90.0 + 5.0);
+          float rw = max(0.006, 2.2 * fwidth(ang)), rd = max(0.007, 2.4 * fwidth(ang));   // thin up close, still seen far off
           for (int k = 0; k < 3; k++) {
-            float x = ang + wob - (tsu.w - float(k) * 0.08);
-            tsuRing += amp * exp(-pow(x / 0.022, 2.0)) * (1.0 - 0.3 * float(k));
-            tsuDark += amp * exp(-pow((x + 0.04) / 0.022, 2.0)) * (1.0 - 0.3 * float(k));
+            float x = ang + wob - (tsu.w - float(k) * max(0.03, 6.0 * fwidth(ang)));
+            tsuRing += amp * exp(-pow(x / rw, 2.0)) * (1.0 - 0.3 * float(k));
+            tsuDark += amp * exp(-pow((x + 1.8 * rd) / rd, 2.0)) * (1.0 - 0.3 * float(k));
           }
           tsuRing *= step(ang, tsu.w + 0.04) * brk; tsuDark *= step(ang, tsu.w + 0.04);
           pall = (1.0 - smoothstep(tsu2.y * 0.5, tsu2.y, ang + fb(n * 12.0) * 0.1)) * 0.92 * (0.75 + 0.25 * fb(n * 40.0));
+          // where it has reached a coast: the shore flashes white with surf and stays churned for hours after
+          if (ang < tsu.w) {
+            float d = max(0.0015, 2.0 * fwidth(ang)), s1 = seaAt(normalize(n + E * d)), s2 = seaAt(normalize(n - E * d));
+            float s3 = seaAt(normalize(n + N * d)), s4 = seaAt(normalize(n - N * d));
+            float coast = max(max(s1, s2), max(s3, max(s4, w))) - min(min(s1, s2), min(s3, min(s4, w)));
+            float since = tsu.w - ang;
+            surf = coast * amp * (exp(-since / 0.05) * 1.6 + 0.35 * exp(-since / 0.6));
+          }
         }
         vec3 nb = normalize(n - bump * (s.x * E + s.y * N));
         float mu = dot(n, sun), day = smoothstep(-0.12, 0.08, mu);
@@ -132,7 +148,8 @@
         col = mix(col, cloudCol, cl * 0.92);
         // the tsunami's white crests show through the gaps and, faintly, through the cloud
         if (tsu2.x > 0.0) {
-          col += vec3(0.75, 0.9, 1.0) * clamp(tsuRing, 0.0, 1.5) * w * 1.3 * (1.0 - 0.5 * cl) * (0.2 + 0.8 * max(mu, 0.0));
+          col += vec3(0.75, 0.9, 1.0) * clamp(tsuRing, 0.0, 1.5) * w * 1.6 * (1.0 - 0.5 * cl) * (0.2 + 0.8 * max(mu, 0.0));
+          col += vec3(0.9, 0.97, 1.0) * clamp(surf, 0.0, 2.0) * 0.9 * (1.0 - 0.5 * cl) * (0.25 + 0.75 * max(mu, 0.0));
         }
         // the air between us and the ground: it dims what is below and adds its own sunlit blue (all of it near the
         // horizon, where we look through the most air); the light it scatters is the Sun's, reddened like the ground's
