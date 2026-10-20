@@ -9,6 +9,10 @@ from scipy import signal
 
 SR = 48000
 ENTRY, IMPACT = 7.5, 10.0                     # shot lengths (s); the impact comes at the end of the entry
+# we watch from far off: the sound reaches us a little after the light (the author: the blow came too soon), so the
+# whole track runs DELAY late — the flash in the roar's last moment, the hush and the blow after it
+DELAY = 0.7
+HIT = ENTRY + DELAY
 rng = np.random.default_rng(66)
 
 
@@ -63,17 +67,17 @@ def make():
     out += pan(bed * 0.06, 0)
 
     # the entry: air glowing from ~1.5 s, a roar swelling to the end, rising in pitch, sweeping right → left
-    te = t[t < ENTRY]; ne = len(te)
-    g = env(te, [(0, 0), (1.5, 0.05), (3.5, 0.35), (6.0, 0.8), (7.35, 1.0), (7.5, 0.0)])
+    te = t[t < HIT]; ne = len(te); tv = te - DELAY                 # tv: the picture's time the sound belongs to
+    g = env(tv, [(0, 0), (1.5, 0.05), (3.5, 0.35), (6.0, 0.8), (7.35, 1.0), (7.5, 0.0)])
     roar = sweep_bp(rng.standard_normal(ne), te, 160, 900, q=0.9) * g
     low = filt(brown(ne), 'low', 140) * g
-    crk = filt(crackle(ne, 40 + 400 * 1), 'high', 1500) * env(te, [(0, 0), (3, 0.1), (7.3, 1), (7.5, 0)])
+    crk = filt(crackle(ne, 40 + 400 * 1), 'high', 1500) * env(tv, [(0, 0), (3, 0.1), (7.3, 1), (7.5, 0)])
     e = 0.95 * roar / np.max(np.abs(roar)) + 0.6 * low + 0.32 * crk / np.max(np.abs(crk))
     e = np.tanh(e * 1.6) / 1.6
-    out[:ne] += pan(0.45 * e, env(te, [(0, 0.7), (7.5, -0.3)]))
+    out[:ne] += pan(0.45 * e, env(tv, [(0, 0.7), (7.5, -0.3)]))
 
-    # the impact, at ENTRY: a moment's hush before it, then the blow
-    ti = t - ENTRY; post = ti >= 0
+    # the impact, heard at HIT: a moment's hush before it, then the blow
+    ti = t - HIT; post = ti >= 0
     tt = np.maximum(ti, 0)
     click = rng.standard_normal(n) * np.exp(-tt / 0.006) * post
     sub = np.sin(2 * np.pi * (55 * tt - 15 * tt ** 2 / 2.5) * (tt < 2.5) + 2 * np.pi * 21 * tt * (tt >= 2.5)) * np.exp(-tt / 2.2) * post
@@ -93,7 +97,7 @@ def make():
     imp = np.tanh(imp * 2.2) / 2.2                                    # driven harder: denser, louder on small speakers
     out += pan(imp, 0.05 * np.sin(2 * np.pi * 0.11 * t))
     # the hush: everything drops for the last ~0.15 s before contact
-    out *= (1 - 0.85 * env(t, [(0, 0), (ENTRY - 0.16, 0), (ENTRY - 0.06, 1), (ENTRY, 1), (ENTRY + 0.001, 0), (total, 0)]))[:, None]
+    out *= (1 - 0.85 * env(t, [(0, 0), (HIT - 0.16, 0), (HIT - 0.06, 1), (HIT, 1), (HIT + 0.001, 0), (total, 0)]))[:, None]
 
     out = np.stack([reverb(out[:, 0]), reverb(out[:, 1])], 1)
     fade = env(t, [(0, 0), (0.5, 1), (total - 1.0, 1), (total, 0)])
