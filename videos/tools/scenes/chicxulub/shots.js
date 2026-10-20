@@ -35,6 +35,8 @@
   // how brightly the air glows round it at a height (units): from nothing above ~125 km to full below ~70 km
   const glowAt = h => smooth((0.125 - h) / 0.055);
 
+  const P_back = shot => shot.P.back;
+
   const SHOTS = {
     // the whole Earth, gibbous, the Americas and the young Atlantic toward us, slowly turning
     earth_full: { dur: 6,
@@ -115,6 +117,94 @@
         for (const F of [this.glowFx, this.smokeFx]) { F.u.time.value = this.tau0 - tau; F.u.scale.value = pxScale; }
         // dusk: the Sun just gone down in the west — the ground in twilight, the air high up still lit — so the
         // fireball's own light shows on the clouds and the sea
+        X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
+        X.U.cloudLon.value = 0.02;
+      } },
+    // the impact, its first two minutes squeezed into ten seconds (real time T = 120·(t/10)^1.8 s): the flash; the
+    // fireball of rock and sea turned to vapour, rising past the top of the air, thrown a little downrange (south-west);
+    // the curtain of ejecta, an inverted cone of rock opening outward from the growing crater on ballistic arcs; the
+    // blast running out over the sea and the clouds (Sedov: ~340 km in two minutes for ~4·10²³ J), sweeping them away
+    // and leaving a pall of dust; the young crater's floor glowing. The camera starts where the entry ended and draws
+    // back and up to show the size of it all.
+    impact: { dur: 10,
+      T(t) { return 120 * Math.pow(Math.max(t, 0) / this.dur, 1.8); },
+      setup(X) {
+        SHOTS.entry.setup.call(SHOTS.entry, X);                        // the trail and its smoke still hang there
+        const S = site(X), P = path(S); this.S = S; this.P = P;
+        X.asteroid.visible = false;
+        const r = X.rnd, rv = () => V(r() - 0.5, r() - 0.5, r() - 0.5), dr = horiz(S, AZ + 180);
+        // a direction and speed for the vapour: any way up, fastest straight up and a little downrange (the cloud grows as
+        // a rounded, leaning dome, then a mushroom), with a random share of that speed so it fills its volume
+        const pvel = () => {
+          let d = rv().normalize(); if (d.dot(S.up) < 0) d.addScaledVector(S.up, -2 * d.dot(S.up));
+          d.addScaledVector(dr, 0.2).normalize();
+          const c = Math.max(d.dot(S.up), 0), sp = 0.012 * (0.3 + 0.7 * Math.pow(c, 1.6)) * (0.35 + 0.65 * Math.pow(r(), 0.5));
+          return d.multiplyScalar(sp).add(rv().multiplyScalar(0.0015));
+        };
+        // the fireball: vapour flung up and out at 3–13 km/s, slowed by the air (drag 0.02/s)
+        const PG = this.pg = this.pg || X.fx(16000, true), PS = this.ps = this.ps || X.fx(7000, false), DRAG = 0.02;
+        for (let i = 0; i < PG.n; i++) {
+          const v = pvel();
+          PG.set(i, S.I.clone().addScaledVector(S.up, 0.002).add(rv().multiplyScalar(0.004)), v, 0.3 * r(), 40 + 80 * r(), 0.006, 0.05 + 0.09 * r(), r());
+        }
+        // its smoke: born later where the vapour has got to by then, carrying on with what speed it has left; and the
+        // top of the cloud, past the thin upper air, spreading sideways into a cap (the plume spreads out above the
+        // atmosphere): a mushroom
+        const hz = () => { const a = r() * Math.PI * 2; return S.east.clone().multiplyScalar(Math.cos(a)).addScaledVector(S.north, Math.sin(a)); };
+        for (let i = 0; i < PS.n; i++) {
+          if (i % 5 < 2) {
+            const b = 12 + 40 * r(), hgt = 0.22 + 0.12 * r(), h = hz();
+            const p = S.I.clone().addScaledVector(S.up, hgt).addScaledVector(h, 0.06 * r()).addScaledVector(dr, 0.04);
+            PS.set(i, p, h.multiplyScalar(0.003 + 0.005 * r()).addScaledVector(S.up, 0.0008 * r()), b, 150 + 100 * r(), 0.05, 0.12 + 0.08 * r(), r());
+          } else {
+            const v = pvel(), b = 6 + 50 * r();
+            const p = S.I.clone().addScaledVector(v, (1 - Math.exp(-DRAG * b)) / DRAG);
+            PS.set(i, p, v.multiplyScalar(Math.exp(-DRAG * b)), b, 150 + 100 * r(), 0.04, 0.10 + 0.08 * r(), r());
+          }
+        }
+        PG.u.drag.value = PS.u.drag.value = DRAG; PG.u.heat.value = 2.0; PG.u.gain.value = 0.022;
+        PS.u.smoke.value.setRGB(0.46, 0.40, 0.34); PS.u.gain.value = 0.8;
+        // the curtain: rock thrown out at 45° from the crater's growing rim, slower the later and further out it
+        // leaves (2.5 → 0.6 km/s), on ballistic arcs; hot at first, then dark dust
+        const CG = this.cg = this.cg || X.fx(5000, true), CS = this.cs = this.cs || X.fx(12000, false);
+        const launch = (F, i, life, s0, s1) => {
+          const b = 60 * Math.pow(r(), 1.5), f = Math.sqrt(b / 60), phi = r() * Math.PI * 2;
+          const h = S.east.clone().multiplyScalar(Math.cos(phi)).addScaledVector(S.north, Math.sin(phi));
+          const v = 0.0025 * (1 - 0.75 * f), pos = S.I.clone().addScaledVector(h, 0.05 * f).addScaledVector(S.up, 0.001);
+          F.set(i, pos, h.multiplyScalar(v * 0.707).addScaledVector(S.up, v * 0.707), b, life, s0, s1, r());
+        };
+        for (let i = 0; i < CG.n; i++) launch(CG, i, 15 + 20 * r(), 0.003, 0.01);
+        for (let i = 0; i < CS.n; i++) launch(CS, i, 300, 0.006, 0.022 + 0.016 * r());
+        CG.u.drag.value = CS.u.drag.value = 0.0005; CG.u.heat.value = 3.0; CG.u.gain.value = 0.06;
+        CG.u.grav.value.copy(S.up).multiplyScalar(-9.8e-6); CS.u.grav.value.copy(S.up).multiplyScalar(-9.8e-6);
+        CS.u.smoke.value.setRGB(0.26, 0.21, 0.17); CS.u.gain.value = 0.3;
+        // above ~60 km the smoke and dust still catch the Sun, set on the ground below
+        for (const F of [PS, CS]) F.u.litH.value.set(0.04, 0.12);
+        // the blast dome, its foot on the ground ring: tilted so its pole is the site's up
+        X.dome.visible = true; X.dome.position.copy(S.I); X.dome.quaternion.setFromUnitVectors(V(0, 1, 0), S.up);
+        for (const F of [PG, PS, CG, CS]) F.points.visible = true;
+        X.head.core.visible = X.head.halo.visible = true;
+      },
+      frame(X, t) {
+        const T = this.T(t), S = this.S, E = SHOTS.entry;
+        // the flash: blinding at contact, gone in seconds; the fireball's own light lingers
+        const fl = Math.exp(-T / 1.5), glowPt = S.I.clone().addScaledVector(S.up, 0.01);
+        X.head.core.position.copy(glowPt); X.head.core.scale.setScalar(0.05 + 0.5 * fl);
+        X.head.halo.position.copy(glowPt); X.head.halo.scale.setScalar(0.25 + 2.2 * fl);
+        X.U.fball.value.set(glowPt.x, glowPt.y + 0.0, glowPt.z, 2.5 * fl + 0.6 * Math.exp(-T / 40));
+        // the blast ring, the swept and dusty ground inside it, the crater (transient, ~100 km across) glowing
+        const RB = 0.34 * Math.pow(Math.max(T, 0.01) / 120, 0.4);
+        X.U.shock.value.set(S.up.x, S.up.y, S.up.z, RB / X.ER);
+        X.dome.scale.set(RB, RB * 0.55, RB); X.dome.material.uniforms.k.value = 0.7 * Math.exp(-T / 45) + 0.1;
+        X.U.shock2.value.set(0.04 + 0.15 * Math.exp(-T / 40), 0.05 * Math.sqrt(Math.min(T / 90, 1)) / X.ER, 1.8, 0.85 * smooth(T / 20));
+        // the camera: from where the entry ended, back to ~1700 km and up to ~850 km
+        const k = smooth((t - 0.6) / 9.4);
+        const base = S.I.clone().addScaledVector(horiz(S, 140), lerp(0.38, 1.7, k)).normalize().multiplyScalar(X.ER + lerp(0.24, 0.85, k));
+        cam(X, base.addScaledVector(S.east, 0.006 * (E.dur + t)), S.I.clone().addScaledVector(P_back(this), lerp(0.06, 0.0, k)).addScaledVector(S.up, lerp(0, 0.3, k)),
+            lerp(40, 48, k), S.up.clone(), 0.002);
+        const pxScale = X.H / (2 * Math.tan(X.camera.fov * X.D / 2));
+        for (const F of [E.glowFx, E.smokeFx]) { F.u.time.value = E.tau0 + T; F.u.scale.value = pxScale; }
+        for (const F of [this.pg, this.ps, this.cg, this.cs]) { F.u.time.value = T; F.u.scale.value = pxScale; }
         X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
         X.U.cloudLon.value = 0.02;
       } },

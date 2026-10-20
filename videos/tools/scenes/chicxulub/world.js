@@ -25,10 +25,11 @@
     sun: { value: new T.Vector3(1, 0, 0) }, C: { value: new T.Vector3() }, R: { value: ER },
     bump: { value: 7.0 }, cloudLon: { value: 0 }, exposure: { value: 1.0 }, dim: { value: 0 },
     fball: { value: new T.Vector4(0, 0, 0, 0) }, haze: { value: 1 }, atm: { value: 1.2 },
-    pcol: { value: pcol }, prel: { value: prel }, pbox: { value: new T.Vector4(...PBOX) } };
+    pcol: { value: pcol }, prel: { value: prel }, pbox: { value: new T.Vector4(...PBOX) },
+    shock: { value: new T.Vector4(1, 0, 0, 0) }, shock2: { value: new T.Vector4(0, 0, 0, 0) } };
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
     fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel; uniform vec4 pbox; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
-      uniform vec4 fball; uniform float haze, atm;
+      uniform vec4 fball, shock, shock2; uniform float haze, atm;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       float vn(vec3 p) {
@@ -80,6 +81,15 @@
         // close up the map's 5 km cells would blur: its edges are frayed by finer noise, and the fraying fades out far off
         float ce = (fb(n * 1400.0 + 7.0) * 0.7 + fb(n * 5200.0) * 0.3) * k1;
         cl = clamp(cl + ce * 0.9 * cl * (1.0 - cl) * 4.0 - 0.06 * k1 * (1.0 - cl), 0.0, 1.0);
+        // the blast (shock: its centre and radius as an angle; shock2: ring brightness, crater radius, crater glow, dust):
+        // inside the ring the clouds are swept away and a pall of dust lies over everything
+        float ang = length(n - shock.xyz), inside = 0.0, ring = 0.0;
+        if (shock.w > 0.0) {
+          inside = 1.0 - smoothstep(shock.w * 0.8, shock.w, ang);
+          float wob = fb(n * 700.0 + 11.0) * 0.12 * shock.w;                        // a ragged front, not a drawn circle
+          ring = exp(-pow((ang + wob - shock.w) / (shock.w * 0.06 + 0.0006), 2.0));
+          cl *= 1.0 - 0.9 * inside;
+        }
         vec3 ns = normalize(n + sun * 0.0018 / max(mu, 0.15));
         float sh = texture2D(clouds, uvOf(ns, cloudLon)).r;
         col *= 1.0 - 0.55 * sh;
@@ -96,6 +106,17 @@
         float cs = dot(-V, sun), ph = 0.75 * (1.0 + cs * cs) + 0.5 * pow(max(cs, 0.0), 8.0);
         vec3 sunA = sunT(0.008, mu + 0.02) * smoothstep(-0.03, 0.05, mu) * mix(0.45, 1.0, smoothstep(0.0, 0.3, mu));
         col = col * Tv + (1.0 - Tv) * sunA * ph * atm * 0.75;
+        if (shock.w > 0.0) {
+          float dn = fb(n * 900.0 + 3.0) * 0.5 + 0.5;
+          col = mix(col, vec3(0.16, 0.12, 0.09) * (0.15 + 0.85 * max(mu, 0.0)) * (0.7 + 0.6 * dn), inside * shock2.w);
+          col += ring * shock2.x * vec3(1.0, 0.92, 0.82) * (0.3 + 1.4 * dn * dn);
+        }
+        // the crater floor: molten rock, glowing
+        if (shock2.y > 0.0) {
+          float cr = 1.0 - smoothstep(shock2.y * 0.7, shock2.y, ang);
+          float lava = fb(n * 2600.0) * 0.5 + 0.5;
+          col += cr * shock2.z * mix(vec3(0.6, 0.08, 0.01), vec3(1.0, 0.55, 0.15), lava);
+        }
         col *= 1.0 - dim;
         // the fireball's own light (fb: where, how strong): warm, falling off with distance, on whatever faces it
         if (fball.w > 0.0) {
@@ -235,24 +256,25 @@
   const MAXPT = renderer.getContext().getParameter(renderer.getContext().ALIASED_POINT_SIZE_RANGE)[1];
   const FXV = `attribute vec3 vel; attribute float tb, life, s0, s1, seed;
     uniform float time, scale, drag, maxPt; uniform vec3 grav;
-    varying float vA, vSeed;
+    varying float vA, vSeed, vH;
     void main() {
       float age = time - tb, a = age / life;
       if (age < 0.0 || a > 1.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
       vec3 p = position + vel * (1.0 - exp(-drag * age)) / drag + 0.5 * grav * age * age;
       vec4 mv = modelViewMatrix * vec4(p, 1.0);
       gl_PointSize = clamp(mix(s0, s1, sqrt(a)) * scale / max(-mv.z, 1e-5), 1.0, maxPt);
-      gl_Position = projectionMatrix * mv; vA = a; vSeed = seed;
+      gl_Position = projectionMatrix * mv; vA = a; vSeed = seed; vH = length(p) - 6.371;
     }`;
   function fx(n, glow) {
     const g = new T.BufferGeometry(), A = {};
     for (const [k, m] of [['position', 3], ['vel', 3], ['tb', 1], ['life', 1], ['s0', 1], ['s1', 1], ['seed', 1]])
       g.setAttribute(k, A[k] = new T.BufferAttribute(new Float32Array(n * m), m));
     const u = { time: { value: 0 }, scale: { value: 1 }, drag: { value: 1 }, maxPt: { value: MAXPT }, grav: { value: new T.Vector3() },
-      heat: { value: 3 }, gain: { value: 1 }, sun: U.sun, smoke: { value: new T.Color(0.13, 0.11, 0.10) } };
+      heat: { value: 3 }, gain: { value: 1 }, sun: U.sun, smoke: { value: new T.Color(0.13, 0.11, 0.10) },
+      litH: { value: new T.Vector2(-1, -1) }, litCol: { value: new T.Color(1.0, 0.62, 0.42) } };
     const m = new T.ShaderMaterial({ uniforms: u, vertexShader: FXV, transparent: true, depthWrite: false,
       blending: glow ? T.AdditiveBlending : T.NormalBlending,
-      fragmentShader: glow ? `uniform float heat, gain; varying float vA, vSeed;
+      fragmentShader: glow ? `uniform float heat, gain; varying float vA, vSeed, vH;
         float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
@@ -265,7 +287,7 @@
           c = mix(c, vec3(1.0, 0.80, 0.42), smoothstep(0.35, 0.65, T)); c = mix(c, vec3(1.0, 0.97, 0.90), smoothstep(0.65, 0.95, T));
           float k = exp(-r * r * 3.0) * (1.0 - smoothstep(0.7, 1.0, vA)) * (0.25 + 1.6 * T * T);
           gl_FragColor = vec4(c * k * gain, 1.0);
-        }` : `uniform float gain; uniform vec3 smoke; varying float vA, vSeed;
+        }` : `uniform float gain; uniform vec3 smoke, litCol; uniform vec2 litH; varying float vA, vSeed, vH;
         float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
@@ -275,6 +297,8 @@
           float r = length(d) * 2.0 * (0.7 + 0.6 * puff); if (r > 1.0) discard;
           float a = exp(-r * r * 2.5) * smoothstep(0.0, 0.08, vA) * (1.0 - smoothstep(0.55, 1.0, vA)) * 0.12 * gain;
           vec3 c = smoke * (0.8 + 0.4 * vSeed) * (0.85 + 0.3 * d.x);
+          // high enough, smoke still catches the Sun that has set on the ground below (litH: from, to — in units)
+          if (litH.y > 0.0) c = mix(c * 0.55, litCol * (0.8 + 0.4 * vSeed) * (0.8 + 0.4 * d.x), smoothstep(litH.x, litH.y, vH));
           gl_FragColor = vec4(c, a);
         }` });
     const p = new T.Points(g, m); p.frustumCulled = false; p.visible = false; p.renderOrder = glow ? 3 : 2; scene.add(p);
@@ -296,6 +320,24 @@
     const s = new T.Sprite(new T.SpriteMaterial({ map: glowTex(stops), blending: T.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false }));
     s.visible = false; s.renderOrder = 4; scene.add(s); return s;
   }
+  // the blast seen in the air: a thin ragged dome, brightest where we look along its edge (where it is thickest)
+  const dome = new T.Mesh(new T.SphereGeometry(1, 128, 64, 0, Math.PI * 2, 0, Math.PI / 2), new T.ShaderMaterial({
+    uniforms: { k: { value: 0 }, col: { value: new T.Color(1.0, 0.85, 0.7) } }, transparent: true, depthWrite: false,
+    blending: T.AdditiveBlending, side: T.DoubleSide,
+    vertexShader: `varying vec3 vN, vW, vP; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vP = position;
+      vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float k; uniform vec3 col; varying vec3 vN, vW, vP;
+      float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+      float vn(vec3 p) { vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h3(i), h3(i + vec3(1, 0, 0)), f.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), f.x), f.y),
+                   mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y), f.z); }
+      void main() {
+        float e = 1.0 - abs(dot(normalize(vN), normalize(cameraPosition - vW)));
+        float nz = 0.55 * vn(vP * 9.0) + 0.3 * vn(vP * 23.0) + 0.15 * vn(vP * 61.0);
+        float a = pow(e, 5.0) * (0.15 + 1.6 * nz * nz * nz) * smoothstep(0.0, 0.25, vP.y);
+        gl_FragColor = vec4(col * a * k, 1.0);
+      }` }));
+  dome.visible = false; dome.renderOrder = 1; scene.add(dome);
   const head = {
     core: glow([[0, 'rgba(255,255,250,1)'], [0.25, 'rgba(255,240,200,0.9)'], [0.6, 'rgba(255,170,80,0.25)'], [1, 'rgba(255,120,40,0)']]),
     halo: glow([[0, 'rgba(255,200,120,0.55)'], [0.3, 'rgba(255,140,50,0.22)'], [0.7, 'rgba(200,70,20,0.06)'], [1, 'rgba(120,30,10,0)']]),
@@ -312,12 +354,12 @@
   const stars = new T.Points(sg, new T.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
 
-  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd };
+  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2;
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0);
     head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };
