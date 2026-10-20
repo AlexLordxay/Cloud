@@ -11,7 +11,7 @@ SR = 48000
 ENTRY, IMPACT = 7.5, 10.0                     # shot lengths (s); the impact comes at the end of the entry
 # we watch from far off: the sound reaches us a little after the light (the author: the blow came too soon), so the
 # whole track runs DELAY late — the flash in the roar's last moment, the hush and the blow after it
-DELAY = 1.3
+DELAY = 2.0
 HIT = ENTRY + DELAY
 rng = np.random.default_rng(66)
 
