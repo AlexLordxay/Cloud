@@ -14,17 +14,21 @@
   const scene = new T.Scene(), camera = new T.PerspectiveCamera(30, W / H, 0.01, 3000);
   const dirLL = (lat, lon) => new T.Vector3(Math.cos(lat * D) * Math.cos(lon * D), Math.sin(lat * D), -Math.cos(lat * D) * Math.sin(lon * D));
   const load = url => new Promise((res, rej) => new T.TextureLoader().load(url, t => { t.anisotropy = 8; res(t); }, undefined, rej));
-  const [color, relief, sea, clouds] = await Promise.all(['color.jpg', 'relief.png', 'sea.png', 'clouds.jpg'].map(f => load('/maps/' + f)));
+  const [color, relief, sea, clouds, pcol, prel] = await Promise.all(['color.jpg', 'relief.png', 'sea.png', 'clouds.jpg',
+    'patch_color.jpg', 'patch_rel.png'].map(f => load('/maps/' + f)));
   for (const t of [color, relief, clouds]) { t.wrapS = T.RepeatWrapping; t.minFilter = T.LinearMipmapLinearFilter; }
+  // the impact region in detail (patch.py): its box in latitude and longitude (radians), the same as there
+  const PBOX = [13.0, 37.0, -88.0, -56.0].map(v => v * D);
 
   const VS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
   const U = { color: { value: color }, relief: { value: relief }, sea: { value: sea }, clouds: { value: clouds },
     sun: { value: new T.Vector3(1, 0, 0) }, C: { value: new T.Vector3() }, R: { value: ER },
     bump: { value: 7.0 }, cloudLon: { value: 0 }, exposure: { value: 1.0 }, dim: { value: 0 },
-    fball: { value: new T.Vector4(0, 0, 0, 0) }, haze: { value: 1 } };
+    fball: { value: new T.Vector4(0, 0, 0, 0) }, haze: { value: 1 }, atm: { value: 1.2 },
+    pcol: { value: pcol }, prel: { value: prel }, pbox: { value: new T.Vector4(...PBOX) } };
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
-    fragmentShader: `uniform sampler2D color, relief, sea, clouds; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
-      uniform vec4 fball; uniform float haze;
+    fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel; uniform vec4 pbox; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
+      uniform vec4 fball; uniform float haze, atm;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       float vn(vec3 p) {
@@ -32,6 +36,13 @@
         return mix(mix(mix(h3(i), h3(i + vec3(1, 0, 0)), f.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), f.x), f.y),
                    mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), f.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), f.x), f.y), f.z) * 2.0 - 1.0;
       }
+      // the air (Rayleigh): extinction per unit (1000 km) at sea level for red, green, blue; scale height 8 km;
+      // the air mass along a slant (Kasten–Young), so the Sun near the horizon shines through much more air
+      const vec3 BETA = vec3(5.8, 13.5, 33.1); const float HS = 0.008;
+      // ozone (Chappuis band) takes the green-orange out of long slanting light, so twilight goes pink-violet, not olive
+      const vec3 OZ = vec3(0.65, 1.881, 0.085) * 0.015;
+      float airmass(float mu) { float z = degrees(acos(clamp(mu, -1.0, 1.0))); return 1.0 / max(mu + 0.15 * pow(max(93.885 - z, 0.4), -1.253), 0.026); }
+      vec3 sunT(float h, float mu) { return exp(-(BETA * HS * exp(-h / HS) + OZ) * airmass(mu)); }
       float fb(vec3 p) { return 0.5 * vn(p) + 0.27 * vn(p * 2.03) + 0.15 * vn(p * 4.1) + 0.08 * vn(p * 8.3); }
       vec2 uvOf(vec3 n, float lonOff) {
         float lat = asin(clamp(n.y, -1.0, 1.0)), lon = atan(-n.z, n.x) + lonOff;
@@ -43,16 +54,27 @@
         // relief: the land's slopes tilt the normal (east and north at this point)
         vec3 E = normalize(vec3(n.z, 0.0, -n.x) + 1e-6), N = normalize(vec3(-n.y * n.x, 1.0 - n.y * n.y, -n.y * n.z) + 1e-6);
         vec2 s = (texture2D(relief, uv).rg * 255.0 - 128.0) / 635.0;
-        vec3 nb = normalize(n - bump * (s.x * E + s.y * N));
-        float mu = dot(n, sun), day = smoothstep(-0.12, 0.08, mu);
         vec3 c = pow(texture2D(color, uv).rgb, vec3(2.2));
         float w = texture2D(sea, uv).r;
+        // inside the impact region the detailed maps take over, fading in from the box's edges
+        vec2 pu = vec2((atan(-n.z, n.x) - pbox.z) / (pbox.w - pbox.z), (asin(clamp(n.y, -1.0, 1.0)) - pbox.x) / (pbox.y - pbox.x));
+        float pw = smoothstep(0.0, 0.07, min(min(pu.x, 1.0 - pu.x), min(pu.y, 1.0 - pu.y)));
+        if (pw > 0.0) {
+          vec3 pr = texture2D(prel, pu).rgb;
+          s = mix(s, (pr.rg * 255.0 - 128.0) / 635.0, pw);
+          c = mix(c, pow(texture2D(pcol, pu).rgb, vec3(2.2)), pw);
+          w = mix(w, pr.b, pw);
+        }
+        vec3 nb = normalize(n - bump * (s.x * E + s.y * N));
+        float mu = dot(n, sun), day = smoothstep(-0.12, 0.08, mu);
         // finer than the map: fields, woods and gullies at 1–30 km, fading out where they would only shimmer
         float px = length(fwidth(vW)) / R;
         float k1 = 1.0 - smoothstep(0.0006, 0.002, px), k2 = 1.0 - smoothstep(0.00015, 0.0006, px);
         c *= 1.0 + (1.0 - w) * (0.22 * fb(n * 260.0) * k1 + 0.14 * fb(n * 2100.0) * k2);
         float lit = max(dot(nb, sun), 0.0) * smoothstep(-0.05, 0.12, mu) + 0.0;
-        vec3 col = c * lit * 2.6;
+        // sunlight at the ground, reddened by the air it came through (orange near the terminator)
+        vec3 sunG = sunT(0.0, mu) * smoothstep(-0.03, 0.04, mu);
+        vec3 col = c * lit * 2.6 * sunG;
         // clouds (drifting by cloudLon) and their shadows, cast away from the Sun from ~10 km up
         float cl = texture2D(clouds, uvOf(n, cloudLon)).r;
         // close up the map's 5 km cells would blur: its edges are frayed by finer noise, and the fraying fades out far off
@@ -66,12 +88,14 @@
         float g = pow(max(dot(n, Hh), 0.0), 600.0) * 0.45 + pow(max(dot(n, Hh), 0.0), 40.0) * 0.035;
         col += vec3(1.0, 0.93, 0.80) * g * w * (1.0 - cl) * day;
         float cmu = max(mu, 0.0);
-        vec3 cloudCol = vec3(1.0, 0.99, 0.97) * (pow(cmu, 0.8) * 2.4) * mix(vec3(1.0, 0.55, 0.30), vec3(1.0), smoothstep(0.0, 0.25, mu));
+        vec3 cloudCol = vec3(1.0, 0.99, 0.97) * (pow(cmu, 0.8) * 2.4) * sunT(0.01, mu + 0.03) * smoothstep(-0.05, 0.03, mu);
         col = mix(col, cloudCol, cl * 0.92);
-        // the air: blue haze thickening toward the rim, orange where the light grazes
-        float rim = pow(1.0 - max(dot(n, V), 0.0), 2.2);
-        vec3 sky = mix(vec3(0.9, 0.42, 0.15), vec3(0.28, 0.50, 1.0), smoothstep(0.0, 0.22, mu));
-        col = mix(col, sky * smoothstep(-0.06, 0.35, mu) * 1.2, clamp((0.06 + 0.7 * rim) * haze, 0.0, 1.0) * smoothstep(-0.1, 0.05, mu));
+        // the air between us and the ground: it dims what is below and adds its own sunlit blue (all of it near the
+        // horizon, where we look through the most air); the light it scatters is the Sun's, reddened like the ground's
+        vec3 Tv = exp(-BETA * HS * airmass(max(dot(n, V), 0.0)) * haze);
+        float cs = dot(-V, sun), ph = 0.75 * (1.0 + cs * cs) + 0.5 * pow(max(cs, 0.0), 8.0);
+        vec3 sunA = sunT(0.008, mu + 0.02) * smoothstep(-0.03, 0.05, mu) * mix(0.45, 1.0, smoothstep(0.0, 0.3, mu));
+        col = col * Tv + (1.0 - Tv) * sunA * ph * atm * 0.75;
         col *= 1.0 - dim;
         // the fireball's own light (fb: where, how strong): warm, falling off with distance, on whatever faces it
         if (fball.w > 0.0) {
@@ -82,19 +106,33 @@
         col = vec3(1.0) - exp(-col * exposure);                                 // soft shoulder: bright clouds don't clip
         gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
       }` }));
-  // the atmosphere edge-on: a thin glow just outside the limb on the lit side, orange toward the terminator
-  const halo = new T.Mesh(new T.SphereGeometry(ER * 1.035, 128, 64), new T.ShaderMaterial({ uniforms: U, vertexShader: VS,
+  // the atmosphere edge-on: the air along each line of sight that misses the Earth, by the same Rayleigh numbers —
+  // the column through the tangent point, how much of it the Sun lights (none in the Earth's shadow, red light near
+  // it), forward-scattering a little brighter toward the Sun. White-blue close to the limb, blue higher, then black;
+  // at dusk a red-orange layer on the horizon. A hair of glow is let inside the limb, over the mesh's facet gaps.
+  const halo = new T.Mesh(new T.SphereGeometry(ER * 1.035, 256, 128), new T.ShaderMaterial({ uniforms: U, vertexShader: VS,
     transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.FrontSide,
-    fragmentShader: `uniform vec3 sun, C; uniform float R, dim; varying vec3 vW;
+    fragmentShader: `uniform vec3 sun, C; uniform float R, dim, atm; varying vec3 vW;
+      // the air (Rayleigh): extinction per unit (1000 km) at sea level for red, green, blue; scale height 8 km;
+      // the air mass along a slant (Kasten–Young), so the Sun near the horizon shines through much more air
+      const vec3 BETA = vec3(5.8, 13.5, 33.1); const float HS = 0.008;
+      // ozone (Chappuis band) takes the green-orange out of long slanting light, so twilight goes pink-violet, not olive
+      const vec3 OZ = vec3(0.65, 1.881, 0.085) * 0.015;
+      float airmass(float mu) { float z = degrees(acos(clamp(mu, -1.0, 1.0))); return 1.0 / max(mu + 0.15 * pow(max(93.885 - z, 0.4), -1.253), 0.026); }
+      vec3 sunT(float h, float mu) { return exp(-(BETA * HS * exp(-h / HS) + OZ) * airmass(mu)); }
       void main() {
         vec3 d = normalize(vW - cameraPosition), oc = C - cameraPosition;
         vec3 near = cameraPosition + d * dot(oc, d);
-        float b = length(near - C) / R;
-        if (b < 1.0) discard;
-        float mu = dot(normalize(near - C), sun);
-        float gl = exp(-(b - 1.0) / 0.006) * smoothstep(-0.3, 0.2, mu);
-        vec3 c = mix(vec3(1.0, 0.45, 0.15), vec3(0.35, 0.6, 1.0), smoothstep(-0.05, 0.35, mu));
-        gl_FragColor = vec4(c * gl * 1.1 * (1.0 - dim), 1.0);
+        float b = length(near - C);
+        if (b < R - 0.0004) discard;
+        float h = max(b - R, 0.0);
+        vec3 up = normalize(near - C);
+        vec3 tauV = BETA * exp(-h / HS) * sqrt(6.2831853 * R * HS);
+        float ms = dot(up, sun) + sqrt(2.0 * h / R);                       // > 0: the Sun is above this point's horizon
+        vec3 lit = sunT(h, ms) * smoothstep(-0.02, 0.01, ms);
+        float cs = dot(d, sun), ph = 0.75 * (1.0 + cs * cs) + 0.5 * pow(max(cs, 0.0), 8.0);
+        vec3 L = (1.0 - exp(-tauV)) * lit * ph * atm;
+        gl_FragColor = vec4(L * (1.0 - dim), 1.0);
       }` }));
   scene.add(earth, halo);
 
@@ -147,7 +185,7 @@
   const AU = { sun: U.sun, exposure: { value: 1.0 }, M3: { value: new T.Matrix3() }, heat: { value: 0 }, fwd: { value: new T.Vector3(1, 0, 0) } };
   // boulders in the shader, too small for the mesh: two sizes of domes strewn on a 3-D grid (one per cell, some cells
   // empty), each tilting the surface; the regolith darker round their feet, the boulders themselves a little varied
-  const asteroid = new T.Mesh(ag, new T.ShaderMaterial({ uniforms: AU, vertexColors: true,
+  const asteroid = new T.Mesh(ag, new T.ShaderMaterial({ uniforms: AU, vertexColors: true, extensions: { derivatives: true },
     vertexShader: `varying vec3 vN, vP, vW, vC; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz;
       vN = normal; vP = position; vC = color; gl_Position = projectionMatrix * viewMatrix * w; }`,
     fragmentShader: `uniform vec3 sun, fwd; uniform float exposure, heat; uniform mat3 M3; varying vec3 vN, vP, vW, vC;
@@ -170,7 +208,8 @@
       void main() {
         vec3 n = normalize(vN), g1, g2;
         vec4 b1 = boulders(vP, 45.0, g1), b2 = boulders(vP, 150.0, g2);
-        vec3 g = g1 * 0.9 + g2 * 0.7 * (1.0 - step(0.001, b1.x));
+        float pxa = length(fwidth(vP));                                         // object units per pixel
+        vec3 g = g1 * 0.9 * (1.0 - smoothstep(0.006, 0.02, pxa)) + g2 * 0.7 * (1.0 - step(0.001, b1.x)) * (1.0 - smoothstep(0.002, 0.007, pxa));
         n = normalize(n - 0.85 * (g - n * dot(g, n)));          // domes: the surface tilts away from each centre
         n = normalize(M3 * n);
         vec3 V = normalize(cameraPosition - vW);
@@ -278,7 +317,7 @@
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1;
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2;
     head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };

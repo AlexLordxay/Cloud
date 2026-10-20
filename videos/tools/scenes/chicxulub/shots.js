@@ -111,12 +111,26 @@
         const base = S.I.clone().addScaledVector(horiz(S, 140), 0.38).normalize().multiplyScalar(X.ER + 0.24);
         const look = S.I.clone().addScaledVector(P.back, 0.06);
         cam(X, base.addScaledVector(S.east, 0.006 * t), look, 40, S.up.clone(), 0.002);
-        X.U.haze.value = 0.35;
         const pxScale = X.H / (2 * Math.tan(X.camera.fov * X.D / 2));
         for (const F of [this.glowFx, this.smokeFx]) { F.u.time.value = this.tau0 - tau; F.u.scale.value = pxScale; }
-        // dusk: the Sun just above the western horizon, so the fireball's own light shows on the clouds and the sea
-        X.U.sun.value.copy(S.up.clone().multiplyScalar(0.07).addScaledVector(horiz(S, 265), 1).normalize());
+        // dusk: the Sun just gone down in the west — the ground in twilight, the air high up still lit — so the
+        // fireball's own light shows on the clouds and the sea
+        X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
         X.U.cloudLon.value = 0.02;
+      } },
+    // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
+    site_top: { dur: 2,
+      frame(X, t) {
+        const S = site(X);
+        cam(X, S.up.clone().multiplyScalar(X.ER + 0.7), S.I, 60, S.north.clone(), 0.01);
+        X.U.sun.value.copy(S.up.clone().multiplyScalar(0.8).addScaledVector(horiz(S, 250), 0.6).normalize());
+      } },
+    site_low: { dur: 2,
+      frame(X, t) {
+        const S = site(X);
+        const pos = S.I.clone().addScaledVector(horiz(S, 200), 0.45).normalize().multiplyScalar(X.ER + 0.12);
+        cam(X, pos, S.I.clone().addScaledVector(horiz(S, 200), 0.1), 50, S.up.clone(), 0.002);
+        X.U.sun.value.copy(S.up.clone().multiplyScalar(0.6).addScaledVector(horiz(S, 250), 0.8).normalize());
       } },
   };
   window.SHOTS = SHOTS;
