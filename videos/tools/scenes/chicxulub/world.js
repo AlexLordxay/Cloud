@@ -26,10 +26,11 @@
     bump: { value: 7.0 }, cloudLon: { value: 0 }, exposure: { value: 1.0 }, dim: { value: 0 },
     fball: { value: new T.Vector4(0, 0, 0, 0) }, haze: { value: 1 }, atm: { value: 1.2 },
     pcol: { value: pcol }, prel: { value: prel }, pbox: { value: new T.Vector4(...PBOX) },
-    shock: { value: new T.Vector4(1, 0, 0, 0) }, shock2: { value: new T.Vector4(0, 0, 0, 0) } };
+    shock: { value: new T.Vector4(1, 0, 0, 0) }, shock2: { value: new T.Vector4(0, 0, 0, 0) },
+    hole: { value: new T.Vector4(1, 0, 0, 0) } };
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
     fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel; uniform vec4 pbox; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
-      uniform vec4 fball, shock, shock2; uniform float haze, atm;
+      uniform vec4 fball, shock, shock2, hole; uniform float haze, atm;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       float vn(vec3 p) {
@@ -51,6 +52,7 @@
       }
       void main() {
         vec3 n = normalize(vW - C), V = normalize(cameraPosition - vW);
+        if (hole.w > 0.0 && length(n - hole.xyz) < hole.w) discard;            // the crater mesh is drawn here instead
         vec2 uv = uvOf(n, 0.0);
         // relief: the land's slopes tilt the normal (east and north at this point)
         vec3 E = normalize(vec3(n.z, 0.0, -n.x) + 1e-6), N = normalize(vec3(-n.y * n.x, 1.0 - n.y * n.y, -n.y * n.z) + 1e-6);
@@ -349,6 +351,104 @@
     halo: glow([[0, 'rgba(255,200,120,0.55)'], [0.3, 'rgba(255,140,50,0.22)'], [0.7, 'rgba(200,70,20,0.06)'], [1, 'rgba(120,30,10,0)']]),
   };
 
+
+  // ---- the crater ---------------------------------------------------------------------------------------------------
+  // A square of ground 500 km across at the site (in its own east/north/up frame, bent to the Earth's curve), shaped in
+  // the vertex shader as the crater forms over its first ten minutes (T, seconds), after the drilling of its peak ring
+  // (IODP 364, Morgan et al. 2016) and models of it: a transient bowl ~100 km wide and ~28 km deep in the first minute,
+  // its walls showing the layers it cut (limestone, anhydrite, then granite); the floor rebounding into a central peak
+  // higher than Everest; the peak falling outward into a ring of mountains ~80 km across while the walls slump in
+  // terraces to a rim ~180 km across — a basin a kilometre or two deep, its middle a lake of melt. Dressed in ejecta,
+  // lit from above by the glowing cloud and from below by the melt; dust in the air. The Earth's own surface has a hole
+  // here (U.hole) so the two do not fight.
+  const CU = { T: { value: 0 }, ex: { value: 1 }, C0: { value: new T.Vector3() }, eE: { value: new T.Vector3() },
+    eN: { value: new T.Vector3() }, eU: { value: new T.Vector3() }, key: { value: new T.Vector3(0, 1, 0) },
+    keyI: { value: 1 }, melt: { value: 1 }, fogC: { value: new T.Color(0.10, 0.06, 0.035) }, fogK: { value: 0.0016 },
+    sun: U.sun };
+  const CRATER_GLSL = `
+    uniform float T, ex; uniform vec3 C0, eE, eN, eU;
+    float ch(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float cn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(ch(i), ch(i + vec2(1, 0)), f.x), mix(ch(i + vec2(0, 1)), ch(i + vec2(1, 1)), f.x), f.y) * 2.0 - 1.0; }
+    float cf(vec2 p) { return 0.5 * cn(p) + 0.25 * cn(p * 2.07) + 0.13 * cn(p * 4.13) + 0.07 * cn(p * 8.3) + 0.04 * cn(p * 16.7); }
+    // stages (0…1): the bowl growing, the floor rebounding, the collapse into the final form
+    float sGrow() { float g = clamp(T / 70.0, 0.0, 1.0); return 1.0 - (1.0 - g) * (1.0 - g); }
+    float sRise() { return smoothstep(70.0, 190.0, T); }
+    float sColl() { return smoothstep(200.0, 560.0, T); }
+    // height in km at p (km east, north of the centre)
+    float craterH(vec2 p) {
+      float r = length(p), a = atan(p.y, p.x);
+      float g = sGrow(), Rt = 50.0 * sqrt(g) + 0.5, Dt = 28.0 * g;
+      float bowl = r < Rt ? -Dt * (1.0 - r * r / (Rt * Rt)) : 0.0;
+      float rim = (r < Rt ? pow(r / Rt, 8.0) : pow(Rt / r, 3.0)) * 2.2 * g;
+      float wall = cf(p * 0.06 + 3.0) * 1.6 * g * exp(-pow((r - Rt * 0.8) / (Rt * 0.5), 2.0));
+      // the rebound: the bowl shallows and a central peak rises past the old ground, then spreads and falls
+      float rise = sRise(), coll = sColl();
+      float pk = 15.0 * rise * (1.0 - smoothstep(190.0, 420.0, T)), pkS = 13.0 + 18.0 * smoothstep(190.0, 420.0, T);
+      float mid = (bowl + wall) * (1.0 - 0.75 * rise) + rim + pk * exp(-r * r / (pkS * pkS)) * (1.0 + 0.15 * cf(p * 0.15));
+      // the final crater: a melt-filled middle, the peak ring, a trough, walls in slumped terraces up to the rim
+      float rr = r / (1.0 + 0.035 * sin(3.0 * a + 1.0) + 0.025 * sin(7.0 * a + 2.0) + 0.02 * cf(p * 0.02));
+      float ring = 1.9 * exp(-pow((rr - 40.0) / 6.0, 2.0)) * (0.7 + 0.6 * (cf(p * 0.09 + 7.0) * 0.5 + 0.5));
+      float s = clamp((rr - 50.0) / 42.0, 0.0, 1.0), st = (floor(s * 5.0) + smoothstep(0.0, 0.65, fract(s * 5.0))) / 5.0;
+      float fin = rr < 92.0 ? mix(-1.3, mix(-1.7, 0.7, st), smoothstep(46.0, 54.0, rr)) + ring
+                            : 0.7 * pow(92.0 / rr, 3.0);
+      fin += cf(p * 0.12 + 11.0) * 0.18 + (rr < 34.0 ? cf(p * 0.3) * 0.05 : 0.0);
+      return mix(mid, fin, coll);
+    }
+    vec3 cpos(vec2 p) {                     // world position: km in the site frame → units, bent to the curve
+      float h = craterH(p) * ex; vec2 u = p / 1000.0;
+      return C0 + eE * u.x + eN * u.y + eU * (h / 1000.0 - dot(u, u) / (2.0 * 6.371));
+    }`;
+  const crater = new T.Mesh(new T.PlaneGeometry(500, 500, 640, 640), new T.ShaderMaterial({ uniforms: CU,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+    vertexShader: CRATER_GLSL + `
+      varying vec2 vP; varying vec3 vW, vN; varying float vH;
+      void main() {
+        vec2 p = position.xy; vP = p;
+        vec3 w = cpos(p), wx = cpos(p + vec2(0.6, 0.0)), wy = cpos(p + vec2(0.0, 0.6));
+        vN = normalize(cross(wx - w, wy - w)); vW = w; vH = craterH(p);
+        gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
+      }`,
+    fragmentShader: CRATER_GLSL + `
+      uniform vec3 key, sun, fogC; uniform float keyI, melt, fogK;
+      varying vec2 vP; varying vec3 vW, vN; varying float vH;
+      void main() {
+        float r = length(vP); if (r > 245.0) discard;
+        vec3 n = normalize(vN); vec3 V = normalize(cameraPosition - vW);
+        float g = sGrow(), coll = sColl(), rise = sRise();
+        // ground: ejecta over everything near, thinning out with distance; rays of it
+        float a = atan(vP.y, vP.x), ray = 0.5 + 0.5 * cn(vec2(a * 9.0, 0.3)) * cn(vec2(a * 23.0, 1.7));
+        vec3 ej = vec3(0.17, 0.13, 0.10) * (0.8 + 0.4 * cf(vP * 0.05)) * (0.85 + 0.3 * ray);
+        vec3 sea = vec3(0.025, 0.04, 0.05);
+        vec3 c = mix(ej, sea, smoothstep(120.0, 230.0, r) * 0.7);
+        // the cut layers: limestone and anhydrite light, then granite (pinkish grey) below ~4 km
+        float dep = -vH;
+        if (dep > 0.3 && coll < 0.9) {
+          float band = 0.5 + 0.5 * cn(vec2(dep * 1.1 + cf(vP * 0.04) * 1.8, 0.37) + vP * 0.004);   // uneven strata
+          vec3 lay = dep < 4.0 ? mix(vec3(0.40, 0.38, 0.34), vec3(0.54, 0.52, 0.48), band) : vec3(0.34, 0.27, 0.25) * (0.8 + 0.3 * band);
+          lay *= 0.75 + 0.5 * (cf(vP * 0.25 + dep) * 0.5 + 0.5);
+          c = mix(c, lay, smoothstep(0.3, 1.5, dep) * (1.0 - coll));
+        }
+        // light: the glowing cloud above (warm, from high up), faint twilight, the melt's own glow
+        float dif = max(dot(n, key), 0.0), amb = 0.5 + 0.5 * dot(n, eU);
+        vec3 col = c * (vec3(1.0, 0.55, 0.28) * dif * keyI * 2.8 + vec3(0.03, 0.035, 0.05) * amb);
+        // melt: the floor of the bowl at first, then the middle of the final crater; crusting into dark plates with
+        // glowing cracks as it cools
+        // in the end the melt lies in the low ground — the middle and the trough — and the peak ring stands out of it
+        float lowf = 1.0 - smoothstep(-1.15, -0.75, vH);
+        float mz = mix(1.0 - smoothstep(0.0, 0.45, r / (50.0 * sqrt(g) + 1.0)), lowf * (1.0 - smoothstep(48.0, 60.0, r)), coll);
+        float tb = cf(vP * 0.08 + 5.0) * 0.5 + 0.5, tf = cf(vP * 0.5 - 3.0) * 0.5 + 0.5;
+        float hot = melt * mz * (0.45 + 0.55 * tb) * (0.8 + 0.4 * tf) * mix(1.0, 0.6, smoothstep(150.0, 600.0, T));
+        col = mix(col, col * 0.3, mz * coll);
+        col += hot * mix(vec3(0.55, 0.06, 0.01), vec3(1.0, 0.45, 0.08), tb * tf);
+        // dust in the air: the far ground sinks into an orange-brown haze
+        float dist = length(cameraPosition - vW) * 1000.0;
+        col = mix(col, fogC * (0.4 + keyI * 0.8), 1.0 - exp(-dist * fogK));
+        col = vec3(1.0) - exp(-col * 1.6);
+        gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+      }` }));
+  crater.frustumCulled = false; crater.visible = false; scene.add(crater);
+
   // ---- stars ----------------------------------------------------------------------------------------------------
   const sp = [], sc = [];
   for (let i = 0; i < 9000; i++) {
@@ -360,12 +460,12 @@
   const stars = new T.Points(sg, new T.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
 
-  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome };
+  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0);
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false;
     head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };

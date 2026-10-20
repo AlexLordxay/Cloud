@@ -210,6 +210,28 @@
         X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
         X.U.cloudLon.value = 0.02;
       } },
+    // the crater forming, its first ten minutes in ten seconds (T = 600·(t/10)² s), seen from ~75 km up to the
+    // south-east: the bowl opening, the floor rebounding into a peak, the peak falling into a ring, the walls slumping
+    crater: { dur: 10,
+      T(t) { return 600 * Math.pow(Math.max(t, 0) / this.dur, 2); },
+      setup(X) {
+        const S = site(X); this.S = S;
+        const CU = X.CU; CU.C0.value.copy(S.I); CU.eE.value.copy(S.east); CU.eN.value.copy(S.north); CU.eU.value.copy(S.up);
+        X.crater.visible = true; X.U.hole.value.set(S.up.x, S.up.y, S.up.z, 0.240 / X.ER);
+      },
+      frame(X, t) {
+        const S = this.S, T = this.T(t), CU = X.CU; CU.T.value = T;
+        // light from the glowing cloud above, a little downrange; fading as it cools and the dust thickens
+        CU.key.value.copy(S.up).addScaledVector(horiz(S, 225), 1.0).normalize();
+        // the final basin is shallow (1–2 km over 180 km): its relief is drawn 3× as it settles (said in a caption)
+        CU.ex.value = 1 + 2 * smooth((T - 200) / 360);
+        CU.keyI.value = 1.1 * Math.exp(-T / 350) + 0.35; CU.melt.value = 1.6;
+        const az = 150 - 12 * t / this.dur, d = lerp(0.15, 0.17, t / this.dur);
+        const pos = S.I.clone().addScaledVector(horiz(S, az), d).normalize().multiplyScalar(X.ER + 0.075);
+        cam(X, pos, S.I.clone().addScaledVector(S.up, -0.008), 52, S.up.clone(), 0.002);
+        X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
+        X.U.cloudLon.value = 0.02;
+      } },
     // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
     site_top: { dur: 2,
       frame(X, t) {
