@@ -109,7 +109,8 @@
         if (shock.w > 0.0) {
           float dn = fb(n * 900.0 + 3.0) * 0.5 + 0.5;
           col = mix(col, vec3(0.16, 0.12, 0.09) * (0.15 + 0.85 * max(mu, 0.0)) * (0.7 + 0.6 * dn), inside * shock2.w);
-          col += ring * shock2.x * vec3(1.0, 0.92, 0.82) * (0.3 + 1.4 * dn * dn);
+          float dr = fb(n * 260.0 + 5.0) * 0.5 + 0.5;
+          col += ring * shock2.x * vec3(0.85, 0.72, 0.58) * (0.4 + 1.2 * dr * dr);
         }
         // the crater floor: molten rock, glowing
         if (shock2.y > 0.0) {
@@ -271,7 +272,8 @@
       g.setAttribute(k, A[k] = new T.BufferAttribute(new Float32Array(n * m), m));
     const u = { time: { value: 0 }, scale: { value: 1 }, drag: { value: 1 }, maxPt: { value: MAXPT }, grav: { value: new T.Vector3() },
       heat: { value: 3 }, gain: { value: 1 }, sun: U.sun, smoke: { value: new T.Color(0.13, 0.11, 0.10) },
-      litH: { value: new T.Vector2(-1, -1) }, litCol: { value: new T.Color(1.0, 0.62, 0.42) } };
+      litH: { value: new T.Vector2(-1, -1) }, litCol: { value: new T.Color(1.0, 0.62, 0.42) },
+      shade: { value: 0 }, ldir: { value: new T.Vector2(-0.7, 0.5) } };
     const m = new T.ShaderMaterial({ uniforms: u, vertexShader: FXV, transparent: true, depthWrite: false,
       blending: glow ? T.AdditiveBlending : T.NormalBlending,
       fragmentShader: glow ? `uniform float heat, gain; varying float vA, vSeed, vH;
@@ -287,7 +289,7 @@
           c = mix(c, vec3(1.0, 0.80, 0.42), smoothstep(0.35, 0.65, T)); c = mix(c, vec3(1.0, 0.97, 0.90), smoothstep(0.65, 0.95, T));
           float k = exp(-r * r * 3.0) * (1.0 - smoothstep(0.7, 1.0, vA)) * (0.25 + 1.6 * T * T);
           gl_FragColor = vec4(c * k * gain, 1.0);
-        }` : `uniform float gain; uniform vec3 smoke, litCol; uniform vec2 litH; varying float vA, vSeed, vH;
+        }` : `uniform float gain, shade; uniform vec3 smoke, litCol; uniform vec2 litH, ldir; varying float vA, vSeed, vH;
         float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
         float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
@@ -295,10 +297,14 @@
           vec2 d = gl_PointCoord - 0.5;
           float puff = 0.6 * n2(d * 4.0 + vSeed * 41.0) + 0.4 * n2(d * 9.0 - vSeed * 17.0);
           float r = length(d) * 2.0 * (0.7 + 0.6 * puff); if (r > 1.0) discard;
-          float a = exp(-r * r * 2.5) * smoothstep(0.0, 0.08, vA) * (1.0 - smoothstep(0.55, 1.0, vA)) * 0.12 * gain;
+          float a = mix(exp(-r * r * 2.5), smoothstep(1.0, 0.55, r), shade) * smoothstep(0.0, 0.08, vA) * (1.0 - smoothstep(0.55, 1.0, vA)) * mix(0.12, 0.3, shade) * gain;
           vec3 c = smoke * (0.8 + 0.4 * vSeed) * (0.85 + 0.3 * d.x);
+          // billows (shade 1): each puff a lumpy ball, lit on one side (ldir, on the screen), shadowed on the other
+          vec3 bn = vec3(d.x * 2.0, -d.y * 2.0, sqrt(max(0.0, 1.0 - r * r)));
+          float L = 0.35 + 0.75 * max(dot(bn, normalize(vec3(ldir, 0.55))), 0.0) + 0.25 * (puff - 0.5);
+          c *= mix(1.0, L, shade);
           // high enough, smoke still catches the Sun that has set on the ground below (litH: from, to — in units)
-          if (litH.y > 0.0) c = mix(c * 0.55, litCol * (0.8 + 0.4 * vSeed) * (0.8 + 0.4 * d.x), smoothstep(litH.x, litH.y, vH));
+          if (litH.y > 0.0) c = mix(c * 0.55, litCol * (0.8 + 0.4 * vSeed) * mix(0.8 + 0.4 * d.x, L, shade), smoothstep(litH.x, litH.y, vH));
           gl_FragColor = vec4(c, a);
         }` });
     const p = new T.Points(g, m); p.frustumCulled = false; p.visible = false; p.renderOrder = glow ? 3 : 2; scene.add(p);

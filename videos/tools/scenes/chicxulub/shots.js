@@ -142,7 +142,7 @@
           return d.multiplyScalar(sp).add(rv().multiplyScalar(0.0015));
         };
         // the fireball: vapour flung up and out at 3–13 km/s, slowed by the air (drag 0.02/s)
-        const PG = this.pg = this.pg || X.fx(16000, true), PS = this.ps = this.ps || X.fx(7000, false), DRAG = 0.02;
+        const PG = this.pg = this.pg || X.fx(10000, true), PS = this.ps = this.ps || X.fx(6000, false), DRAG = 0.02;
         for (let i = 0; i < PG.n; i++) {
           const v = pvel();
           PG.set(i, S.I.clone().addScaledVector(S.up, 0.002).add(rv().multiplyScalar(0.004)), v, 0.3 * r(), 40 + 80 * r(), 0.006, 0.05 + 0.09 * r(), r());
@@ -153,7 +153,8 @@
         const hz = () => { const a = r() * Math.PI * 2; return S.east.clone().multiplyScalar(Math.cos(a)).addScaledVector(S.north, Math.sin(a)); };
         for (let i = 0; i < PS.n; i++) {
           if (i % 5 < 2) {
-            const b = 12 + 40 * r(), hgt = 0.22 + 0.12 * r(), h = hz();
+            // born only once the rising vapour has got that high (its top: 0.6·(1 − e^(−0.02 T)) units)
+            const hgt = 0.2 + 0.14 * r(), h = hz(), b = -Math.log(1 - hgt / 0.6) / DRAG + 12 * r();
             const p = S.I.clone().addScaledVector(S.up, hgt).addScaledVector(h, 0.06 * r()).addScaledVector(dr, 0.04);
             PS.set(i, p, h.multiplyScalar(0.003 + 0.005 * r()).addScaledVector(S.up, 0.0008 * r()), b, 150 + 100 * r(), 0.05, 0.12 + 0.08 * r(), r());
           } else {
@@ -162,7 +163,8 @@
             PS.set(i, p, v.multiplyScalar(Math.exp(-DRAG * b)), b, 150 + 100 * r(), 0.04, 0.10 + 0.08 * r(), r());
           }
         }
-        PG.u.drag.value = PS.u.drag.value = DRAG; PG.u.heat.value = 2.0; PG.u.gain.value = 0.022;
+        PG.u.drag.value = PS.u.drag.value = DRAG; PG.u.heat.value = 2.0; PG.u.gain.value = 0.032;
+        PS.u.shade.value = 1; PS.u.ldir.value.set(-0.75, 0.35);
         PS.u.smoke.value.setRGB(0.46, 0.40, 0.34); PS.u.gain.value = 0.8;
         // the curtain: rock thrown out at 45° from the crater's growing rim, slower the later and further out it
         // leaves (2.5 → 0.6 km/s), on ballistic arcs; hot at first, then dark dust
