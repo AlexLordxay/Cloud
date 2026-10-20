@@ -20,9 +20,11 @@
   const VS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
   const U = { color: { value: color }, relief: { value: relief }, sea: { value: sea }, clouds: { value: clouds },
     sun: { value: new T.Vector3(1, 0, 0) }, C: { value: new T.Vector3() }, R: { value: ER },
-    bump: { value: 7.0 }, cloudLon: { value: 0 }, exposure: { value: 1.0 }, dim: { value: 0 } };
-  const earth = new T.Mesh(new T.SphereGeometry(ER, 256, 128), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
+    bump: { value: 7.0 }, cloudLon: { value: 0 }, exposure: { value: 1.0 }, dim: { value: 0 },
+    fball: { value: new T.Vector4(0, 0, 0, 0) }, haze: { value: 1 } };
+  const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
     fragmentShader: `uniform sampler2D color, relief, sea, clouds; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
+      uniform vec4 fball; uniform float haze;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       float vn(vec3 p) {
@@ -53,6 +55,9 @@
         vec3 col = c * lit * 2.6;
         // clouds (drifting by cloudLon) and their shadows, cast away from the Sun from ~10 km up
         float cl = texture2D(clouds, uvOf(n, cloudLon)).r;
+        // close up the map's 5 km cells would blur: its edges are frayed by finer noise, and the fraying fades out far off
+        float ce = (fb(n * 1400.0 + 7.0) * 0.7 + fb(n * 5200.0) * 0.3) * k1;
+        cl = clamp(cl + ce * 0.9 * cl * (1.0 - cl) * 4.0 - 0.06 * k1 * (1.0 - cl), 0.0, 1.0);
         vec3 ns = normalize(n + sun * 0.0018 / max(mu, 0.15));
         float sh = texture2D(clouds, uvOf(ns, cloudLon)).r;
         col *= 1.0 - 0.55 * sh;
@@ -66,8 +71,14 @@
         // the air: blue haze thickening toward the rim, orange where the light grazes
         float rim = pow(1.0 - max(dot(n, V), 0.0), 2.2);
         vec3 sky = mix(vec3(0.9, 0.42, 0.15), vec3(0.28, 0.50, 1.0), smoothstep(0.0, 0.22, mu));
-        col = mix(col, sky * smoothstep(-0.06, 0.35, mu) * 1.2, clamp(0.06 + 0.7 * rim, 0.0, 1.0) * smoothstep(-0.1, 0.05, mu));
+        col = mix(col, sky * smoothstep(-0.06, 0.35, mu) * 1.2, clamp((0.06 + 0.7 * rim) * haze, 0.0, 1.0) * smoothstep(-0.1, 0.05, mu));
         col *= 1.0 - dim;
+        // the fireball's own light (fb: where, how strong): warm, falling off with distance, on whatever faces it
+        if (fball.w > 0.0) {
+          vec3 L = fball.xyz - vW; float dl = length(L);
+          float f = fball.w * max(dot(n, L / dl), 0.0) / (1.0 + dl * dl / 0.006);
+          col += vec3(1.0, 0.62, 0.30) * f * mix(c * 3.0 + 0.02, vec3(0.9), cl);
+        }
         col = vec3(1.0) - exp(-col * exposure);                                 // soft shoulder: bright clouds don't clip
         gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
       }` }));
@@ -133,13 +144,13 @@
     cols[i * 3] = a * 1.06; cols[i * 3 + 1] = a; cols[i * 3 + 2] = a * 0.92;
   }
   ag.setAttribute('color', new T.BufferAttribute(cols, 3));
-  const AU = { sun: U.sun, exposure: { value: 1.0 }, M3: { value: new T.Matrix3() } };
+  const AU = { sun: U.sun, exposure: { value: 1.0 }, M3: { value: new T.Matrix3() }, heat: { value: 0 }, fwd: { value: new T.Vector3(1, 0, 0) } };
   // boulders in the shader, too small for the mesh: two sizes of domes strewn on a 3-D grid (one per cell, some cells
   // empty), each tilting the surface; the regolith darker round their feet, the boulders themselves a little varied
   const asteroid = new T.Mesh(ag, new T.ShaderMaterial({ uniforms: AU, vertexColors: true,
     vertexShader: `varying vec3 vN, vP, vW, vC; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz;
       vN = normal; vP = position; vC = color; gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform vec3 sun; uniform float exposure; uniform mat3 M3; varying vec3 vN, vP, vW, vC;
+    fragmentShader: `uniform vec3 sun, fwd; uniform float exposure, heat; uniform mat3 M3; varying vec3 vN, vP, vW, vC;
       vec3 h33(vec3 p) { return fract(sin(vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)))) * 43758.5453); }
       // the tallest dome over p at this scale: its height (cell units), gradient, how near its foot, and a tint
       vec4 boulders(vec3 p, float s, out vec3 grad) {
@@ -169,10 +180,87 @@
         float ls = mu0 / (mu0 + mu + 1e-4) * 2.0, lam = mu0;
         vec3 col = vC * alb * (0.55 * ls + 0.45 * lam) * 2.4 * exposure;
         col += vC * 0.03;                                                      // a whisper of earthshine
+        // in the air: the face it drives into glows white-hot, the sides orange
+        float f = max(dot(n, fwd), 0.0);
+        col += heat * (vec3(1.0, 0.85, 0.6) * pow(f, 2.0) * 3.0 + vec3(1.0, 0.4, 0.1) * f * 0.8);
         col = vec3(1.0) - exp(-col);
         gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
       }` }));
   asteroid.visible = false; scene.add(asteroid);
+
+  // ---- fire and smoke ---------------------------------------------------------------------------------------------
+  // Particles laid out in advance, each with its birth time, so that any frame can be drawn on its own: born at p0 with
+  // velocity vel, slowed by drag (the air) and pulled by grav, growing from size s0 to s1 (world units) over its life.
+  // Glow is added: hot white, then yellow, orange, deep red as it cools (heat sets how fast). Smoke is laid over: dark,
+  // brownish, lit a little on the Sun's side.
+  const MAXPT = renderer.getContext().getParameter(renderer.getContext().ALIASED_POINT_SIZE_RANGE)[1];
+  const FXV = `attribute vec3 vel; attribute float tb, life, s0, s1, seed;
+    uniform float time, scale, drag, maxPt; uniform vec3 grav;
+    varying float vA, vSeed;
+    void main() {
+      float age = time - tb, a = age / life;
+      if (age < 0.0 || a > 1.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+      vec3 p = position + vel * (1.0 - exp(-drag * age)) / drag + 0.5 * grav * age * age;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = clamp(mix(s0, s1, sqrt(a)) * scale / max(-mv.z, 1e-5), 1.0, maxPt);
+      gl_Position = projectionMatrix * mv; vA = a; vSeed = seed;
+    }`;
+  function fx(n, glow) {
+    const g = new T.BufferGeometry(), A = {};
+    for (const [k, m] of [['position', 3], ['vel', 3], ['tb', 1], ['life', 1], ['s0', 1], ['s1', 1], ['seed', 1]])
+      g.setAttribute(k, A[k] = new T.BufferAttribute(new Float32Array(n * m), m));
+    const u = { time: { value: 0 }, scale: { value: 1 }, drag: { value: 1 }, maxPt: { value: MAXPT }, grav: { value: new T.Vector3() },
+      heat: { value: 3 }, gain: { value: 1 }, sun: U.sun, smoke: { value: new T.Color(0.13, 0.11, 0.10) } };
+    const m = new T.ShaderMaterial({ uniforms: u, vertexShader: FXV, transparent: true, depthWrite: false,
+      blending: glow ? T.AdditiveBlending : T.NormalBlending,
+      fragmentShader: glow ? `uniform float heat, gain; varying float vA, vSeed;
+        float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
+        void main() {
+          vec2 q = gl_PointCoord - 0.5;
+          float puff = 0.6 * n2(q * 5.0 + vSeed * 37.0) + 0.4 * n2(q * 11.0 - vSeed * 53.0);
+          float r = length(q) * 2.0 * (0.75 + 0.5 * puff); if (r > 1.0) discard;
+          float T = exp(-vA * heat) * (0.75 + 0.25 * vSeed);
+          vec3 c = mix(vec3(0.55, 0.06, 0.01), vec3(1.0, 0.42, 0.08), smoothstep(0.08, 0.35, T));
+          c = mix(c, vec3(1.0, 0.80, 0.42), smoothstep(0.35, 0.65, T)); c = mix(c, vec3(1.0, 0.97, 0.90), smoothstep(0.65, 0.95, T));
+          float k = exp(-r * r * 3.0) * (1.0 - smoothstep(0.7, 1.0, vA)) * (0.25 + 1.6 * T * T);
+          gl_FragColor = vec4(c * k * gain, 1.0);
+        }` : `uniform float gain; uniform vec3 smoke; varying float vA, vSeed;
+        float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
+        void main() {
+          vec2 d = gl_PointCoord - 0.5;
+          float puff = 0.6 * n2(d * 4.0 + vSeed * 41.0) + 0.4 * n2(d * 9.0 - vSeed * 17.0);
+          float r = length(d) * 2.0 * (0.7 + 0.6 * puff); if (r > 1.0) discard;
+          float a = exp(-r * r * 2.5) * smoothstep(0.0, 0.08, vA) * (1.0 - smoothstep(0.55, 1.0, vA)) * 0.12 * gain;
+          vec3 c = smoke * (0.8 + 0.4 * vSeed) * (0.85 + 0.3 * d.x);
+          gl_FragColor = vec4(c, a);
+        }` });
+    const p = new T.Points(g, m); p.frustumCulled = false; p.visible = false; p.renderOrder = glow ? 3 : 2; scene.add(p);
+    return { points: p, u, A, n,
+      set(i, pos, vel, tb, life, s0, s1, seed) {
+        A.position.setXYZ(i, pos.x, pos.y, pos.z); A.vel.setXYZ(i, vel.x, vel.y, vel.z);
+        A.tb.setX(i, tb); A.life.setX(i, life); A.s0.setX(i, s0); A.s1.setX(i, s1); A.seed.setX(i, seed);
+      },
+      done() { for (const a of Object.values(A)) a.needsUpdate = true; } };
+  }
+  // the head of the fireball: soft round glows (canvas gradients) that stay a fixed size in the world
+  function glowTex(stops) {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    for (const [o, col] of stops) gr.addColorStop(o, col);
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return new T.CanvasTexture(c);
+  }
+  function glow(stops) {
+    const s = new T.Sprite(new T.SpriteMaterial({ map: glowTex(stops), blending: T.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false }));
+    s.visible = false; s.renderOrder = 4; scene.add(s); return s;
+  }
+  const head = {
+    core: glow([[0, 'rgba(255,255,250,1)'], [0.25, 'rgba(255,240,200,0.9)'], [0.6, 'rgba(255,170,80,0.25)'], [1, 'rgba(255,120,40,0)']]),
+    halo: glow([[0, 'rgba(255,200,120,0.55)'], [0.3, 'rgba(255,140,50,0.22)'], [0.7, 'rgba(200,70,20,0.06)'], [1, 'rgba(120,30,10,0)']]),
+  };
 
   // ---- stars ----------------------------------------------------------------------------------------------------
   const sp = [], sc = [];
@@ -185,12 +273,13 @@
   const stars = new T.Points(sg, new T.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
 
-  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL };
+  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1;
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1;
+    head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };
   window.renderShot = (name, t) => {
