@@ -41,3 +41,8 @@
 - Senel et al. 2023, Nature Geoscience (пил); Bardeen et al. 2017, PNAS (сажа); Brugger et al. 2017 (сірка).
 - Fischer-Gödde et al. 2024, Science (походження астероїда).
 - Scotese & Wright 2018, PALEOMAP PaleoDEMs (CC BY 4.0); NASA Visible Earth (Blue Marble, хмари).
+
+## Запис (21.10.2026): `voice.mp3`, 108,7 с — Higgsfield, Eleven v4, голос автора «Мій-голос-», stability 0,45,
+similarity 0,9; текст з наголосами — `voice_text.txt` (6,67 кредита). Фрази в записі (с, за паузами):
+1 0–5,42 · 2 6,03–16,65 · 3 17,17–25,40 · 4 25,94–32,31 · 5 32,82–41,57 · 6 42,05–49,59 · 7 50,05–61,71 ·
+8 62,19–71,50 · 9 71,94–86,87 · 10 87,36–103,58 · 11 (питання) 104,13–108,75. Перед питанням вставити 2 с паузи.
