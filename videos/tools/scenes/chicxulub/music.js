@@ -10,12 +10,16 @@
 // noise burst) and the shell; every hit slightly different in strength, pitch and timing, as players are; all in a hall
 // whose high end dies sooner than its low.
 //
+// The bass guitar (a variant ending in '_bass') is a plucked string: Karplus–Strong — a burst of soft noise, plucked a
+// fifth of the way along (the finger's warmth), running round a delay line one period long and losing its highs each
+// time round, as a real string does; through a pickup (low-pass and a little drive, so its growl carries on a phone).
+//
 // Variants (opts.v): 'taiko' — organ and a taiko ensemble; 'timp' — organ and orchestral kettle drums (rolls);
-// 'organ' — organ alone. opts.T0: the film time at which the music starts (cues below are in film seconds of the
+// 'organ' — organ alone; 'taiko_bass', 'timp_bass' — with the bass guitar. opts.T0: the film time at which the music starts (cues below are in film seconds of the
 // test clip: the end of the long night 0–6 s, the finale 6–22 s: the veil going 6–9.5, the snow melting 9.5–11.5, the
 // drift 11.5–21, today's Earth from ~21).
 function createSceneMusic(ctx, dest, opts = {}) {
-  const V = opts.v || 'taiko';
+  const V = (opts.v || 'taiko').split('_')[0], BASS = /_bass$/.test(opts.v || '');
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
   let seed = opts.seed || 11;
   const rnd = (a, b) => a + ((seed = (seed * 16807) % 2147483647) / 2147483647) * (b - a);
@@ -43,8 +47,10 @@ function createSceneMusic(ctx, dest, opts = {}) {
     const s = ctx.createGain(); s.gain.value = send; g.connect(s).connect(verb);
     return g;
   };
-  // the organ leads, the drums carry it (opts.only: 'organ' or 'drums' — the other muted, for checking the balance)
-  const organBus = bus(opts.only === 'drums' ? 0 : 0.6, 0.95), drumBus = bus(opts.only === 'organ' ? 0 : 0.45, 0.4);
+  // the organ leads, the drums and the bass carry it (opts.only: 'organ', 'drums' or 'bass' — the rest muted, for
+  // checking the balance)
+  const on = part => !opts.only || opts.only === part;
+  const organBus = bus(on('organ') ? 0.6 : 0, 0.95), drumBus = bus(on('drums') ? 0.45 : 0, 0.4);
   // no rumble: the drums lose what is below ~45 Hz (a phone can't play it, and it would only boom), shelved below 90
   const dHP = ctx.createBiquadFilter(); dHP.type = 'highpass'; dHP.frequency.value = 45; dHP.Q.value = 0.7;
   const dLS = ctx.createBiquadFilter(); dLS.type = 'lowshelf'; dLS.frequency.value = 90; dLS.gain.value = -4;
@@ -119,6 +125,32 @@ function createSceneMusic(ctx, dest, opts = {}) {
   // kettle drum: the air in the bowl pulls the modes near 1 : 1.5 : 2 : 2.5 : 3 (the "principal" sings), felt mallet
   const TIMP = { modes: [[1, 1, 0.6], [1.504, 0.6, 0.5], [1.742, 0.25, 0.3], [2.0, 0.35, 0.4], [2.44, 0.2, 0.25], [2.9, 0.12, 0.2], [0.55, 0.25, 0.12]],
     bend: 0.03, rise: 0.006, hit: [700, 0.03, 0.35], shell: null };
+  // ---- the bass guitar: a plucked string (see above), muted at the note's end ----
+  const bassBus = bus(on('bass') ? 0.2 : 0, 0.12);
+  const bHP = ctx.createBiquadFilter(); bHP.type = 'highpass'; bHP.frequency.value = 35;
+  const bLP = ctx.createBiquadFilter(); bLP.type = 'lowpass'; bLP.frequency.value = 2600; bLP.Q.value = 0.8;
+  const drive = ctx.createWaveShaper(), curve = new Float32Array(1024);
+  for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; curve[i] = Math.tanh(1.8 * x) / Math.tanh(1.8); }
+  drive.curve = curve; bHP.connect(drive).connect(bLP).connect(bassBus);
+  function bass(t0, dur, m, vel) {
+    t0 = at(t0) + rnd(-0.006, 0.006); if (t0 < 0) return;
+    const SR = ctx.sampleRate, f = midi(m), N = Math.max(2, Math.round(SR / f)), L = Math.ceil(SR * (dur + 0.05));
+    const line = new Float32Array(N); let y = 0;
+    for (let i = 0; i < N; i++) { y += 0.3 * (rnd(-1, 1) - y); line[i] = y; }
+    const P = Math.round(N * 0.2), ex = line.slice();
+    for (let i = P; i < N; i++) line[i] = ex[i] - ex[i - P];                // plucked a fifth along: that harmonic gone
+    const b = ctx.createBuffer(1, L, SR), d = b.getChannelData(0), damp = 0.9985 - 0.002 * (f / 200);
+    let k = 0, peak = 1e-6;
+    for (let i = 0; i < L; i++) {
+      const k1 = (k + 1) % N; d[i] = line[k]; line[k] = damp * 0.5 * (line[k] + line[k1]); k = k1;
+      if (i < N * 4) peak = Math.max(peak, Math.abs(d[i]));
+    }
+    const mute = Math.floor(SR * dur);                                     // the finger stops the string
+    for (let i = 0; i < L; i++) d[i] = d[i] / peak * (i < mute ? 1 : Math.max(0, 1 - (i - mute) / (SR * 0.04)));
+    const src = ctx.createBufferSource(); src.buffer = b;
+    const g = ctx.createGain(); g.gain.value = vel * rnd(0.9, 1.05);
+    src.connect(g).connect(bHP); src.start(t0);
+  }
   const roll = (t0, t1, f0, v0, v1, pan, kind = TIMP, step = 0.072) => {  // single strokes, hand to hand, swelling
     for (let t = t0, i = 0; t < t1; t += step * rnd(0.92, 1.08), i++)
       drum(t, f0, v0 + (v1 - v0) * (t - t0) / (t1 - t0), kind, pan + (i % 2 ? 0.08 : -0.08));
@@ -183,6 +215,22 @@ function createSceneMusic(ctx, dest, opts = {}) {
       }
       roll(LIGHT - 1.4, LIGHT + 2.4, midi(38), 0.03, 0.3, -0.2);
       drum(LIGHT + 2.5, midi(38), 0.4, TIMP, -0.2);
+    }
+    if (BASS) {
+      // the bass: none in the night; long notes on the roots as the veil goes; through the drift it drives with the
+      // drums (3 + 3 + 2, the accents with them), growing; silent for the hush; long D's in the light
+      const ROOT = { Dm: 38, Bb: 34, F: 41, C: 36, Gm: 43, A: 45, D: 38 };
+      for (let t = 6.6; t < 11.5; t += BAR) bass(t, BAR * 0.95, ROOT[chordAt(t + 0.05)], 0.35);
+      for (let b = 11.5; b < HUSH - 0.1; b += BAR) {
+        const kk = Math.min(1, (b - 11.5) / (HUSH - 11.5));
+        for (let e = 0; e < 8; e++) {
+          const t = b + e * E8; if (t >= HUSH - 0.1) break;
+          const acc = e === 0 || e === 3 || e === 6, r = ROOT[chordAt(t + 0.02)];
+          if (kk < 0.3 && !acc) continue;
+          bass(t, acc && kk < 0.3 ? E8 * 2.8 : E8 * 0.8, e === 6 && kk > 0.5 ? r + 12 : e === 7 ? r + 7 : r, (acc ? 0.5 : 0.3) + 0.35 * kk);
+        }
+      }
+      for (let t = LIGHT + 2.5; t < END - 0.5; t += BAR) bass(t, BAR * 0.95, 38, 0.4);
     }
   }
   return { output: master, start() { schedule(); }, scheduleUntil() {} };

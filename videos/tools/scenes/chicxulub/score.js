@@ -1,5 +1,5 @@
 // Renders the score (music.js) offline, in a headless page's OfflineAudioContext, to a WAV.
-//   node scenes/chicxulub/score.js <variant> <seconds> [T0] [organ|drums]   -> work/chicxulub/score_<variant>[_only].wav
+//   node scenes/chicxulub/score.js <variant> <seconds> [T0] [organ|drums|bass]   -> work/chicxulub/score_<variant>[_only].wav
 const fs = require('fs'), path = require('path');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
 const [v = 'taiko', T = '22.5', T0 = '0', only = ''] = process.argv.slice(2);
