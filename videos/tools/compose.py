@@ -126,7 +126,7 @@ def frame(sc, i, src):
     for tk in ([tick + (tick[0] - 0.4, tick[1] + 0.8)] if isinstance(tick, tuple) else tick or []):
         t0, t1, y0, y1, a, b = tk
         if a < t < b:
-            year = int(y0 + (y1 - y0) * ease((t - t0) / (t1 - t0)))
+            year = int(y0 + (y1 - y0) * getattr(sc, 'TICKER_EASE', ease)((t - t0) / (t1 - t0)))   # TICKER_EASE: to follow a scene's own easing
             draw_block(img, str(year), f_tick, 330, fade(t, a, b, 0.4), fill=SUN)
     clock = getattr(sc, 'CLOCK_SHOW', None)
     if clock:
