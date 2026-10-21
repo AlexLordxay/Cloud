@@ -396,6 +396,23 @@
         M.u.ref.value = 1.5;
         X.U.sun.value.copy(this.sun); X.U.cloudLon.value = 0.02;
       } },
+    // the long night: the soot (of the fires and of the rock itself), sulphate from Yucatán's gypsum and the finest rock
+    // dust, flung round the world with the ejecta within hours, are carried up by the Sun's heat above the weather and
+    // drawn into a veil over the whole Earth: for a year or two hardly any sunlight reaches the ground (photosynthesis
+    // stops), and it stays cold for years; the dust takes up to ~15 years to settle (Bardeen et al. 2017; Brugger et al.
+    // 2017; Senel et al. 2023). 14 s: the first day (the veil spreading from the Gulf), weeks (thickening, drawn out
+    // into bands by the high winds), months (a dark brown world). The whole Earth, gibbous, waning to a crescent.
+    darkness: { dur: 14,
+      setup(X) { this.S = site(X); },
+      frame(X, t) {
+        const S = this.S, c = S.up, u = t / this.dur;
+        X.U.dark.value.set(c.x, c.y, c.z, lerp(0.6, 3.7, smooth(t / 5.5)));
+        X.U.dark2.value.set(lerp(0.75, 1.0, smooth((t - 1) / 6)), 0.25 * t + 0.02 * t * t, 0.1, 0);
+        const p = X.dirLL(18, -58 + 26 * u).multiplyScalar(lerp(32, 46, smooth(u)));
+        cam(X, p, V(0, 0, 0), 30);
+        // and the world turns away into the dark: the lit side narrowing to a crescent
+        sunFrom(X, p, lerp(-50, -128, smooth((t - 3) / 11)), 10); X.U.cloudLon.value = 0.02 + t * 0.01;
+      } },
     // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
     site_top: { dur: 2,
       frame(X, t) {

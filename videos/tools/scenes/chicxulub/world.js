@@ -29,10 +29,11 @@
     shock: { value: new T.Vector4(1, 0, 0, 0) }, shock2: { value: new T.Vector4(0, 0, 0, 0) },
     hole: { value: new T.Vector4(1, 0, 0, 0) }, dfog: { value: new T.Vector4(0, 0, 0, 0) },
     tsu: { value: new T.Vector4(1, 0, 0, 0) }, tsu2: { value: new T.Vector4(0, 0, 0, 0) },
-    fire: { value: new T.Vector4(1, 0, 0, 0) }, fire2: { value: new T.Vector4(0, 0, 0, 0) } };
+    fire: { value: new T.Vector4(1, 0, 0, 0) }, fire2: { value: new T.Vector4(0, 0, 0, 0) },
+    dark: { value: new T.Vector4(1, 0, 0, 0) }, dark2: { value: new T.Vector4(0, 0, 0, 0) } };
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
     fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel; uniform vec4 pbox; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
-      uniform vec4 fball, shock, shock2, hole, dfog, tsu, tsu2, fire, fire2; uniform float haze, atm;
+      uniform vec4 fball, shock, shock2, hole, dfog, tsu, tsu2, fire, fire2, dark, dark2; uniform float haze, atm;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       float vn(vec3 p) {
@@ -261,6 +262,22 @@
         col = col * Tv + (1.0 - Tv) * sunA * ph * atm * 0.75;
         // the dust and soot ride high, above the weather and most of the air: a brown veil over everything
         if (pall > 0.0) col = mix(col, vec3(0.16, 0.085, 0.035) * (0.15 + 0.85 * max(mu, 0.0)) * sunG, pall);
+        // the long night (dark: the impact site, how far, as an angle, the veil has spread; dark2: how thick, how far the
+        // high winds have run, how much of it is pale dust rather than soot): soot, sulphate and pulverised rock high
+        // above the weather, drawn out by the winds into bands along the latitudes (the jets run at different speeds),
+        // ragged at its spreading edge, thickest where it began; dark brown where the soot is, paler with the dust; lit
+        // only where the Sun still shines on its top
+        if (dark2.x > 0.0) {
+          float lat = asin(clamp(n.y, -1.0, 1.0)), sh = dark2.y * (0.5 + 0.9 * cos(lat * 2.0) + 0.4 * sin(lat * 5.0));
+          vec3 m = vec3(cos(sh) * n.x - sin(sh) * n.z, n.y, sin(sh) * n.x + cos(sh) * n.z);
+          float band = fb(vec3(m.x * 3.0, m.y * 18.0, m.z * 3.0) + 5.0) * 0.5 + fb(m * 9.0 + 4.0) * 0.5, thick = fb(m * 2.2 + 2.0);
+          float da = acos(clamp(dot(n, dark.xyz), -1.0, 1.0));
+          float reach = 1.0 - smoothstep(dark.w - 0.3, dark.w, da + 0.4 * fb(m * 4.0 + 8.0));
+          float op = clamp(dark2.x * reach * (0.8 + 0.25 * thick + 0.06 * band) * (1.0 + 0.3 * exp(-da / 0.5)), 0.0, 1.0);
+          vec3 vc = mix(vec3(0.012, 0.0095, 0.0075), vec3(0.036, 0.029, 0.022), clamp(dark2.z + 0.3 * band + 0.3 * thick, 0.0, 1.0));
+          // what light gets through has to come down through it and back up again
+          col = col * (1.0 - op) * (1.0 - op) + vc * max(mu, 0.0) * 2.4 * sunG * op;
+        }
         if (shock.w > 0.0) {
           float dn = fb(n * 900.0 + 3.0) * 0.5 + 0.5;
           col = mix(col, vec3(0.16, 0.12, 0.09) * (0.15 + 0.85 * max(mu, 0.0)) * (0.7 + 0.6 * dn), inside * shock2.w);
@@ -290,7 +307,7 @@
   // at dusk a red-orange layer on the horizon. A hair of glow is let inside the limb, over the mesh's facet gaps.
   const halo = new T.Mesh(new T.SphereGeometry(ER * 1.035, 256, 128), new T.ShaderMaterial({ uniforms: U, vertexShader: VS,
     transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.FrontSide,
-    fragmentShader: `uniform vec3 sun, C; uniform float R, dim, atm; uniform vec4 fire, fire2; varying vec3 vW;
+    fragmentShader: `uniform vec3 sun, C; uniform float R, dim, atm; uniform vec4 fire, fire2, dark, dark2; varying vec3 vW;
       // the air (Rayleigh): extinction per unit (1000 km) at sea level for red, green, blue; scale height 8 km;
       // the air mass along a slant (Kasten–Young), so the Sun near the horizon shines through much more air
       const vec3 BETA = vec3(5.8, 13.5, 33.1); const float HS = 0.008;
@@ -317,6 +334,12 @@
           float G = smoothstep(-0.1, 0.5, s0) * (0.75 + 0.25 * exp(-max(s0, 0.0) / 1.5) + 0.8 * exp(-pow((s0 - 0.25) / 0.3, 2.0)));
           float lump = 1.0 + 0.5 * sin(dot(up, vec3(23.0, 17.0, 31.0))) * sin(dot(up, vec3(-13.0, 29.0, 7.0)) + 1.3);
           L += vec3(1.0, 0.36, 0.11) * fire2.y * 14.0 * G * mix(1.0, lump, 0.4) * exp(-pow((h - 0.08) / 0.03, 2.0));
+        }
+        if (dark2.x > 0.0) {
+          // under the long night the blue sky is gone: a brown haze, thick and low, where the veil has reached
+          float k = dark2.x * (1.0 - smoothstep(dark.w - 0.35, dark.w, acos(clamp(dot(up, dark.xyz), -1.0, 1.0))));
+          vec3 hz = lit * ph * vec3(0.5, 0.34, 0.2) * 0.5 * exp(-h / 0.03) * smoothstep(0.0, 0.004, h);
+          L = mix(L, hz, clamp(k, 0.0, 1.0) * 0.9);
         }
         gl_FragColor = vec4(L * (1.0 - dim), 1.0);
       }` }));
@@ -761,7 +784,7 @@
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0); U.tsu.value.set(1, 0, 0, 0); U.tsu2.value.set(0, 0, 0, 0); U.fire.value.set(1, 0, 0, 0); U.fire2.value.set(0, 0, 0, 0);
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0); U.tsu.value.set(1, 0, 0, 0); U.tsu2.value.set(0, 0, 0, 0); U.fire.value.set(1, 0, 0, 0); U.fire2.value.set(0, 0, 0, 0); U.dark.value.set(1, 0, 0, 0); U.dark2.value.set(0, 0, 0, 0);
     head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };
