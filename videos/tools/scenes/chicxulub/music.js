@@ -15,9 +15,10 @@
 // time round, as a real string does; through a pickup (low-pass and a little drive, so its growl carries on a phone).
 //
 // Variants (opts.v): 'taiko' — organ and a taiko ensemble; 'timp' — organ and orchestral kettle drums (rolls);
-// 'organ' — organ alone; 'taiko_bass', 'timp_bass' — with the bass guitar. opts.T0: the film time at which the music starts (cues below are in film seconds of the
-// test clip: the end of the long night 0–6 s, the finale 6–22 s: the veil going 6–9.5, the snow melting 9.5–11.5, the
-// drift 11.5–21, today's Earth from ~21).
+// 'organ' — organ alone; 'taiko_bass', 'timp_bass' — with the bass guitar; 'epic' — a film orchestra (my own take);
+// 'dune' — organ, clock, wind, metal, hand drums and a duduk-like voice. opts.T0: the film time at which the music
+// starts (cues below are in film seconds of the test clip: the end of the long night 0–6 s, the finale 6–22.5 s: the veil
+// going 6–9.5, the snow melting 9.5–11.5, the drift 11.5–21, today's Earth from ~20, held to 24.5).
 function createSceneMusic(ctx, dest, opts = {}) {
   const V = (opts.v || 'taiko').split('_')[0], BASS = /_bass$/.test(opts.v || '') || V === 'epic';
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
@@ -185,6 +186,71 @@ function createSceneMusic(ctx, dest, opts = {}) {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(1, t1 - 0.02); g.gain.linearRampToValueAtTime(0, t1);
     n.connect(hp).connect(g).connect(fxBus); n.start(t0); n.stop(t1 + 0.05);
   }
+  // ---- 'dune': in the spirit of the desert and space-film scores (no quotation) — the organ's clock, a clock's tick,
+  // the wind over sand, struck and bowed metal far off, frame drums played by hand, and a lone voice like a duduk's:
+  // a reed tone through the "a" vowel's formants with breath in it, sliding between notes, turning round them
+  // (grace notes), its vibrato coming in late on the long ones ----
+  const voxBus = bus(on('organ') ? 0.16 : 0, 0.8), windBus = bus(on('organ') ? 0.05 : 0, 0.5), metBus = bus(on('organ') ? 0.05 : 0, 0.9),
+    tickBus = bus(on('drums') ? 0.05 : 0, 0.5);
+  function vox(phrase, level) {                       // phrase: [time, length, midi, grace?] — one breath, legato
+    const t0 = at(phrase[0][0]) - 0.05, last = phrase[phrase.length - 1], t1 = at(last[0] + last[1]);
+    if (t1 <= 0) return;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    const o2 = ctx.createOscillator(); o2.type = 'triangle';
+    const fq = [o.frequency, o2.frequency];
+    for (const f of fq) f.setValueAtTime(midi(phrase[0][2]), Math.max(0, t0));
+    const vib = ctx.createOscillator(), vd = ctx.createGain(); vib.frequency.value = 5.3; vd.gain.value = 0;
+    vib.connect(vd); vd.connect(o.detune); vd.connect(o2.detune);
+    const amp = ctx.createGain(); amp.gain.setValueAtTime(0, Math.max(0, t0));
+    for (const [t, d, m, grace] of phrase) {
+      const a = at(t);
+      if (grace) for (const f of fq) { f.setTargetAtTime(midi(m + grace), a - 0.09, 0.012); f.setTargetAtTime(midi(m), a - 0.03, 0.015); }
+      else for (const f of fq) f.setTargetAtTime(midi(m), a, 0.035);
+      amp.gain.setTargetAtTime(level * (0.75 + 0.25 * Math.min(1, d)), a, 0.08);
+      amp.gain.setTargetAtTime(level * 0.85, a + d * 0.6, 0.2);
+      vd.gain.setTargetAtTime(0, a, 0.03); if (d > 0.6) vd.gain.setTargetAtTime(14, a + 0.35, 0.25);
+    }
+    amp.gain.setTargetAtTime(0, t1 - 0.15, 0.12);
+    const bands = [[800, 1, 4], [1150, 0.6, 5], [2900, 0.25, 6]].map(([f, g, q]) => {
+      const b = ctx.createBiquadFilter(); b.type = 'bandpass'; b.frequency.value = f; b.Q.value = q;
+      const bg = ctx.createGain(); bg.gain.value = g * 3; b.connect(bg).connect(amp); return b;
+    });
+    const mix = ctx.createGain(); mix.gain.value = 0.6; o.connect(mix); o2.connect(mix); for (const b of bands) mix.connect(b);
+    const n = ctx.createBufferSource(); n.buffer = noise; n.loop = true;                       // the breath in the reed
+    const nb = ctx.createBiquadFilter(); nb.type = 'bandpass'; nb.frequency.value = 1500; nb.Q.value = 0.8;
+    const ng = ctx.createGain(); ng.gain.value = 0.12; n.connect(nb).connect(ng).connect(amp);
+    amp.connect(voxBus);
+    const end = t1 + 0.8;
+    for (const x of [o, o2, vib, n]) { x.start(Math.max(0, t0)); x.stop(end); }
+  }
+  function wind(t0, t1, level) {                     // wind over the dunes: noise through a slowly wandering band
+    t0 = at(t0); t1 = at(t1);
+    for (const pan of [-0.5, 0.5]) {
+      const n = ctx.createBufferSource(); n.buffer = noise; n.loop = true; n.playbackRate.value = rnd(0.7, 0.9);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.6;
+      for (let t = t0, f = rnd(300, 700); t < t1; t += 1.2) { bp.frequency.linearRampToValueAtTime(f, t); f = Math.min(1400, Math.max(220, f * rnd(0.7, 1.4))); }
+      const g = env(t0, (t1 - t0) * 0.4, (t1 - t0) * 0.2, (t1 - t0) * 0.4, level);
+      const p = ctx.createStereoPanner(); p.pan.value = pan;
+      n.connect(bp).connect(g).connect(p).connect(windBus); n.start(t0, rnd(0, 1.5)); n.stop(t1 + 0.1);
+    }
+  }
+  function metal(t, m, vel, bowed) {                 // a struck (or bowed) metal bar: inharmonic partials, long ring
+    t = at(t); if (t < 0) return;
+    const g = ctx.createGain(); g.connect(metBus);
+    if (bowed) { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 1.8); g.gain.exponentialRampToValueAtTime(0.0008, t + 5); }
+    else { g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 0.003); g.gain.exponentialRampToValueAtTime(0.0008, t + 4); }
+    for (const [r, a] of [[1, 1], [2.76, 0.5], [5.4, 0.25], [8.93, 0.12]]) {
+      const ag = ctx.createGain(); ag.gain.value = a; ag.connect(g);
+      const x = ctx.createOscillator(); x.frequency.value = midi(m) * r * rnd(0.998, 1.002); x.connect(ag); x.start(t); x.stop(t + 5.1);
+    }
+  }
+  function tick(t, vel) {                            // a clock's tick: a small hard click with a woody ring
+    t = at(t) + rnd(-0.002, 0.002); if (t < 0) return;
+    const g = ctx.createGain(); g.connect(tickBus);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 0.001); g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    for (const [f, a] of [[1900, 1], [3300, 0.5], [5200, 0.3]]) { const ag = ctx.createGain(); ag.gain.value = a; ag.connect(g);
+      const x = ctx.createOscillator(); x.frequency.value = f; x.connect(ag); x.start(t); x.stop(t + 0.08); }
+  }
   // ---- the bass guitar: a plucked string (see above), muted at the note's end ----
   const bassBus = bus(on('bass') ? 0.2 : 0, 0.12);
   const bHP = ctx.createBiquadFilter(); bHP.type = 'highpass'; bHP.frequency.value = 35;
@@ -211,6 +277,9 @@ function createSceneMusic(ctx, dest, opts = {}) {
     const g = ctx.createGain(); g.gain.value = vel * rnd(0.9, 1.05);
     src.connect(g).connect(bHP); src.start(t0);
   }
+  // a big frame drum, struck with the hand: the membrane's modes, a duller slap than a stick's, no shell
+  const FRAME = { modes: MEMB.map(([r, a], i) => [r, a, [0.4, 0.22, 0.15, 0.13, 0.1, 0.08, 0.07, 0.06][i]]), bend: 0.06, rise: 0.006,
+    hit: [900, 0.03, 0.4], shell: null };
   const roll = (t0, t1, f0, v0, v1, pan, kind = TIMP, step = 0.072) => {  // single strokes, hand to hand, swelling
     for (let t = t0, i = 0; t < t1; t += step * rnd(0.92, 1.08), i++)
       drum(t, f0, v0 + (v1 - v0) * (t - t0) / (t1 - t0), kind, pan + (i % 2 ? 0.08 : -0.08));
@@ -235,19 +304,21 @@ function createSceneMusic(ctx, dest, opts = {}) {
       }
       // held chords that breathe
       PLAN.forEach(([s, k], i) => {
-        if (s >= LIGHT) return;
+        if (s >= LIGHT || (V === 'dune' && s < 6)) return;                // ('dune': the night is the wind's and the voice's)
         const e = i + 1 < PLAN.length ? Math.min(PLAN[i + 1][0], HUSH) : HUSH, w = wave((s + e) / 2);
         for (const m of CH[k]) organ(s, e + 0.4, m + 12, w > 0.5 ? MID : FL, 0.07 + 0.2 * w, 800 + 2500 * w, Math.min(1.8, (e - s) * 0.5), 1.2);
       });
-      // the night: one slow line in the middle register
-      organ(0, 5.6, 62, FL, 0.1, 1200, 2.5, 1.5); organ(2.8, 5.6, 65, FL, 0.08, 1200, 1.5, 1.2);
-      // a high line over the rise
-      organ(15.0, 16.9, 77, FL, 0.13, 3000, 1.2, 0.6); organ(17.0, HUSH, 79, FL, 0.13, 3000, 0.6, 0.4);
+      if (V !== 'dune') {
+        // the night: one slow line in the middle register
+        organ(0, 5.6, 62, FL, 0.1, 1200, 2.5, 1.5); organ(2.8, 5.6, 65, FL, 0.08, 1200, 1.5, 1.2);
+        // a high line over the rise
+        organ(15.0, 16.9, 77, FL, 0.13, 3000, 1.2, 0.6); organ(17.0, HUSH, 79, FL, 0.13, 3000, 0.6, 0.4);
+      }
       // the hush: the figure stops, one high note hangs on into the light
       organ(HUSH - 0.1, LIGHT + 1.6, 81, FL, 0.12, 2500, 0.3, 1.0);
       // today: D major breathes in over ~2.5 s, full, and stays
       for (const m of [50, 54, 57, 62, 66, 69]) organ(LIGHT - 0.6, END, m, FULL, 0.26, 3600, 2.6, 1.5);
-      organ(LIGHT + 1.0, END, 78, FL, 0.14, 3200, 1.6, 1.2);
+      if (V !== 'dune') organ(LIGHT + 1.0, END, 78, FL, 0.14, 3200, 1.6, 1.2);
     }
 
     if (V === 'taiko') {
@@ -277,6 +348,33 @@ function createSceneMusic(ctx, dest, opts = {}) {
       }
       roll(LIGHT - 1.4, LIGHT + 2.4, midi(38), 0.03, 0.3, -0.2);
       drum(LIGHT + 2.5, midi(38), 0.4, TIMP, -0.2);
+    }
+    if (V === 'dune') {
+      // the night: wind over the sand, metal far off, the voice alone in the desert's mode (D E♭ F♯ G A B♭ C), a hand drum
+      // like a slow heart
+      wind(0, 7.5, 0.5); metal(0.3, 74, 0.25, true); metal(3.4, 69, 0.18, true);
+      vox([[1.0, 1.1, 69, 1], [2.1, 0.4, 70], [2.5, 0.3, 69], [2.8, 0.3, 67], [3.1, 0.7, 66, 1], [3.8, 0.4, 63], [4.2, 1.5, 62]], 0.5);
+      for (let t = 0.6; t < 6; t += 2) { drum(t, 70, 0.35, FRAME, -0.15); drum(t + 0.3, 70, 0.2, FRAME, -0.15); }
+      // the veil going: the organ breathes in (above), the clock starts to tick, the voice once more, in the plain minor
+      for (let t = 6.5; t < HUSH; t += BEAT) tick(t, 0.25 + 0.25 * Math.min(1, (t - 6.5) / 8));
+      vox([[7.0, 1.4, 74, 1], [8.4, 0.45, 72], [8.85, 0.45, 70], [9.3, 1.8, 69, 1]], 0.4);
+      for (let t = 6.6; t < 11.5; t += BAR) drum(t, 70, 0.4, FRAME, -0.15);
+      // the drift: the hand drums in 3 + 3 + 2, more and more of them; the voice high over the rise; metal shimmering
+      for (let b = 11.5; b < HUSH - 0.1; b += BAR) {
+        const k = Math.min(1, (b - 11.5) / (HUSH - 11.5));
+        drum(b, 70, 0.55 + 0.35 * k, FRAME, -0.15); drum(b + 0.015, 52, 0.35 + 0.35 * k, ODAIKO, 0.1);
+        for (const e of k < 0.35 ? [3, 6] : [1, 3, 4, 6, 7]) drum(b + e * E8, e === 3 || e === 6 ? 70 : 130, (e === 3 || e === 6 ? 0.35 : 0.18) + 0.3 * k, FRAME, e % 2 ? 0.4 : -0.35);
+        if (k > 0.5) for (let x = 0; x < 8; x++) drum(b + x * E8, 260, 0.05 + 0.05 * (x % 3 === 0), FRAME, 0.55);
+      }
+      metal(13.0, 81, 0.12, true); metal(16.0, 86, 0.1, true);
+      vox([[15.0, 1.0, 81, 1], [16.0, 1.0, 79, 1], [17.0, 0.8, 82], [17.8, 0.4, 81], [18.2, 0.4, 85]], 0.55);
+      wind(14.5, HUSH, 0.35);
+      // the hush: only the clock goes on, quieter, and the organ's one high note (above)
+      for (let t = HUSH + 0.25; t < LIGHT + 1.5; t += BEAT) tick(t, 0.2 * (1 - (t - HUSH) / 3));
+      // the light: the organ opens into D major (above, no blow); the voice holds above it and settles; the drum rolls softly
+      vox([[LIGHT + 0.6, 1.6, 81, 1], [LIGHT + 2.2, END - LIGHT - 2.4, 78, 1]], 0.45);
+      roll(LIGHT + 0.5, END - 0.6, 70, 0.03, 0.14, 0, FRAME, 0.1);
+      metal(LIGHT + 0.2, 86, 0.12, true);
     }
     if (V === 'epic') {
       const S16 = E8 / 2, voice = k => CH[k].map(m => m + 12).concat([CH[k][0] - 12]);
