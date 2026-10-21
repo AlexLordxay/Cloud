@@ -105,7 +105,7 @@
     // the asteroid on its way (over "a dark rock ten kilometres wide, born somewhere beyond Jupiter, flying at twenty
     // times the speed of a bullet"): close beside it, Jupiter behind it; the camera swings half round the rock until
     // the Earth is ahead. (Jupiter is set much nearer than it ever was, so it shows: an illustration.)
-    approach: { dur: 9,
+    approach: { dur: 10,
       async setup(X) {
         X.JU.map.value = await X.load('/tex/jupiter.jpg');
         X.asteroid.visible = true; X.asteroid.scale.setScalar(0.006);
@@ -120,11 +120,11 @@
         const A = this.A, k = smooth(t / this.dur), a = Math.PI * (1 - k);
         X.asteroid.position.copy(A); X.asteroid.rotation.set(0.3 + t * 0.05, 1.1 + t * 0.18, 0.2);
         // the camera: ~70 km from the rock and a little above it, swinging from the Earth's side of it (Jupiter behind
-        // the rock) round to the far side (the Earth behind it); looking past the rock, so it rides low in the frame and
-        // what lies behind it stands in the middle
+        // the rock) round to the far side (the Earth behind it); looking a little down past the rock, so it sits just
+        // below the middle (clear of a short's captions and buttons) and what lies behind it stands just above
         const R = this.out.clone().multiplyScalar(Math.cos(a)).addScaledVector(this.side, Math.sin(a)).normalize(), up = V(0, 1, 0);
-        const pos = A.clone().addScaledVector(R, 0.07).addScaledVector(up, 0.012);
-        cam(X, pos, A.clone().addScaledVector(R, -0.3).addScaledVector(up, 0.03), 34, up, 0.001);
+        const pos = A.clone().addScaledVector(R, 0.07).addScaledVector(up, 0.0136);
+        cam(X, pos, A.clone().addScaledVector(R, -0.3).addScaledVector(up, -0.0253), 34, up, 0.001);
         X.U.sun.value.copy(this.sun); X.U.cloudLon.value = 0.02; X.AU.exposure.value = 0.55;   // a dark, carbonaceous rock
       } },
     // into the air: the last seconds above Yucatán seen from the side, from ~250 km up to the south-east. It lights up
