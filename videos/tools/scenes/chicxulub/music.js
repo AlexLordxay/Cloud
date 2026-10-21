@@ -19,7 +19,7 @@
 // test clip: the end of the long night 0–6 s, the finale 6–22 s: the veil going 6–9.5, the snow melting 9.5–11.5, the
 // drift 11.5–21, today's Earth from ~21).
 function createSceneMusic(ctx, dest, opts = {}) {
-  const V = (opts.v || 'taiko').split('_')[0], BASS = /_bass$/.test(opts.v || '');
+  const V = (opts.v || 'taiko').split('_')[0], BASS = /_bass$/.test(opts.v || '') || V === 'epic';
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
   let seed = opts.seed || 11;
   const rnd = (a, b) => a + ((seed = (seed * 16807) % 2147483647) / 2147483647) * (b - a);
@@ -125,6 +125,66 @@ function createSceneMusic(ctx, dest, opts = {}) {
   // kettle drum: the air in the bowl pulls the modes near 1 : 1.5 : 2 : 2.5 : 3 (the "principal" sings), felt mallet
   const TIMP = { modes: [[1, 1, 0.6], [1.504, 0.6, 0.5], [1.742, 0.25, 0.3], [2.0, 0.35, 0.4], [2.44, 0.2, 0.25], [2.9, 0.12, 0.2], [0.55, 0.25, 0.12]],
     bend: 0.03, rise: 0.006, hit: [700, 0.03, 0.35], shell: null };
+  // ---- 'epic': a film orchestra (my own take, not the author's taste) — string sections (many detuned saws, each with
+  // its own vibrato, through the body's resonances), spiccato basses and cellos, horns (filter opening with the breath),
+  // a choir's "ah" (two vowel formants), a cymbal swell ----
+  const O = on('organ') ? 1.6 : 0, strBus = bus(0.12 * O, 0.7), hornBus = bus(0.07 * O, 0.6),
+    choirBus = bus(0.05 * O, 0.9), spicBus = bus(0.13 * O, 0.3), fxBus = bus(on('drums') ? 0.05 : 0, 0.7);
+  function section(t0, t1, m, level, att = 0.8, rel = 1.2, cut = 2600) {
+    t0 = at(t0); t1 = at(t1); if (t1 <= t0) return;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cut; lp.Q.value = 0.4;
+    const pk = ctx.createBiquadFilter(); pk.type = 'peaking'; pk.frequency.value = 2800; pk.Q.value = 1.2; pk.gain.value = 4;
+    const g = env(t0, att, Math.max(0, t1 - t0 - att), rel, level);
+    lp.connect(pk).connect(g).connect(strBus);
+    for (let v = 0; v < 6; v++) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = midi(m); o.detune.value = rnd(-14, 14);
+      const lfo = ctx.createOscillator(), ld = ctx.createGain(); lfo.frequency.value = rnd(4.6, 5.8); ld.gain.value = rnd(6, 11);
+      lfo.connect(ld).connect(o.detune); const p = ctx.createStereoPanner(); p.pan.value = rnd(-0.6, 0.6);
+      const vg = ctx.createGain(); vg.gain.value = 1 / 6;
+      o.connect(vg).connect(p).connect(lp); o.start(t0, rnd(0, 0.02)); o.stop(t1 + rel + 0.1); lfo.start(t0); lfo.stop(t1 + rel + 0.1);
+    }
+  }
+  function spic(t, m, vel) {
+    t = at(t) + rnd(-0.004, 0.004); if (t < 0) return;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.1;
+    lp.frequency.setValueAtTime(2400, t); lp.frequency.exponentialRampToValueAtTime(600, t + 0.11);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vel, t + 0.005); g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    lp.connect(g).connect(spicBus);
+    for (const c of [-9, 0, 9]) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = midi(m); o.detune.value = c; o.connect(lp); o.start(t); o.stop(t + 0.17); }
+    const n = ctx.createBufferSource(); n.buffer = noise; const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3000; bp.Q.value = 1;
+    const ng = ctx.createGain(); ng.gain.setValueAtTime(vel * 0.15, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    n.connect(bp).connect(ng).connect(spicBus); n.start(t, rnd(0, 1.5)); n.stop(t + 0.04);         // the bow's bite
+  }
+  function hornNote(t0, t1, m, level, att = 0.18) {
+    t0 = at(t0); t1 = at(t1); if (t1 <= t0) return;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.7;
+    lp.frequency.setValueAtTime(300, t0); lp.frequency.linearRampToValueAtTime(1500 + 900 * level, t0 + Math.min(0.5, (t1 - t0) * 0.5));
+    lp.frequency.setValueAtTime(1500 + 900 * level, t1); lp.frequency.linearRampToValueAtTime(400, t1 + 0.5);
+    const g = env(t0, att, Math.max(0, t1 - t0 - att), 0.5, level); lp.connect(g).connect(hornBus);
+    for (const c of [-7, 0, 6]) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = midi(m); o.detune.value = c;
+      const lfo = ctx.createOscillator(), ld = ctx.createGain(); lfo.frequency.value = 5; ld.gain.setValueAtTime(0, t0); ld.gain.linearRampToValueAtTime(7, t0 + 0.6);
+      lfo.connect(ld).connect(o.detune); o.connect(lp); o.start(t0); o.stop(t1 + 0.6); lfo.start(t0); lfo.stop(t1 + 0.6);
+    }
+  }
+  function choir(t0, t1, m, level, att = 1.5) {
+    t0 = at(t0); t1 = at(t1); if (t1 <= t0) return;
+    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = 730; f1.Q.value = 2.5;
+    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = 1090; f2.Q.value = 3.5;
+    const g = env(t0, att, Math.max(0, t1 - t0 - att), 1.8, level); f1.connect(g); f2.connect(g); g.connect(choirBus);
+    for (let v = 0; v < 5; v++) {
+      const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = midi(m); o.detune.value = rnd(-16, 16);
+      const lfo = ctx.createOscillator(), ld = ctx.createGain(); lfo.frequency.value = rnd(4.5, 5.6); ld.gain.value = 10;
+      lfo.connect(ld).connect(o.detune); o.connect(f1); o.connect(f2); o.start(t0); o.stop(t1 + 2); lfo.start(t0); lfo.stop(t1 + 2);
+    }
+  }
+  function swell(t0, t1) {                                                  // a cymbal rolled with soft mallets, rising
+    t0 = at(t0); t1 = at(t1);
+    const n = ctx.createBufferSource(); n.buffer = noise; n.loop = true;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.setValueAtTime(2500, t0); hp.frequency.exponentialRampToValueAtTime(5000, t1);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(1, t1 - 0.02); g.gain.linearRampToValueAtTime(0, t1);
+    n.connect(hp).connect(g).connect(fxBus); n.start(t0); n.stop(t1 + 0.05);
+  }
   // ---- the bass guitar: a plucked string (see above), muted at the note's end ----
   const bassBus = bus(on('bass') ? 0.2 : 0, 0.12);
   const bHP = ctx.createBiquadFilter(); bHP.type = 'highpass'; bHP.frequency.value = 35;
@@ -166,27 +226,29 @@ function createSceneMusic(ctx, dest, opts = {}) {
     const HUSH = 18.6, LIGHT = 20.0, END = opts.T || 24.5;
     // loudness through the clip: low in the night, a swell as the veil goes, back down, one long rise through the drift
     const wave = t => t < 5 ? 0.15 : t < 9 ? 0.15 + 0.3 * (t - 5) / 4 : t < 11.5 ? 0.45 - 0.2 * (t - 9) / 2.5 : 0.25 + 0.75 * Math.min(1, (t - 11.5) / (HUSH - 11.5));
-    // the figure (root, fifth, octave over and over, so it falls in threes across the bar), from the veil going on
-    for (let t = 8, i = 0; t < HUSH - 0.05; t += E8, i++) {
-      const d = wave(t), ch = CH[chordAt(t)], m = [ch[0], ch[0] + 7, ch[0] + 12][i % 3];
-      organ(t, t + E8 * 0.9, m, d > 0.55 ? MID : FL, 0.08 + 0.22 * d, 1000 + 3000 * d, 0.01, 0.12);
-      if (d > 0.5) organ(t, t + E8 * 0.9, m + 12, FL, 0.04 + 0.12 * (d - 0.5), 2500, 0.01, 0.12);
+    if (V !== 'epic') {
+      // the figure (root, fifth, octave over and over, so it falls in threes across the bar), from the veil going on
+      for (let t = 8, i = 0; t < HUSH - 0.05; t += E8, i++) {
+        const d = wave(t), ch = CH[chordAt(t)], m = [ch[0], ch[0] + 7, ch[0] + 12][i % 3];
+        organ(t, t + E8 * 0.9, m, d > 0.55 ? MID : FL, 0.08 + 0.22 * d, 1000 + 3000 * d, 0.01, 0.12);
+        if (d > 0.5) organ(t, t + E8 * 0.9, m + 12, FL, 0.04 + 0.12 * (d - 0.5), 2500, 0.01, 0.12);
+      }
+      // held chords that breathe
+      PLAN.forEach(([s, k], i) => {
+        if (s >= LIGHT) return;
+        const e = i + 1 < PLAN.length ? Math.min(PLAN[i + 1][0], HUSH) : HUSH, w = wave((s + e) / 2);
+        for (const m of CH[k]) organ(s, e + 0.4, m + 12, w > 0.5 ? MID : FL, 0.07 + 0.2 * w, 800 + 2500 * w, Math.min(1.8, (e - s) * 0.5), 1.2);
+      });
+      // the night: one slow line in the middle register
+      organ(0, 5.6, 62, FL, 0.1, 1200, 2.5, 1.5); organ(2.8, 5.6, 65, FL, 0.08, 1200, 1.5, 1.2);
+      // a high line over the rise
+      organ(15.0, 16.9, 77, FL, 0.13, 3000, 1.2, 0.6); organ(17.0, HUSH, 79, FL, 0.13, 3000, 0.6, 0.4);
+      // the hush: the figure stops, one high note hangs on into the light
+      organ(HUSH - 0.1, LIGHT + 1.6, 81, FL, 0.12, 2500, 0.3, 1.0);
+      // today: D major breathes in over ~2.5 s, full, and stays
+      for (const m of [50, 54, 57, 62, 66, 69]) organ(LIGHT - 0.6, END, m, FULL, 0.26, 3600, 2.6, 1.5);
+      organ(LIGHT + 1.0, END, 78, FL, 0.14, 3200, 1.6, 1.2);
     }
-    // held chords that breathe
-    PLAN.forEach(([s, k], i) => {
-      if (s >= LIGHT) return;
-      const e = i + 1 < PLAN.length ? Math.min(PLAN[i + 1][0], HUSH) : HUSH, w = wave((s + e) / 2);
-      for (const m of CH[k]) organ(s, e + 0.4, m + 12, w > 0.5 ? MID : FL, 0.07 + 0.2 * w, 800 + 2500 * w, Math.min(1.8, (e - s) * 0.5), 1.2);
-    });
-    // the night: one slow line in the middle register
-    organ(0, 5.6, 62, FL, 0.1, 1200, 2.5, 1.5); organ(2.8, 5.6, 65, FL, 0.08, 1200, 1.5, 1.2);
-    // a high line over the rise
-    organ(15.0, 16.9, 77, FL, 0.13, 3000, 1.2, 0.6); organ(17.0, HUSH, 79, FL, 0.13, 3000, 0.6, 0.4);
-    // the hush: the figure stops, one high note hangs on into the light
-    organ(HUSH - 0.1, LIGHT + 1.6, 81, FL, 0.12, 2500, 0.3, 1.0);
-    // today: D major breathes in over ~2.5 s, full, and stays
-    for (const m of [50, 54, 57, 62, 66, 69]) organ(LIGHT - 0.6, END, m, FULL, 0.26, 3600, 2.6, 1.5);
-    organ(LIGHT + 1.0, END, 78, FL, 0.14, 3200, 1.6, 1.2);
 
     if (V === 'taiko') {
       // a heartbeat in the night, far off; then the ensemble wakes through the drift and grows; silent for the hush;
@@ -215,6 +277,55 @@ function createSceneMusic(ctx, dest, opts = {}) {
       }
       roll(LIGHT - 1.4, LIGHT + 2.4, midi(38), 0.03, 0.3, -0.2);
       drum(LIGHT + 2.5, midi(38), 0.4, TIMP, -0.2);
+    }
+    if (V === 'epic') {
+      const S16 = E8 / 2, voice = k => CH[k].map(m => m + 12).concat([CH[k][0] - 12]);
+      // the night: low strings barely there, a lone horn far off with the theme's first words, the heartbeat
+      for (const m of voice('Dm')) section(0, 6.4, m - 12, 0.18, 2.5, 1.5, 1200);
+      hornNote(1.4, 2.9, 62, 0.25, 0.4); hornNote(3.0, 3.9, 69, 0.22, 0.25); hornNote(4.0, 5.8, 65, 0.2, 0.3);
+      for (let t = 0.6; t < 6; t += 2) { drum(t, 50, 0.35, ODAIKO, -0.1); drum(t + 0.32, 50, 0.2, ODAIKO, -0.1); }
+      // the veil going: the strings swell through B♭ and F, the choir comes in, kettle drums murmur
+      for (const [t0, t1, k] of [[6, 8.2, 'Bb'], [8, 11.7, 'F']]) for (const m of voice(k)) section(t0, t1, m, 0.3, 1.5, 1.2, 2000);
+      for (const m of [65, 69, 72]) choir(7.5, 11.6, m, 0.25, 2.5);
+      roll(9.4, 11.4, midi(38), 0.02, 0.15, 0.2);
+      // the drift: spiccato sixteenths on the roots, the theme in the horns (and the strings an octave up), the whole
+      // ensemble of drums, growing all the way to the hush
+      const THEME = [[11.5, 1.0, 62], [12.5, 0.5, 69], [13.0, 1.0, 70], [14.0, 0.5, 69], [14.5, 1.0, 72], [15.5, 0.25, 70],
+        [15.75, 0.25, 69], [16.0, 1.0, 67], [17.0, 0.8, 70], [17.8, 0.4, 69], [18.2, 0.4, 73]];
+      for (const [t, d, m] of THEME) {
+        const k = (t - 11.5) / (HUSH - 11.5);
+        hornNote(t, t + d * 0.95, m, 0.45 + 0.4 * k); hornNote(t, t + d * 0.95, m - 12, 0.3 + 0.3 * k);
+        if (k > 0.35) section(t, t + d, m + 12, 0.12 + 0.2 * k, 0.08, 0.3, 3200);
+      }
+      PLAN.forEach(([t0, kk], i) => {
+        if (t0 < 11.5 || t0 >= HUSH) return;
+        const t1 = Math.min(PLAN[i + 1][0], HUSH), k = (t0 - 11.5) / (HUSH - 11.5);
+        for (const m of voice(kk)) section(t0, t1 + 0.1, m, 0.22 + 0.25 * k, 0.3, 0.15, 1800 + 1800 * k);
+        for (const m of CH[kk]) choir(t0, t1 + 0.1, m + 12, 0.18 + 0.25 * k, 0.4);
+      });
+      const OST = [0, 0, 12, 0, 7, 0, 12, 0];
+      for (let t = 11.5, i = 0; t < HUSH - 0.05; t += S16, i++) {
+        const k = (t - 11.5) / (HUSH - 11.5), r = CH[chordAt(t + 0.01)][0] - 12;
+        spic(t, r + OST[i % 8], (i % 4 === 0 ? 0.5 : 0.3) * (0.5 + 0.7 * k));
+      }
+      for (let b = 11.5; b < HUSH - 0.1; b += BAR) {
+        const k = Math.min(1, (b - 11.5) / (HUSH - 11.5));
+        drum(b, 50, 0.65 + 0.35 * k, ODAIKO, -0.1); drum(b + 0.012, 52, 0.45 + 0.3 * k, ODAIKO, 0.2);
+        for (const e of k < 0.35 ? [3, 6] : [1, 3, 4, 6, 7]) drum(b + e * E8, 96, (e === 3 || e === 6 ? 0.35 : 0.2) + 0.35 * k, NAGADO, e % 2 ? 0.35 : -0.3);
+        if (k > 0.4) for (const e of [0, 3, 6]) drum(b + e * E8, midi(e === 3 ? 33 : 38), 0.3 + 0.3 * k, TIMP, 0.15);
+      }
+      swell(HUSH - 2.0, HUSH);
+      // the hush: a cut, one high string note left hanging
+      section(HUSH, LIGHT + 0.8, 81, 0.16, 0.05, 1.0, 4000);
+      // the light: D major, all of it — one great hit, then the theme lifting: F♯, A, up to D
+      drum(LIGHT, 50, 1.0, ODAIKO, 0); drum(LIGHT + 0.01, 48, 0.8, ODAIKO, 0.3); drum(LIGHT, midi(38), 0.7, TIMP, -0.2);
+      for (const m of [38, 45, 50]) hornNote(LIGHT, LIGHT + 1.6, m, 0.7, 0.06);
+      for (const m of voice('D').concat([66 + 12, 69 + 12])) section(LIGHT, END, m, 0.34, 0.25, 1.5, 3400);
+      for (const m of [62, 66, 69, 74]) choir(LIGHT, END, m + 12, 0.3, 0.6);
+      for (const [t, d, m] of [[LIGHT + 0.6, 1.0, 66], [LIGHT + 1.6, 1.0, 69], [LIGHT + 2.6, END - LIGHT - 2.6, 74]]) {
+        hornNote(t, t + d, m, 0.75); section(t, t + d, m + 12, 0.3, 0.15, 1.0, 3800);
+      }
+      roll(LIGHT + 2.2, END - 0.5, midi(38), 0.03, 0.18, -0.2);
     }
     if (BASS) {
       // the bass: none in the night; long notes on the roots as the veil goes; through the drift it drives with the
