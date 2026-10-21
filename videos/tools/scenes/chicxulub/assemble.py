@@ -12,39 +12,51 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TOOLS = os.path.abspath(os.path.join(HERE, '../..'))
 WORK = os.path.join(TOOLS, 'work', 'chicxulub')
 FPS, XF, PAUSE, ASK = 30, 0.8, 0.45, 2.0             # frame rate; each dissolve; between phrases; before the question
-# (shot, rendered length, length on the cut): a few shown a touch slower (≤ 8 %, unseen) so each phrase stays on its own
-# shot after the re-recorded phrases came out longer
-SHOTS = [('hook', 6, 6), ('kpg_earth', 11, 11), ('approach', 10, 10.6), ('entry', 7.5, 8.3), ('impact', 10, 10.5),
-         ('crater', 10, 10.6), ('tsunami', 8, 8), ('tsunami_globe', 9, 9), ('fire_rain', 12, 12), ('darkness', 15.5, 15.5),
-         ('finale', 26, 26)]
-START = {}
-_t = 0.0
-for _n, _r, _d in SHOTS:
-    START[_n] = _t; _t += _d - XF
-SHOTS_END = _t + XF
+# (shot, rendered length): each is shown at least that long, and longer (a touch slower, unseen) where its phrase needs
+# it, so no phrase or caption runs over into the next shot
+SHOTS = [('hook', 6), ('kpg_earth', 11), ('approach', 10), ('entry', 7.5), ('impact', 10), ('crater', 10),
+         ('tsunami', 8), ('tsunami_globe', 9), ('fire_rain', 12), ('darkness', 15.5), ('finale', 26)]
 # the phrases: the file, where the words start and end in it, where its trailing breath ends (a cut there clips no
-# ending), and where it would like to start on the cut — (shot, s into it), or None: right after the one before.
-# Phrases 3, 6 and 7 re-recorded for the stress (завши́ршки, завви́шки, удвадця́теро): fix3/6/7.mp3.
-PHRASES = [('voice.mp3', 0.00, 5.42, 5.72, ('hook', 0.1)),
-           ('voice.mp3', 6.03, 16.65, 16.91, ('hook', 6.03)),
-           ('fix3.mp3', 0.00, 8.57, 8.75, ('hook', 17.17)),
-           ('voice.mp3', 25.94, 32.31, 32.56, ('entry', 1.0)),
-           ('voice.mp3', 32.82, 41.57, 41.81, ('impact', 0.9)),
-           ('fix6.mp3', 0.00, 8.28, 8.43, ('crater', 0.6)),
-           ('fix7.mp3', 0.00, 11.97, 12.19, ('tsunami', 0.5)),
-           ('voice.mp3', 62.19, 71.50, 71.72, ('fire_rain', 0.9)),
-           ('voice.mp3', 71.94, 86.87, 87.11, ('darkness', 0.5)),
-           ('voice.mp3', 87.36, 103.58, 103.85, ('finale', 1.3)),
-           ('voice.mp3', 104.13, 108.62, 108.75, None)]
+# ending), the shot it starts on and how far into it, and the shot it must end within. Phrases 3, 6, 7 re-recorded for
+# the stress (fix3/6/7.mp3; in 3 "удвадцятеро" became "у двадцять разів").
+PHRASES = [('voice.mp3', 0.00, 5.42, 5.72, 'hook', 0.1, 'hook'),
+           ('voice.mp3', 6.03, 16.65, 16.91, 'kpg_earth', 0.6, 'kpg_earth'),
+           ('fix3.mp3', 0.00, 8.80, 8.98, 'approach', 0.9, 'approach'),
+           ('voice.mp3', 25.94, 32.31, 32.56, 'entry', 0.9, 'entry'),
+           ('voice.mp3', 32.82, 41.57, 41.81, 'impact', 0.9, 'impact'),
+           ('fix6.mp3', 0.00, 8.28, 8.43, 'crater', 0.6, 'crater'),
+           ('fix7.mp3', 0.00, 11.97, 12.19, 'tsunami', 0.5, 'tsunami_globe'),
+           ('voice.mp3', 62.19, 71.50, 71.72, 'fire_rain', 0.9, 'fire_rain'),
+           ('voice.mp3', 71.94, 86.87, 87.11, 'darkness', 0.5, 'darkness'),
+           ('voice.mp3', 87.36, 103.58, 103.85, 'finale', 1.3, 'finale'),
+           ('voice.mp3', 104.13, 108.62, 108.75, 'finale', 0, 'finale')]
+
+
+def _layout():
+    """Lay out the shots and the phrases together: each phrase starts where it wants on its shot, never closer than
+    PAUSE (ASK before the question) to the one before; a shot is stretched until its phrases end 0.3 s before the next
+    shot begins to dissolve in. Returns {shot: (start, length on the cut)}, [(file, from, to with breath, at, end)]."""
+    lay, ph, t, end, j = {}, [], 0.0, -PAUSE, 0
+    for name, r in SHOTS:
+        lay[name] = [t, r]
+        while j < len(PHRASES) and PHRASES[j][4] == name:
+            f, a, b, tail, _, off, until = PHRASES[j]
+            at = max(t + off, end + (ASK if j == len(PHRASES) - 1 else PAUSE)); end = at + b - a
+            ph.append((f, a, tail, at, end, until)); j += 1
+        for p in ph:
+            if p[5] == name: lay[name][1] = max(lay[name][1], p[4] + 0.3 - lay[name][0] + XF)
+        t = lay[name][0] + lay[name][1] - XF
+    return {k: tuple(v) for k, v in lay.items()}, [p[:5] for p in ph]
+
+
+LAYOUT, _PLACED = _layout()
+START = {k: v[0] for k, v in LAYOUT.items()}
+SHOTS_END = max(s + d for s, d in LAYOUT.values())
 
 
 def placed():
     """Each phrase: (file, from, to with its breath, at on the cut, words end on the cut)."""
-    out, end = [], -PAUSE
-    for i, (f, a, b, tail, want) in enumerate(PHRASES):
-        at = max(START[want[0]] + want[1] if want else 0, end + (ASK if i == len(PHRASES) - 1 else PAUSE))
-        out.append((f, a, tail, at, at + b - a)); end = at + b - a
-    return out
+    return _PLACED
 
 
 END_CARD = placed()[-1][4] + 0.3
@@ -58,8 +70,8 @@ def _frame(i):
     # frame i of the cut: the shot showing, dissolving into the next one where they overlap; the last frame held
     t = i / FPS
     layers = []
-    for name, r, d in SHOTS:
-        s = t - START[name]
+    for name, r in SHOTS:
+        d = LAYOUT[name][1]; s = t - START[name]
         if -1e-6 <= s < d:
             n = len(os.listdir(os.path.join(WORK, 'shot_' + name)))
             layers.append((name, min(int(s * r / d * FPS + 1e-6), n - 1), min(1.0, s / XF) if name != 'hook' else 1.0))
