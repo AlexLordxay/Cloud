@@ -30,9 +30,12 @@
     hole: { value: new T.Vector4(1, 0, 0, 0) }, dfog: { value: new T.Vector4(0, 0, 0, 0) },
     tsu: { value: new T.Vector4(1, 0, 0, 0) }, tsu2: { value: new T.Vector4(0, 0, 0, 0) },
     fire: { value: new T.Vector4(1, 0, 0, 0) }, fire2: { value: new T.Vector4(0, 0, 0, 0) },
-    dark: { value: new T.Vector4(1, 0, 0, 0) }, dark2: { value: new T.Vector4(0, 0, 0, 0) } };
+    dark: { value: new T.Vector4(1, 0, 0, 0) }, dark2: { value: new T.Vector4(0, 0, 0, 0) },
+    // the finale (epochs.py): two epochs' maps, the flow between them, how far; the impact winter's snow
+    eA: { value: color }, eB: { value: color }, eAr: { value: relief }, eBr: { value: relief }, eF: { value: relief },
+    ep: { value: new T.Vector4(0, 0, 0, 0) }, snow: { value: new T.Vector4(0, 0, 0, 0) }, cloudA: { value: 1 } };
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
-    fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel; uniform vec4 pbox; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
+    fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel, eA, eB, eAr, eBr, eF; uniform vec4 pbox, ep, snow; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim, cloudA;
       uniform vec4 fball, shock, shock2, hole, dfog, tsu, tsu2, fire, fire2, dark, dark2; uniform float haze, atm;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
@@ -146,11 +149,27 @@
         // inside the impact region the detailed maps take over, fading in from the box's edges
         vec2 pu = vec2((atan(-n.z, n.x) - pbox.z) / (pbox.w - pbox.z), (asin(clamp(n.y, -1.0, 1.0)) - pbox.x) / (pbox.y - pbox.x));
         float pw = smoothstep(0.0, 0.07, min(min(pu.x, 1.0 - pu.x), min(pu.y, 1.0 - pu.y)));
-        if (pw > 0.0) {
+        if (pw > 0.0 && ep.x < 0.5) {
           vec3 pr = texture2D(prel, pu).rgb;
           s = mix(s, (pr.rg * 255.0 - 128.0) / 635.0, pw);
           c = mix(c, pow(texture2D(pcol, pu).rgb, vec3(2.2)), pw);
           w = mix(w, pr.b, pw);
+        }
+        // the finale: the map of one epoch turning into the next younger one (ep: on, how far): each pushed along the
+        // flow of the ground between them (eF, pixels of the 2048 × 1024 maps), so the continents slide, not dissolve
+        if (ep.x > 0.5) {
+          vec2 f = (texture2D(eF, uv).rg * 255.0 - 128.0) * 0.5 * vec2(1.0 / 2048.0, -1.0 / 1024.0);
+          vec2 ua = uv - ep.y * f, ub = uv + (1.0 - ep.y) * f;
+          c = pow(mix(texture2D(eA, ua).rgb, texture2D(eB, ub).rgb, ep.y), vec3(2.2));
+          vec3 rr = mix(texture2D(eAr, ua).rgb, texture2D(eBr, ub).rgb, ep.y);
+          s = (rr.rg * 255.0 - 128.0) / 635.0; w = rr.b;
+        }
+        // the impact winter (snow.x: how deep): snow over the land, down from the poles and patchy toward the equator;
+        // the polar seas frozen
+        if (snow.x > 0.0) {
+          float al = abs(n.y), sn = fb(n * 30.0 + 3.0) * 0.5 + fb(n * 140.0) * 0.2;
+          float cover = (1.0 - w) * smoothstep(0.0, 0.25, snow.x * 1.3 - 1.0 + al + sn) + w * smoothstep(0.82, 0.9, al + 0.25 * snow.x + 0.2 * sn - 0.25);
+          c = mix(c, vec3(0.82, 0.85, 0.9), clamp(cover, 0.0, 1.0) * min(snow.x * 2.0, 1.0));
         }
         // the tsunami seen from space (tsu: its source and how far, as an angle, its front has run; tsu2: strength, dust
         // pall radius): rings of white water running out over the oceans, weaker as they spread, partly shadowed by the
@@ -199,7 +218,7 @@
         vec3 sunG = sunT(0.0, mu) * smoothstep(-0.03, 0.04, mu);
         vec3 col = c * lit * 2.6 * sunG;
         // clouds (drifting by cloudLon) and their shadows, cast away from the Sun from ~10 km up
-        float cl = texture2D(clouds, uvOf(n, cloudLon)).r;
+        float cl = texture2D(clouds, uvOf(n, cloudLon)).r * cloudA;
         // close up the map's 5 km cells would blur: its edges are frayed by finer noise, and the fraying fades out far off
         float ce = (fb(n * 1400.0 + 7.0) * 0.7 + fb(n * 5200.0) * 0.3) * k1;
         cl = clamp(cl + ce * 0.9 * cl * (1.0 - cl) * 4.0 - 0.06 * k1 * (1.0 - cl), 0.0, 1.0);
@@ -213,7 +232,7 @@
           cl *= 1.0 - 0.9 * inside;
         }
         vec3 ns = normalize(n + sun * 0.0018 / max(mu, 0.15));
-        float sh = texture2D(clouds, uvOf(ns, cloudLon)).r;
+        float sh = texture2D(clouds, uvOf(ns, cloudLon)).r * cloudA;
         col *= 1.0 - 0.55 * sh;
         if (tsu2.x > 0.0) col = mix(col, col * 0.5, clamp(tsuDark, 0.0, 1.0) * w);
         // the water's glint: a sharp sun and a broad sheen
@@ -779,12 +798,12 @@
   const stars = new T.Points(sg, new T.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
 
-  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY, streaks };
+  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY, streaks, load };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0); U.tsu.value.set(1, 0, 0, 0); U.tsu2.value.set(0, 0, 0, 0); U.fire.value.set(1, 0, 0, 0); U.fire2.value.set(0, 0, 0, 0); U.dark.value.set(1, 0, 0, 0); U.dark2.value.set(0, 0, 0, 0);
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0); U.tsu.value.set(1, 0, 0, 0); U.tsu2.value.set(0, 0, 0, 0); U.fire.value.set(1, 0, 0, 0); U.fire2.value.set(0, 0, 0, 0); U.dark.value.set(1, 0, 0, 0); U.dark2.value.set(0, 0, 0, 0); U.ep.value.set(0, 0, 0, 0); U.snow.value.set(0, 0, 0, 0); U.cloudA.value = 1;
     head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };

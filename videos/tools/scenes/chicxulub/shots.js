@@ -413,6 +413,39 @@
         // and the world turns away into the dark: the lit side narrowing to a crescent
         sunFrom(X, p, lerp(-50, -128, smooth((t - 3) / 11)), 10); X.U.cloudLon.value = 0.02 + t * 0.01;
       } },
+    // the finale: years later the veil thins and lets the Sun back onto a frozen world (the impact winter); the snow
+    // melts and the green comes back; then 65 million years in ~9 s, a map every 5 million (epochs.py: Scotese &
+    // Wright 2018), each sliding into the next along the drift of the ground — the Atlantic widening, India running
+    // into Asia, Africa closing on Europe — to the Earth of today (NASA's Blue Marble at the very end). The whole Earth,
+    // turning from the Atlantic toward Europe, Africa and Asia.
+    finale: { dur: 16,
+      SEQ: [65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0, 'now'],
+      async setup(X) {
+        const get = f => X.load('/maps/' + f).then(t => { t.wrapS = X.T.RepeatWrapping; return t; });
+        this.tex = {};
+        await Promise.all(this.SEQ.map(async a => {
+          this.tex[a] = { c: await get(a === 'now' ? 'ep_now.jpg' : `ep_${a}.jpg`), r: await get(`ep_${a === 'now' ? 0 : a}_r.png`),
+            f: await get(a === 'now' || a === 0 ? 'ep_flat_f.png' : `ep_${a}_f.png`) };
+        }));
+        this.S = site(X);
+      },
+      frame(X, t) {
+        const U = X.U, c = this.S.up;
+        // the veil going (a few years), the snow, then the green
+        U.dark.value.set(c.x, c.y, c.z, 3.7);
+        U.dark2.value.set(1 - smooth(t / 3.5), 3.5 + 0.4 * t, 0.1, 0);
+        U.snow.value.set(1 - smooth((t - 3.5) / 2.2), 0, 0, 0);
+        // the drift: 14 steps from 65 million years ago to now
+        const D = 14 * smooth((t - 5.5) / 9.5), i = Math.min(Math.floor(D), 13), k = D - i, A = this.tex[this.SEQ[i]], B = this.tex[this.SEQ[i + 1]];
+        U.eA.value = A.c; U.eAr.value = A.r; U.eF.value = A.f; U.eB.value = B.c; U.eBr.value = B.r;
+        U.ep.value.set(1, k, 0, 0);
+        // the camera: from where the long night left it, round to Europe and Africa, a little closer
+        const u = smooth(t / this.dur), p = X.dirLL(lerp(18, 34, u), lerp(-32, 22, u)).multiplyScalar(lerp(46, 40, u));
+        cam(X, p, V(0, 0, 0), 30);
+        sunFrom(X, p, lerp(-128, -42, smooth(t / 4.5)), 10); U.cloudLon.value = 0.16 + t * 0.01;
+        // a clearer view for the drift: less haze, the clouds thinned
+        U.haze.value = lerp(1, 0.55, smooth((t - 4) / 3)); U.cloudA.value = lerp(1, 0.6, smooth((t - 4) / 3));
+      } },
     // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
     site_top: { dur: 2,
       frame(X, t) {

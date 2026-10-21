@@ -102,62 +102,72 @@ def ramp(x, xs, cols):
     return np.stack([np.interp(x, xs, [c[k] for c in cols]) for k in range(3)], -1)
 
 
+def paint(z0, W, H, ice=0.0):
+    """A DEM (6′ grid, metres) as the map's colour (sRGB 0–255), the land's slopes (relief.png's R, G) and the land.
+    ice: how far toward the equator, in degrees from the south pole, an Antarctic ice sheet reaches (0: none)."""
+    # the grid's 40 m steps and 11 km cells smoothed, then finer relief: rough in the mountains, enough at sea level
+    # to break the coasts into bays and capes
+    z = up(ndimage.gaussian_filter(z0, 0.8, mode='wrap'), W, H)
+    zb = z.copy()
+    det = field(W, H, lambda P, la: fbm(P, 24, 7, 11, 0.55))
+    rough = np.clip(np.abs(z) / 1200, 0, 1)
+    z = z + det * (28 + 900 * rough * (z > 0) + 250 * (z < 0) * np.clip((-z - 300) / 600, 0, 1))
+    land = z > 0
+    lat = np.degrees(sphere(1, H)[1][:, :1]) * np.ones((1, W), np.float32)
+    alat = np.abs(lat)
+
+    # moisture: a dry belt about 25° either side of the equator, drier far inland, wetter up the windward slopes
+    small = land[::4, ::4]
+    dist = ndimage.distance_transform_edt(small) * (40075 / (W / 4))          # km (east–west stretch near the poles ignored)
+    dist = up(dist.astype(np.float32), W, H, order=1)
+    belt = 1 - 0.62 * np.exp(-((alat - 24) / 10) ** 2) - 0.12 * np.exp(-((alat - 90) / 25) ** 2)
+    moist = belt * (0.42 + 0.58 * np.exp(-dist / 1100)) + 0.22 * field(W, H, lambda P, la: fbm(P, 6, 6, 21))
+    moist += 0.1 * np.clip(z / 1500, 0, 1)
+    # valleys gather water: greener where the land sits below its surroundings (draws out the drainage)
+    moist += np.clip((ndimage.uniform_filter(zb, 41, mode='wrap') - zb) / 300, -0.08, 0.15) * (z > 0)
+    # land colours (sRGB, as satellites see them): wet forest, savanna, steppe, sand
+    cl = ramp(moist, [0.12, 0.28, 0.40, 0.52, 0.66, 0.85],
+              [(206, 178, 128), (184, 150, 102), (140, 124, 78), (98, 98, 52), (44, 66, 28), (26, 46, 20)])
+    cl = cl * (1 + 0.10 * field(W, H, lambda P, la: fbm(P, 40, 6, 31)))[..., None]
+    # patches of a yellower and a deeper green at a few hundred km, so the forests are not one even carpet
+    hue = field(W, H, lambda P, la: fbm(P, 14, 5, 35))[..., None] * (moist > 0.45)[..., None]
+    cl = cl + hue * np.array([18, 10, -6])
+    # high latitudes: darker conifer-like forest, a little bluer
+    hi = np.clip((alat - 50) / 20, 0, 1)[..., None] * (moist > 0.5)[..., None]
+    cl = cl * (1 - 0.25 * hi) + np.array([22, 40, 30]) * 0.25 * hi
+    # mountains: bare rock where high and steep
+    gy, gx = np.gradient(z, 4.89e3 * 8192 / W)                                  # m per m (≈4.9 km cells at 8192)
+    gx = gx / np.maximum(np.cos(np.radians(lat)), 0.05)
+    slope = np.hypot(gx, gy)
+    rock = np.clip((z - 1300) / 1500, 0, 1) * 0.6 + np.clip(slope / 0.08, 0, 1) * 0.5
+    rock = np.clip(rock, 0, 0.85)[..., None]
+    cl = cl * (1 - rock) + np.array([118, 104, 88]) * rock
+    # the Antarctic ice sheet (from ~34 million years ago): white, a little blue, over the land near the pole
+    if ice > 0:
+        sheet = np.clip((-90 + ice - lat) / 4, 0, 1)[..., None] * (z > 0)[..., None]
+        cl = cl * (1 - sheet) + np.array([226, 232, 238]) * sheet
+    # seas: shelves of the warm shallow seas, darker with depth
+    d = -z
+    cs = ramp(d, [0, 25, 70, 160, 400, 1500, 4000],
+              [(52, 118, 128), (38, 98, 120), (26, 76, 108), (18, 58, 94), (12, 42, 80), (8, 28, 62), (6, 20, 50)])
+    cs = cs * (1 + 0.05 * field(W, H, lambda P, la: fbm(P, 10, 5, 41)))[..., None]
+    # the coast: a slightly lighter, sandier edge of shallow water
+    col = np.where(land[..., None], cl, cs)
+
+    # relief: slopes of the land only (the sea stays smooth for the glint), scaled ×5 into 0…255
+    zl = np.maximum(z, 0)
+    gy, gx = np.gradient(zl, 4.89e3 * 8192 / W)
+    gx = gx / np.maximum(np.cos(np.radians(lat)), 0.05)
+    rel = np.stack([np.clip(128 + gx * 5 * 127, 0, 255), np.clip(128 - gy * 5 * 127, 0, 255), np.full_like(gx, 128)], -1)
+    return col, rel, land
+
+
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
     only_clouds = sys.argv[1:] == ['clouds']
     if not only_clouds:
-        z0 = before_impact(fetch())
-        # the grid's 40 m steps and 11 km cells smoothed, then finer relief: rough in the mountains, enough at sea level
-        # to break the coasts into bays and capes
-        z = up(ndimage.gaussian_filter(z0, 0.8, mode='wrap'), W, H)
-        zb = z.copy()
-        det = field(W, H, lambda P, la: fbm(P, 24, 7, 11, 0.55))
-        rough = np.clip(np.abs(z) / 1200, 0, 1)
-        z = z + det * (28 + 900 * rough * (z > 0) + 250 * (z < 0) * np.clip((-z - 300) / 600, 0, 1))
-        land = z > 0
-        lat = np.degrees(sphere(1, H)[1][:, :1]) * np.ones((1, W), np.float32)
-        alat = np.abs(lat)
-
-        # moisture: a dry belt about 25° either side of the equator, drier far inland, wetter up the windward slopes
-        small = land[::4, ::4]
-        dist = ndimage.distance_transform_edt(small) * (40075 / (W / 4))          # km (east–west stretch near the poles ignored)
-        dist = up(dist.astype(np.float32), W, H, order=1)
-        belt = 1 - 0.62 * np.exp(-((alat - 24) / 10) ** 2) - 0.12 * np.exp(-((alat - 90) / 25) ** 2)
-        moist = belt * (0.42 + 0.58 * np.exp(-dist / 1100)) + 0.22 * field(W, H, lambda P, la: fbm(P, 6, 6, 21))
-        moist += 0.1 * np.clip(z / 1500, 0, 1)
-        # valleys gather water: greener where the land sits below its surroundings (draws out the drainage)
-        moist += np.clip((ndimage.uniform_filter(zb, 41, mode='wrap') - zb) / 300, -0.08, 0.15) * (z > 0)
-        # land colours (sRGB, as satellites see them): wet forest, savanna, steppe, sand
-        cl = ramp(moist, [0.12, 0.28, 0.40, 0.52, 0.66, 0.85],
-                  [(206, 178, 128), (184, 150, 102), (140, 124, 78), (98, 98, 52), (44, 66, 28), (26, 46, 20)])
-        cl = cl * (1 + 0.10 * field(W, H, lambda P, la: fbm(P, 40, 6, 31)))[..., None]
-        # patches of a yellower and a deeper green at a few hundred km, so the forests are not one even carpet
-        hue = field(W, H, lambda P, la: fbm(P, 14, 5, 35))[..., None] * (moist > 0.45)[..., None]
-        cl = cl + hue * np.array([18, 10, -6])
-        # high latitudes: darker conifer-like forest, a little bluer
-        hi = np.clip((alat - 50) / 20, 0, 1)[..., None] * (moist > 0.5)[..., None]
-        cl = cl * (1 - 0.25 * hi) + np.array([22, 40, 30]) * 0.25 * hi
-        # mountains: bare rock where high and steep
-        gy, gx = np.gradient(z, 4.89e3)                                             # m per m (≈4.9 km cells)
-        gx = gx / np.maximum(np.cos(np.radians(lat)), 0.05)
-        slope = np.hypot(gx, gy)
-        rock = np.clip((z - 1300) / 1500, 0, 1) * 0.6 + np.clip(slope / 0.08, 0, 1) * 0.5
-        rock = np.clip(rock, 0, 0.85)[..., None]
-        cl = cl * (1 - rock) + np.array([118, 104, 88]) * rock
-        # seas: shelves of the warm shallow seas, darker with depth
-        d = -z
-        cs = ramp(d, [0, 25, 70, 160, 400, 1500, 4000],
-                  [(52, 118, 128), (38, 98, 120), (26, 76, 108), (18, 58, 94), (12, 42, 80), (8, 28, 62), (6, 20, 50)])
-        cs = cs * (1 + 0.05 * field(W, H, lambda P, la: fbm(P, 10, 5, 41)))[..., None]
-        # the coast: a slightly lighter, sandier edge of shallow water
-        col = np.where(land[..., None], cl, cs)
+        col, rel, land = paint(before_impact(fetch()), W, H)
         Image.fromarray(np.clip(col, 0, 255).astype(np.uint8)).save(os.path.join(OUT, 'color.jpg'), quality=92)
-
-        # relief: slopes of the land only (the sea stays smooth for the glint), scaled ×5 into 0…255
-        zl = np.maximum(z, 0)
-        gy, gx = np.gradient(zl, 4.89e3)
-        gx = gx / np.maximum(np.cos(np.radians(lat)), 0.05)
-        rel = np.stack([np.clip(128 + gx * 5 * 127, 0, 255), np.clip(128 - gy * 5 * 127, 0, 255), np.full_like(gx, 128)], -1)
         Image.fromarray(rel.astype(np.uint8)).save(os.path.join(OUT, 'relief.png'))
         Image.fromarray((~land[::2, ::2] * 255).astype(np.uint8)).save(os.path.join(OUT, 'sea.png'))
 
