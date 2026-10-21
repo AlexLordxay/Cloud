@@ -48,6 +48,49 @@
       float airmass(float mu) { float z = degrees(acos(clamp(mu, -1.0, 1.0))); return 1.0 / max(mu + 0.15 * pow(max(93.885 - z, 0.4), -1.253), 0.026); }
       vec3 sunT(float h, float mu) { return exp(-(BETA * HS * exp(-h / HS) + OZ) * airmass(mu)); }
       float fb(vec3 p) { return 0.5 * vn(p) + 0.27 * vn(p * 2.03) + 0.15 * vn(p * 4.1) + 0.08 * vn(p * 8.3); }
+      vec3 h33(vec3 p) { return fract(sin(vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)))) * 43758.5453); }
+      // the fiery rain (fire: the impact site, the film's time; fire2: flames, the glow of the sky, smoke, when the
+      // rain reaches the far side): the ejecta come back in first round the Gulf, last on the far side of the world.
+      // since(q): how long ago (film seconds) the rain began over q
+      float since(vec3 q) { return fire.w - fire2.w * pow(acos(clamp(dot(q, fire.xyz), -1.0, 1.0)) / 3.1416, 1.25); }
+      // fires on one scale: cells of 1/K radian on a 3-D grid, and in a share p of them (clustered) a fire, caught a
+      // moment after the rain arrives. It spreads as fires do: fastest downwind, slowly against the wind, its edge made
+      // ragged by the ground (the time the flames take to reach a point carries noise laid on the ground, not drawn
+      // round the fire, so the perimeter looks like the burn maps of real fires); the flames are the thin edge where
+      // that time is now, broken into stretches; inside, black ground and a few embers. It burns out before it leaves
+      // its cell (< 0.4), so the 8 nearest cells find every fire. pxc: a pixel in cells. Returns: flames, burnt share
+      vec2 fires(vec3 n, float K, float p, float grow, float pxc) {
+        vec3 q = n * K, b = floor(q - 0.5); float fl = 0.0, burnt = 0.0;
+        for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) for (int k = 0; k < 2; k++) {
+          vec3 cc = b + vec3(float(i), float(j), float(k)), h = h33(cc), pr = cc + 0.25 + 0.5 * h.yzx;
+          if (abs(length(pr) - K) > 0.25) continue;
+          vec3 ctr = normalize(pr);
+          // fires come in clusters (where more burning debris fell, where the woods were drier), with empty land between
+          if (h.x > p * smoothstep(-0.4, 0.15, fb(ctr * 14.0 + 21.0))) continue;
+          float age = since(ctr) - 0.25 - 2.2 * h.z;                        // seconds since it caught
+          if (age < 0.0) continue;
+          // the wind over the region (turning slowly from place to place), along the ground
+          vec3 wv = vec3(vn(ctr * 2.0 + 1.0), vn(ctr * 2.0 + 7.0), vn(ctr * 2.0 + 13.0)) + 0.6 * (h - 0.5);
+          vec3 wd = normalize(wv - ctr * dot(wv, ctr) + 1e-5);
+          vec3 dv = q - ctr * K; float d = length(dv), cw = dot(dv / max(d, 1e-5), wd);
+          // how far the fire has to burn to get here (downwind counts ~1/3, upwind double), plus the ground's say
+          float de = d * (1.15 - 0.85 * cw) + 0.06 * fb(q * 2.2 + h * 7.0) + 0.03 * fb(q * 6.0 + h * 3.0);
+          float R = age * grow * (0.5 + 0.8 * h.y), Rm = 0.1 + 0.06 * h.z;    // how far it has got; where it dies out
+          float live = 1.0 - smoothstep(Rm * 0.7, Rm, R);
+          float ws = max(0.02, 0.5 * pxc), amp = max(0.02 / ws, 0.5);
+          float edge = exp(-pow((de - min(R, Rm)) / ws, 2.0)) * amp;
+          float run = smoothstep(-0.15, 0.3, fb(q * 5.0 + h * 13.0 + age * 0.05));   // stretches burning, stretches out
+          float wc = max(0.02, 0.6 * pxc), core = exp(-d * d / (wc * wc)) * max(0.02 / wc, 0.3) * 1.5 * exp(-age / 0.5);
+          float inside = smoothstep(min(R, Rm), min(R, Rm) - 0.01, de);
+          float ember = inside * 0.03 * smoothstep(0.4, 0.9, vn(dv * 14.0 + h * 5.0)) * smoothstep(0.0, 0.5, age);
+          float glow = exp(-pow((de - min(R, Rm)) / 0.04, 2.0)) * 0.04 * live;          // its smoke, lit from below
+          float hd = mix(0.2, 1.0, smoothstep(-0.4, 0.6, cw));                    // the head burns hard, the back barely
+          fl += ((edge * run * 1.8 * hd + glow) * live + core + ember) * (0.25 + 1.5 * h.y * h.y)
+                * (0.75 + 0.25 * sin(fire.w * 11.0 + h.x * 60.0 + d * 40.0));
+          burnt = max(burnt, inside);
+        }
+        return vec2(fl, burnt);
+      }
       vec2 uvOf(vec3 n, float lonOff) {
         float lat = asin(clamp(n.y, -1.0, 1.0)), lon = atan(-n.z, n.x) + lonOff;
         return vec2(fract((lon + 3.14159265) / 6.2831853), (lat + 1.5707963) / 3.14159265);
@@ -118,6 +161,7 @@
         float px = length(fwidth(vW)) / R;
         float k1 = 1.0 - smoothstep(0.0006, 0.002, px), k2 = 1.0 - smoothstep(0.00015, 0.0006, px);
         c *= 1.0 + (1.0 - w) * (0.22 * fb(n * 260.0) * k1 + 0.14 * fb(n * 2100.0) * k2);
+        vec3 c0 = c;
         float lit = max(dot(nb, sun), 0.0) * smoothstep(-0.05, 0.12, mu) + 0.0;
         // sunlight at the ground, reddened by the air it came through (orange near the terminator)
         vec3 sunG = sunT(0.0, mu) * smoothstep(-0.03, 0.04, mu);
@@ -147,6 +191,26 @@
         float cmu = max(mu, 0.0);
         vec3 cloudCol = vec3(1.0, 0.99, 0.97) * (pow(cmu, 0.8) * 2.4) * sunT(0.01, mu + 0.03) * smoothstep(-0.05, 0.03, mu);
         col = mix(col, cloudCol, cl * 0.92);
+        // the fiery rain: the sky over it glows (the upper air heated by countless meteors), brightest as it arrives, and
+        // its red light falls on the land, the sea and, most, the clouds — on the night side the only light there is;
+        // the land catches fire here and there where there is something to burn (forest and savanna, not desert or
+        // bare rock), burning through the clouds' gaps; on the burnt ground the char shows by day
+        if (fire2.x > 0.0 || fire2.y > 0.0) {
+          float s0 = since(n), G = fire2.y * smoothstep(-0.1, 0.5, s0) * (0.75 + 0.25 * exp(-max(s0, 0.0) / 1.5) + 0.8 * exp(-pow((s0 - 0.25) / 0.3, 2.0)));
+          G *= 0.75 + 0.5 * (fb(n * 9.0 + 4.0) * 0.5 + 0.5);                 // patchy: thicker where more debris falls
+          vec3 skyL = vec3(1.0, 0.33, 0.10) * G;
+          // ... and, before it comes, a little moonlight (fire2.z), cool, so the night is not quite black
+          vec3 lightIn = skyL * 3.0 + vec3(0.7, 0.75, 0.9) * fire2.z;
+          col += mix(c0 * (1.0 - w) * 1.3 + w * vec3(0.006, 0.006, 0.008), vec3(0.8, 0.78, 0.76), cl) * lightIn;
+          float vz = dot(n, V); col += skyL * 0.012 / sqrt(vz * vz + 0.02);      // the glowing layer itself, thicker toward the limb
+          float land = smoothstep(0.6, 0.2, w), fuel = land * smoothstep(0.25, 0.42, c0.g / (c0.r + c0.g + c0.b + 1e-4)) * smoothstep(0.30, 0.06, c0.r + c0.g + c0.b);
+          if (fuel > 0.0 && s0 > 0.0) {
+            vec2 f1 = fires(n, 70.0, 0.75, 0.03, px * 70.0), f2 = fires(n, 260.0, 0.55, 0.012, px * 260.0);
+            float flame = (f1.x + 0.6 * f2.x) * fuel * fire2.x;
+            col *= 1.0 - 0.55 * max(f1.y, f2.y) * fuel * day;                     // char
+            col += vec3(1.0, 0.36, 0.07) * flame * (1.0 - 0.85 * cl) + vec3(1.0, 0.45, 0.2) * flame * 0.15 * cl;
+          }
+        }
         // the tsunami's white crests show through the gaps and, faintly, through the cloud
         if (tsu2.x > 0.0) {
           col += vec3(0.75, 0.9, 1.0) * clamp(tsuRing, 0.0, 1.5) * w * 1.6 * (1.0 - 0.5 * cl) * (0.2 + 0.8 * max(mu, 0.0));
@@ -160,25 +224,6 @@
         col = col * Tv + (1.0 - Tv) * sunA * ph * atm * 0.75;
         // the dust and soot ride high, above the weather and most of the air: a brown veil over everything
         if (pall > 0.0) col = mix(col, vec3(0.16, 0.085, 0.035) * (0.15 + 0.85 * max(mu, 0.0)) * sunG, pall);
-        // the fiery rain (fire: the impact site and how far, as an angle, the returning ejecta have reached; fire2: fires,
-        // the glow of the heated upper air, smoke, the film's time): behind the front, flames on the land — scattered
-        // blazes and long burning lines — flickering and spreading, smoke dimming the day side; and the sky itself
-        // glowing orange over the night side, most toward the limb where we look through the most of it
-        if (fire2.x > 0.0 || fire2.y > 0.0) {
-          float fa = acos(clamp(dot(n, fire.xyz), -1.0, 1.0));
-          float reached = smoothstep(fire.w, fire.w - 0.2, fa);
-          float since = clamp((fire.w - fa) / 0.8, 0.0, 1.0);          // how long ago it arrived, as a share
-          float land = 1.0 - w;
-          float f1 = smoothstep(0.62 - 0.12 * since, 0.8, fb(n * 140.0 + 3.0) * 0.5 + 0.5);
-          float f2 = 1.0 - smoothstep(0.0, 0.012 + 0.03 * since, abs(fb(n * 45.0 + 9.0)));
-          float flick = 0.7 + 0.3 * sin(fire2.w * 9.0 + fb(n * 300.0) * 25.0);
-          float burn = land * reached * (f1 * 0.7 + f2 * 1.0) * flick;
-          col *= 1.0 - fire2.z * reached * (0.3 + 0.4 * land) * since;
-          float nightK = 1.0 - smoothstep(-0.1, 0.15, mu) * 0.75;
-          col += vec3(1.0, 0.30, 0.05) * burn * fire2.x * nightK;
-          float rimv = pow(1.0 - max(dot(n, V), 0.0), 2.0);
-          col += vec3(1.0, 0.33, 0.09) * fire2.y * reached * (0.2 + 0.8 * rimv) * nightK * (0.8 + 0.4 * fb(n * 20.0 + fire2.w * 0.3));
-        }
         if (shock.w > 0.0) {
           float dn = fb(n * 900.0 + 3.0) * 0.5 + 0.5;
           col = mix(col, vec3(0.16, 0.12, 0.09) * (0.15 + 0.85 * max(mu, 0.0)) * (0.7 + 0.6 * dn), inside * shock2.w);
@@ -229,9 +274,12 @@
         float cs = dot(d, sun), ph = 0.75 * (1.0 + cs * cs) + 0.5 * pow(max(cs, 0.0), 8.0);
         vec3 L = (1.0 - exp(-tauV)) * lit * ph * atm;
         if (fire2.y > 0.0) {
-          // the upper air, heated by the ejecta coming back in (~60–100 km up), glowing orange-red round the limb
-          float reached = smoothstep(fire.w, fire.w - 0.2, acos(clamp(dot(up, fire.xyz), -1.0, 1.0)));
-          L += vec3(1.0, 0.35, 0.10) * fire2.y * 1.6 * reached * exp(-pow((h - 0.075) / 0.03, 2.0));
+          // the upper air, heated by the ejecta coming back in (they glow and slow ~60–100 km up), seen edge-on round
+          // the limb: an orange-red band, brightest as the rain arrives, uneven where more or less of it falls
+          float a = acos(clamp(dot(up, fire.xyz), -1.0, 1.0)), s0 = fire.w - fire2.w * pow(a / 3.1416, 1.25);
+          float G = smoothstep(-0.1, 0.5, s0) * (0.75 + 0.25 * exp(-max(s0, 0.0) / 1.5) + 0.8 * exp(-pow((s0 - 0.25) / 0.3, 2.0)));
+          float lump = 1.0 + 0.5 * sin(dot(up, vec3(23.0, 17.0, 31.0))) * sin(dot(up, vec3(-13.0, 29.0, 7.0)) + 1.3);
+          L += vec3(1.0, 0.36, 0.11) * fire2.y * 14.0 * G * mix(1.0, lump, 0.4) * exp(-pow((h - 0.08) / 0.03, 2.0));
         }
         gl_FragColor = vec4(L * (1.0 - dim), 1.0);
       }` }));
@@ -612,19 +660,52 @@
       }` }));
   skydome.renderOrder = -10; skydome.visible = false; skydome.scale.setScalar(2); scene.add(skydome);
 
-  // ---- meteors: short glowing streaks (line segments, a bright head and a fading tail), placed by the shot ----------
-  function meteors(n) {
-    const g = new T.BufferGeometry(), pos = new Float32Array(n * 6), col = new Float32Array(n * 6);
-    g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('color', new T.BufferAttribute(col, 3));
-    const m = new T.LineSegments(g, new T.LineBasicMaterial({ vertexColors: true, transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
-    m.frustumCulled = false; m.visible = false; m.renderOrder = 5; scene.add(m);
-    return { mesh: m, n, pos, col,
-      put(i, head, tail, b) {
-        pos.set([head.x, head.y, head.z, tail.x, tail.y, tail.z], i * 6);
-        col.set([b, b * 0.75, b * 0.45, b * 0.5, b * 0.12, b * 0.02], i * 6);
+  // ---- meteors: the ejecta coming back into the air, each a streak — a white-hot head, a tail cooling through orange
+  // to deep red — drawn on the GPU from its birth time (like fx(), any frame stands alone). On the screen at least
+  // ~1.6 px wide, so far ones still show as sparks; dimmer the farther off (ref: the distance at which gain is as set).
+  function streaks(n) {
+    const g = new T.InstancedBufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute([0, -1, 0, 0, 1, 0, 1, -1, 0, 1, 1, 0], 3));
+    g.setIndex([0, 2, 1, 1, 2, 3]);
+    const A = {};
+    for (const [k, m] of [['p0', 3], ['vel', 3], ['tb', 1], ['life', 1], ['len', 1], ['bri', 1]])
+      g.setAttribute(k, A[k] = new T.InstancedBufferAttribute(new Float32Array(n * m), m));
+    g.instanceCount = n;
+    const u = { time: { value: 0 }, res: { value: new T.Vector2(W, H) }, width: { value: 1.6 }, gain: { value: 1 }, ref: { value: 4 } };
+    const mesh = new T.Mesh(g, new T.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide,
+      vertexShader: `attribute vec3 p0, vel; attribute float tb, life, len, bri; uniform float time, width, ref; uniform vec2 res;
+        varying vec2 vQ; varying float vL, vB;
+        void main() {
+          float age = time - tb, a = age / life;
+          vec3 head = p0 + vel * age, tail = head - normalize(vel) * len * smoothstep(0.0, 0.35, a);
+          vec4 ch = projectionMatrix * viewMatrix * vec4(head, 1.0), ct = projectionMatrix * viewMatrix * vec4(tail, 1.0);
+          if (age < 0.0 || a > 1.0 || ch.w < 0.01 || ct.w < 0.01) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+          vec2 sh = ch.xy / ch.w * res * 0.5, st = ct.xy / ct.w * res * 0.5, ax = sh - st;
+          float L = length(ax); ax = L > 1e-3 ? ax / L : vec2(1.0, 0.0);
+          vec4 c = mix(ch, ct, position.x);
+          vec2 off = vec2(-ax.y, ax.x) * position.y * width * 1.8 + ax * width * 1.8 * (1.0 - 2.0 * position.x);
+          c.xy += off * 2.0 / res * c.w;
+          gl_Position = c;
+          vQ = vec2(mix(-width * 1.8, L + width * 1.8, position.x), position.y * width * 1.8); vL = L;
+          // a meteor brightens as it plunges into thicker air, then burns out
+          vB = bri * smoothstep(0.0, 0.15, a) * (1.0 - smoothstep(0.55, 1.0, a)) * (0.6 + 0.8 * a) * clamp(ref / ch.w, 0.15, 3.0);
+        }`,
+      fragmentShader: `uniform float width, gain; varying vec2 vQ; varying float vL, vB;
+        void main() {
+          float dx = max(max(-vQ.x, vQ.x - vL), 0.0), d = length(vec2(dx, vQ.y)) / width;
+          float f = clamp(vQ.x / max(vL, 1.0), 0.0, 1.0);
+          float k = exp(-d * d * 1.4) * (pow(1.0 - f, 1.6) * 0.8 + 1.6 * exp(-vQ.x * vQ.x / (width * width * 4.0)));
+          vec3 col = mix(vec3(1.0, 0.92, 0.75), vec3(1.0, 0.45, 0.10), smoothstep(0.0, 0.3, f));
+          col = mix(col, vec3(0.55, 0.07, 0.01), smoothstep(0.3, 1.0, f));
+          gl_FragColor = vec4(col * k * vB * gain, 1.0);
+        }` }));
+    mesh.frustumCulled = false; mesh.visible = false; mesh.renderOrder = 5; scene.add(mesh);
+    return { mesh, u, A, n,
+      set(i, p0, vel, tb, life, len, bri) {
+        A.p0.setXYZ(i, p0.x, p0.y, p0.z); A.vel.setXYZ(i, vel.x, vel.y, vel.z);
+        A.tb.setX(i, tb); A.life.setX(i, life); A.len.setX(i, len); A.bri.setX(i, bri);
       },
-      hide(i) { pos.fill(0, i * 6, i * 6 + 6); col.fill(0, i * 6, i * 6 + 6); },
-      done() { g.attributes.position.needsUpdate = true; g.attributes.color.needsUpdate = true; } };
+      done() { for (const a of Object.values(A)) a.needsUpdate = true; } };
   }
 
   // ---- stars ----------------------------------------------------------------------------------------------------
@@ -638,7 +719,7 @@
   const stars = new T.Points(sg, new T.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
 
-  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY, meteors };
+  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY, streaks };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
