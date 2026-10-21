@@ -458,7 +458,7 @@
     // stops), and it stays cold for years; the dust takes up to ~15 years to settle (Bardeen et al. 2017; Brugger et al.
     // 2017; Senel et al. 2023). 14 s: the first day (the veil spreading from the Gulf), weeks (thickening, drawn out
     // into bands by the high winds), months (a dark brown world). The whole Earth, gibbous, waning to a crescent.
-    darkness: { dur: 14,
+    darkness: { dur: 15.5,
       setup(X) { this.S = site(X); },
       frame(X, t) {
         const S = this.S, c = S.up, u = t / this.dur;
@@ -473,8 +473,8 @@
     // melts and the green comes back; then 65 million years in ~9 s, a map every 5 million (epochs.py: Scotese &
     // Wright 2018), each sliding into the next along the drift of the ground — the Atlantic widening, India running
     // into Asia, Africa closing on Europe — to the Earth of today (NASA's Blue Marble at the very end). The whole Earth,
-    // turning from the Atlantic toward Europe, Africa and Asia.
-    finale: { dur: 16,
+    // turning from the Atlantic toward Europe, Africa and Asia, then in toward Ukraine.
+    finale: { dur: 26,
       SEQ: [65, 60, 55, 50, 45, 40, 35, 30, 25, 20, 15, 10, 5, 0, 'now'],
       async setup(X) {
         const get = f => X.load('/maps/' + f).then(t => { t.wrapS = X.T.RepeatWrapping; return t; });
@@ -490,17 +490,20 @@
         // the veil going (a few years), the snow, then the green
         U.dark.value.set(c.x, c.y, c.z, 3.7);
         // (the high winds carry on from where the long night left them, so the bands do not jump at the cut)
-        U.dark2.value.set(1 - smooth(t / 3.5), 0.25 * 14 + 0.02 * 14 * 14 + 0.4 * t, 0.1, 0);
+        const td = SHOTS.darkness.dur;
+        U.dark2.value.set(1 - smooth(t / 3.5), 0.25 * td + 0.02 * td * td + 0.4 * t, 0.1, 0);
         // the snow settles under the veil (none at the cut, so nothing jumps), then melts
         U.snow.value.set(smooth(t / 2.5) * (1 - smooth((t - 3.5) / 2.2)), 0, 0, 0);
         // the drift: 14 steps from 65 million years ago to now
         const D = 14 * smooth((t - 5.5) / 9.5), i = Math.min(Math.floor(D), 13), k = D - i, A = this.tex[this.SEQ[i]], B = this.tex[this.SEQ[i + 1]];
         U.eA.value = A.c; U.eAr.value = A.r; U.eF.value = A.f; U.eB.value = B.c; U.eBr.value = B.r;
         U.ep.value.set(1, k, 0, 0);
-        // the camera: from where the long night left it, round to Europe and Africa, a little closer
-        const u = smooth(t / this.dur), p = X.dirLL(lerp(18, 34, u), lerp(-32, 22, u)).multiplyScalar(lerp(46, 40, u));
+        // the camera: from where the long night left it, round to Europe and Africa, a little closer (16 s); then, over
+        // today's Earth, slowly in toward Ukraine (Kyiv just above the middle) for the last words and the question
+        const u = smooth(t / 16), w = smooth((t - 16) / (this.dur - 16));
+        const p = X.dirLL(lerp(lerp(18, 34, u), 42, w), lerp(lerp(-32, 22, u), 30, w)).multiplyScalar(lerp(lerp(46, 40, u), 26, w));
         cam(X, p, V(0, 0, 0), 30);
-        sunFrom(X, p, lerp(-128, -42, smooth(t / 4.5)), 10); U.cloudLon.value = 0.16 + t * 0.01;
+        sunFrom(X, p, lerp(-128, -42, smooth(t / 4.5)), 10); U.cloudLon.value = 0.02 + 0.01 * td + t * 0.01;
         // a clearer view for the drift: less haze, the clouds thinned
         U.haze.value = lerp(1, 0.55, smooth((t - 4) / 3)); U.cloudA.value = lerp(1, 0.6, smooth((t - 4) / 3));
       } },
