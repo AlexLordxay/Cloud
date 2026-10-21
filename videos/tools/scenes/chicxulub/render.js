@@ -22,7 +22,8 @@ const page = `<!doctype html><html><head><meta charset="utf-8"></head><body styl
       if (u === '/') { rsp.writeHead(200, { 'Content-Type': 'text/html' }); return rsp.end(page); }
       const f = u === '/three.min.js' ? path.join(TOOLS, 'node_modules/three/build/three.min.js')
         : u.startsWith('/scene/') ? path.join(__dirname, u.slice(7))
-        : u.startsWith('/maps/') ? path.join(WORK, 'maps', u.slice(6)) : null;
+        : u.startsWith('/maps/') ? path.join(WORK, 'maps', u.slice(6))
+        : u.startsWith('/tex/') ? path.join(TOOLS, '../../planetarium/textures', u.slice(5)) : null;   // the site's textures
       if (!f || !fs.existsSync(f)) { rsp.writeHead(404); return rsp.end(); }
       if (f.endsWith('.js')) rsp.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8' });
       fs.createReadStream(f).pipe(rsp);

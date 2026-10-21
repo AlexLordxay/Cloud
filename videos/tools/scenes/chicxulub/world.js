@@ -787,6 +787,22 @@
       done() { for (const a of Object.values(A)) a.needsUpdate = true; } };
   }
 
+  // ---- Jupiter (the site's map): lit by the Sun, darker toward the limb, its night side black; placed by the shot ----
+  const JU = { map: { value: color }, sun: U.sun };
+  const jupiter = new T.Mesh(new T.SphereGeometry(1, 128, 64), new T.ShaderMaterial({ uniforms: JU,
+    vertexShader: 'varying vec3 vN, vW; varying vec2 vUv; void main() { vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: `uniform sampler2D map; uniform vec3 sun; varying vec3 vN, vW; varying vec2 vUv;
+      void main() {
+        vec3 n = normalize(vN), V = normalize(cameraPosition - vW);
+        float mu0 = dot(n, sun), mu = max(dot(n, V), 0.0);
+        vec3 c = pow(texture2D(map, vUv).rgb, vec3(2.2));
+        vec3 col = c * smoothstep(-0.02, 0.15, mu0) * max(mu0, 0.0) * 2.6 * (0.55 + 0.45 * pow(mu, 0.4));
+        col += vec3(0.5, 0.4, 0.3) * pow(1.0 - mu, 6.0) * smoothstep(-0.1, 0.3, mu0) * 0.15;     // a hazy rim
+        col = vec3(1.0) - exp(-col);
+        gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+      }` }));
+  jupiter.visible = false; scene.add(jupiter);
+
   // ---- stars ----------------------------------------------------------------------------------------------------
   const sp = [], sc = [];
   for (let i = 0; i < 9000; i++) {
@@ -798,13 +814,13 @@
   const stars = new T.Points(sg, new T.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
 
-  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY, streaks, load };
+  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY, streaks, load, jupiter, JU };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
     U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0); U.tsu.value.set(1, 0, 0, 0); U.tsu2.value.set(0, 0, 0, 0); U.fire.value.set(1, 0, 0, 0); U.fire2.value.set(0, 0, 0, 0); U.dark.value.set(1, 0, 0, 0); U.dark2.value.set(0, 0, 0, 0); U.ep.value.set(0, 0, 0, 0); U.snow.value.set(0, 0, 0, 0); U.cloudA.value = 1;
-    head.core.visible = head.halo.visible = false;
+    head.core.visible = head.halo.visible = false; jupiter.visible = false;
     if (s.setup) await s.setup(window.X);
   };
   window.renderShot = (name, t) => {

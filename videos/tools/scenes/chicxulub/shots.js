@@ -71,6 +71,62 @@
         cam(X, pos, A.clone().addScaledVector(toE, 30), 34, V(0, 1, 0), 0.001);
         sunFrom(X, A, -70, 10); X.U.cloudLon.value = 0.02;
       } },
+    // the hook (over "66 million years ago, one blow changed all life on Earth"): the whole Earth from space at the
+    // Gulf's dusk; a blinding point flares on the terminator, the fireball's glow hangs over it and the blast's ring of
+    // dust runs out over the land and sea (time sped up: ~half an hour in 5 s). The camera drifts in.
+    hook: { dur: 6, T0: 0.9,
+      setup(X) { this.S = site(X); },
+      frame(X, t) {
+        const S = this.S, T = t - this.T0, k = smooth(t / this.dur);
+        cam(X, X.dirLL(14, -80).multiplyScalar(lerp(31, 25, k)), X.dirLL(22, -70).multiplyScalar(lerp(1.5, 3.2, k)), 30);
+        X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
+        X.U.cloudLon.value = 0.02;
+        if (T < 0) return;
+        const fl = Math.exp(-T / 0.25) + 0.25 * Math.exp(-T / 1.5);        // the flash, then the fireball's long glow
+        const glowPt = S.I.clone().addScaledVector(S.up, 0.08 + 0.25 * smooth(T / 3));
+        X.head.core.visible = X.head.halo.visible = true;
+        X.head.core.position.copy(glowPt); X.head.core.scale.setScalar(0.25 + 3.5 * fl);
+        X.head.halo.position.copy(glowPt); X.head.halo.scale.setScalar(1.0 + 12 * fl);
+        X.U.fball.value.set(glowPt.x, glowPt.y, glowPt.z, 30 * fl);
+        const RB = 0.03 + 1.1 * (1 - Math.exp(-T / 2.2));                   // the blast ring, units (1000 km)
+        X.U.shock.value.set(S.up.x, S.up.y, S.up.z, RB / X.ER);
+        X.U.shock2.value.set(0.18 * Math.exp(-T / 2.5) + 0.03, 0.09 / X.ER, 1.8, 0.85 * smooth(T / 2.5));
+      } },
+    // the Earth of the late Cretaceous (over "the Earth was different then: warm, almost no ice, the Atlantic narrow,
+    // India still sailing toward Asia; and the dinosaurs rule the land"): the whole planet turning from the narrow
+    // Atlantic, across Africa, to India alone in the ocean.
+    kpg_earth: { dur: 11,
+      frame(X, t) {
+        const u = smooth(t / this.dur), p = X.dirLL(lerp(14, -6, u), lerp(-42, 58, u)).multiplyScalar(lerp(31, 29, u));
+        cam(X, p, V(0, 0, 0), 30);
+        sunFrom(X, p, -38, 12); X.U.cloudLon.value = 0.02 + t * 0.004;
+        X.U.cloudA.value = 0.7; X.U.haze.value = 0.75;                     // the lands clearer
+      } },
+    // the asteroid on its way (over "a dark rock ten kilometres wide, born somewhere beyond Jupiter, flying at twenty
+    // times the speed of a bullet"): close beside it, Jupiter behind it; the camera swings half round the rock until
+    // the Earth is ahead. (Jupiter is set much nearer than it ever was, so it shows: an illustration.)
+    approach: { dur: 9,
+      async setup(X) {
+        X.JU.map.value = await X.load('/tex/jupiter.jpg');
+        X.asteroid.visible = true; X.asteroid.scale.setScalar(0.006);
+        const out = X.dirLL(12, -20);                                       // from the Earth out toward the rock
+        this.A = out.clone().multiplyScalar(70); this.out = out;
+        this.side = V(0, 1, 0).cross(out).normalize();
+        X.jupiter.visible = true; X.jupiter.scale.setScalar(70); X.jupiter.position.copy(this.A).addScaledVector(out, 700).addScaledVector(V(0, 1, 0), 25);
+        X.jupiter.rotation.set(0.05, 0, 0.03);
+        this.sun = this.side.clone().multiplyScalar(0.85).addScaledVector(out, 0.3).addScaledVector(V(0, 1, 0), 0.2).normalize();
+      },
+      frame(X, t) {
+        const A = this.A, k = smooth(t / this.dur), a = Math.PI * (1 - k);
+        X.asteroid.position.copy(A); X.asteroid.rotation.set(0.3 + t * 0.05, 1.1 + t * 0.18, 0.2);
+        // the camera: ~70 km from the rock and a little above it, swinging from the Earth's side of it (Jupiter behind
+        // the rock) round to the far side (the Earth behind it); looking past the rock, so it rides low in the frame and
+        // what lies behind it stands in the middle
+        const R = this.out.clone().multiplyScalar(Math.cos(a)).addScaledVector(this.side, Math.sin(a)).normalize(), up = V(0, 1, 0);
+        const pos = A.clone().addScaledVector(R, 0.07).addScaledVector(up, 0.012);
+        cam(X, pos, A.clone().addScaledVector(R, -0.3).addScaledVector(up, 0.03), 34, up, 0.001);
+        X.U.sun.value.copy(this.sun); X.U.cloudLon.value = 0.02; X.AU.exposure.value = 0.55;   // a dark, carbonaceous rock
+      } },
     // into the air: the last seconds above Yucatán seen from the side, from ~250 km up to the south-east. It lights up
     // ~120 km high, a white-hot head with a glowing wake that cools to orange and red and leaves smoke behind; the
     // clouds and the sea below take its light. Ends at the moment it reaches the ground.
