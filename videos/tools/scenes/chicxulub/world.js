@@ -59,19 +59,28 @@
       // round the fire, so the perimeter looks like the burn maps of real fires); the flames are the thin edge where
       // that time is now, broken into stretches; inside, black ground and a few embers. It burns out before it leaves
       // its cell (< 0.4), so the 8 nearest cells find every fire. pxc: a pixel in cells. Returns: flames, burnt share
-      vec2 fires(vec3 n, float K, float p, float grow, float pxc) {
+      // is there a fire in cell cc (K: cells per radian; p: the share of cells)? If so: its random numbers, centre, age
+      bool fireAt(vec3 cc, float K, float p, out vec3 h, out vec3 ctr, out float age) {
+        h = h33(cc); vec3 pr = cc + 0.25 + 0.5 * h.yzx;
+        if (h.x > p || abs(length(pr) - K) > 0.25) return false;
+        ctr = normalize(pr);
+        age = since(ctr) - 0.25 - 2.2 * h.z;                                 // seconds since it caught
+        // fires come in clusters (where more burning debris fell, where the woods were drier), with empty land between
+        return age >= 0.0 && h.x <= p * smoothstep(-0.4, 0.15, fb(ctr * 14.0 + 21.0));
+      }
+      // the wind over the region (turning slowly from place to place), along the ground
+      vec3 windAt(vec3 ctr, vec3 h) {
+        vec3 wv = vec3(vn(ctr * 2.0 + 1.0), vn(ctr * 2.0 + 7.0), vn(ctr * 2.0 + 13.0)) + 0.6 * (h - 0.5);
+        return normalize(wv - ctr * dot(wv, ctr) + 1e-5);
+      }
+      // something to burn: forest and savanna (green, dark), not desert or bare rock (linear colour)
+      float fuelOf(vec3 c) { float t = c.r + c.g + c.b; return smoothstep(0.25, 0.42, c.g / (t + 1e-4)) * smoothstep(0.30, 0.06, t); }
+      vec2 fires(vec3 n, float K, float p, float grow, float pxc, float fill) {
         vec3 q = n * K, b = floor(q - 0.5); float fl = 0.0, burnt = 0.0;
         for (int i = 0; i < 2; i++) for (int j = 0; j < 2; j++) for (int k = 0; k < 2; k++) {
-          vec3 cc = b + vec3(float(i), float(j), float(k)), h = h33(cc), pr = cc + 0.25 + 0.5 * h.yzx;
-          if (abs(length(pr) - K) > 0.25) continue;
-          vec3 ctr = normalize(pr);
-          // fires come in clusters (where more burning debris fell, where the woods were drier), with empty land between
-          if (h.x > p * smoothstep(-0.4, 0.15, fb(ctr * 14.0 + 21.0))) continue;
-          float age = since(ctr) - 0.25 - 2.2 * h.z;                        // seconds since it caught
-          if (age < 0.0) continue;
-          // the wind over the region (turning slowly from place to place), along the ground
-          vec3 wv = vec3(vn(ctr * 2.0 + 1.0), vn(ctr * 2.0 + 7.0), vn(ctr * 2.0 + 13.0)) + 0.6 * (h - 0.5);
-          vec3 wd = normalize(wv - ctr * dot(wv, ctr) + 1e-5);
+          vec3 cc = b + vec3(float(i), float(j), float(k)), h, ctr; float age;
+          if (!fireAt(cc, K, p, h, ctr, age)) continue;
+          vec3 wd = windAt(ctr, h);
           vec3 dv = q - ctr * K; float d = length(dv), cw = dot(dv / max(d, 1e-5), wd);
           // how far the fire has to burn to get here (downwind counts ~1/3, upwind double), plus the ground's say
           float de = d * (1.15 - 0.85 * cw) + 0.06 * fb(q * 2.2 + h * 7.0) + 0.03 * fb(q * 6.0 + h * 3.0);
@@ -85,7 +94,7 @@
           float ember = inside * 0.03 * smoothstep(0.4, 0.9, vn(dv * 14.0 + h * 5.0)) * smoothstep(0.0, 0.5, age);
           float glow = exp(-pow((de - min(R, Rm)) / 0.04, 2.0)) * 0.04 * live;          // its smoke, lit from below
           float hd = mix(0.2, 1.0, smoothstep(-0.4, 0.6, cw));                    // the head burns hard, the back barely
-          fl += ((edge * run * 1.8 * hd + glow) * live + core + ember) * (0.25 + 1.5 * h.y * h.y)
+          fl += ((edge * run * 1.8 * hd + glow + inside * fill) * live + core + ember) * (0.25 + 1.5 * h.y * h.y)
                 * (0.75 + 0.25 * sin(fire.w * 11.0 + h.x * 60.0 + d * 40.0));
           burnt = max(burnt, inside);
         }
@@ -101,6 +110,28 @@
         float pw = smoothstep(0.0, 0.07, min(min(pu.x, 1.0 - pu.x), min(pu.y, 1.0 - pu.y)));
         float g = texture2D(sea, uvOf(q, 0.0)).r;
         return pw > 0.0 ? mix(g, texture2D(prel, pu).b, pw) : g;
+      }
+      // the smoke of the big fires (the same cells as fires() at this K): from each a plume carried downwind, faster
+      // than the fire spreads, widening as it goes, in drifting billows; near the fire lit orange from below by its
+      // flames. The 27 nearest cells, so a plume can run ~1 cell (~90 km at K 70) from its fire — about as far as
+      // smoke drifts in the hour. Returns: cover (0–1), firelight on it
+      vec2 smoke(vec3 n, float K, float p) {
+        vec3 q = n * K, b = floor(q); float a = 0.0, lit = 0.0;
+        for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) for (int k = -1; k <= 1; k++) {
+          vec3 cc = b + vec3(float(i), float(j), float(k)), h, ctr; float age;
+          if (!fireAt(cc, K, p, h, ctr, age)) continue;
+          float fu = (1.0 - seaAt(ctr)) * fuelOf(pow(texture2D(color, uvOf(ctr, 0.0)).rgb, vec3(2.2)));
+          if (fu < 0.05) continue;
+          vec3 wd = windAt(ctr, h), dv = q - ctr * K;
+          float along = dot(dv, wd); vec3 side = dv - wd * along - ctr * dot(dv, ctr);
+          float L = min(0.95, age * 0.2 * (0.6 + 0.8 * h.y)), wdt = 0.04 + 0.35 * max(along, 0.0);
+          float body = smoothstep(-0.06, 0.02, along) * (1.0 - smoothstep(L * 0.55, L, along)) * exp(-dot(side, side) / (wdt * wdt));
+          float lump = smoothstep(-0.35, 0.45, fb(q * 3.5 - wd * fire.w * 0.35 + h * 9.0));
+          float sm = body * lump * fu * (0.55 + 0.45 * h.y);
+          a = 1.0 - (1.0 - a) * (1.0 - sm);
+          lit += sm * exp(-max(along, 0.0) / 0.22) * (0.25 + 1.5 * h.y * h.y);
+        }
+        return vec2(a, lit);
       }
       void main() {
         vec3 n = normalize(vW - C), V = normalize(cameraPosition - vW);
@@ -203,12 +234,18 @@
           vec3 lightIn = skyL * 3.0 + vec3(0.7, 0.75, 0.9) * fire2.z;
           col += mix(c0 * (1.0 - w) * 1.3 + w * vec3(0.006, 0.006, 0.008), vec3(0.8, 0.78, 0.76), cl) * lightIn;
           float vz = dot(n, V); col += skyL * 0.012 / sqrt(vz * vz + 0.02);      // the glowing layer itself, thicker toward the limb
-          float land = smoothstep(0.6, 0.2, w), fuel = land * smoothstep(0.25, 0.42, c0.g / (c0.r + c0.g + c0.b + 1e-4)) * smoothstep(0.30, 0.06, c0.r + c0.g + c0.b);
+          float land = smoothstep(0.6, 0.2, w), fuel = land * fuelOf(c0);
           if (fuel > 0.0 && s0 > 0.0) {
-            vec2 f1 = fires(n, 70.0, 0.75, 0.03, px * 70.0), f2 = fires(n, 260.0, 0.55, 0.012, px * 260.0);
+            vec2 f1 = fires(n, 70.0, 0.75, 0.03, px * 70.0, 0.06), f2 = fires(n, 260.0, 0.55, 0.012, px * 260.0, 0.7);
             float flame = (f1.x + 0.6 * f2.x) * fuel * fire2.x;
             col *= 1.0 - 0.55 * max(f1.y, f2.y) * fuel * day;                     // char
             col += vec3(1.0, 0.36, 0.07) * flame * (1.0 - 0.85 * cl) + vec3(1.0, 0.45, 0.2) * flame * 0.15 * cl;
+          }
+          // the smoke: lit by the red sky (and the Sun, by day) from above and by the fires from below; under the clouds
+          if (s0 > 0.0) {
+            vec2 sm = smoke(n, 70.0, 0.75);
+            float sa = sm.x * 0.75 * (1.0 - 0.7 * cl);
+            col = mix(col, (lightIn + sunG * max(mu, 0.0) * 2.0) * vec3(0.55, 0.45, 0.38), sa) + vec3(1.0, 0.36, 0.1) * sm.y * fire2.x * 0.2 * (1.0 - 0.7 * cl);
           }
         }
         // the tsunami's white crests show through the gaps and, faintly, through the cloud
