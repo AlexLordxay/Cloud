@@ -28,10 +28,11 @@
     pcol: { value: pcol }, prel: { value: prel }, pbox: { value: new T.Vector4(...PBOX) },
     shock: { value: new T.Vector4(1, 0, 0, 0) }, shock2: { value: new T.Vector4(0, 0, 0, 0) },
     hole: { value: new T.Vector4(1, 0, 0, 0) }, dfog: { value: new T.Vector4(0, 0, 0, 0) },
-    tsu: { value: new T.Vector4(1, 0, 0, 0) }, tsu2: { value: new T.Vector4(0, 0, 0, 0) } };
+    tsu: { value: new T.Vector4(1, 0, 0, 0) }, tsu2: { value: new T.Vector4(0, 0, 0, 0) },
+    fire: { value: new T.Vector4(1, 0, 0, 0) }, fire2: { value: new T.Vector4(0, 0, 0, 0) } };
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
     fragmentShader: `uniform sampler2D color, relief, sea, clouds, pcol, prel; uniform vec4 pbox; uniform vec3 sun, C; uniform float R, bump, cloudLon, exposure, dim;
-      uniform vec4 fball, shock, shock2, hole, dfog, tsu, tsu2; uniform float haze, atm;
+      uniform vec4 fball, shock, shock2, hole, dfog, tsu, tsu2, fire, fire2; uniform float haze, atm;
       varying vec3 vW;
       float h3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
       float vn(vec3 p) {
@@ -159,6 +160,25 @@
         col = col * Tv + (1.0 - Tv) * sunA * ph * atm * 0.75;
         // the dust and soot ride high, above the weather and most of the air: a brown veil over everything
         if (pall > 0.0) col = mix(col, vec3(0.16, 0.085, 0.035) * (0.15 + 0.85 * max(mu, 0.0)) * sunG, pall);
+        // the fiery rain (fire: the impact site and how far, as an angle, the returning ejecta have reached; fire2: fires,
+        // the glow of the heated upper air, smoke, the film's time): behind the front, flames on the land — scattered
+        // blazes and long burning lines — flickering and spreading, smoke dimming the day side; and the sky itself
+        // glowing orange over the night side, most toward the limb where we look through the most of it
+        if (fire2.x > 0.0 || fire2.y > 0.0) {
+          float fa = acos(clamp(dot(n, fire.xyz), -1.0, 1.0));
+          float reached = smoothstep(fire.w, fire.w - 0.2, fa);
+          float since = clamp((fire.w - fa) / 0.8, 0.0, 1.0);          // how long ago it arrived, as a share
+          float land = 1.0 - w;
+          float f1 = smoothstep(0.62 - 0.12 * since, 0.8, fb(n * 140.0 + 3.0) * 0.5 + 0.5);
+          float f2 = 1.0 - smoothstep(0.0, 0.012 + 0.03 * since, abs(fb(n * 45.0 + 9.0)));
+          float flick = 0.7 + 0.3 * sin(fire2.w * 9.0 + fb(n * 300.0) * 25.0);
+          float burn = land * reached * (f1 * 0.7 + f2 * 1.0) * flick;
+          col *= 1.0 - fire2.z * reached * (0.3 + 0.4 * land) * since;
+          float nightK = 1.0 - smoothstep(-0.1, 0.15, mu) * 0.75;
+          col += vec3(1.0, 0.30, 0.05) * burn * fire2.x * nightK;
+          float rimv = pow(1.0 - max(dot(n, V), 0.0), 2.0);
+          col += vec3(1.0, 0.33, 0.09) * fire2.y * reached * (0.2 + 0.8 * rimv) * nightK * (0.8 + 0.4 * fb(n * 20.0 + fire2.w * 0.3));
+        }
         if (shock.w > 0.0) {
           float dn = fb(n * 900.0 + 3.0) * 0.5 + 0.5;
           col = mix(col, vec3(0.16, 0.12, 0.09) * (0.15 + 0.85 * max(mu, 0.0)) * (0.7 + 0.6 * dn), inside * shock2.w);
@@ -188,7 +208,7 @@
   // at dusk a red-orange layer on the horizon. A hair of glow is let inside the limb, over the mesh's facet gaps.
   const halo = new T.Mesh(new T.SphereGeometry(ER * 1.035, 256, 128), new T.ShaderMaterial({ uniforms: U, vertexShader: VS,
     transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.FrontSide,
-    fragmentShader: `uniform vec3 sun, C; uniform float R, dim, atm; varying vec3 vW;
+    fragmentShader: `uniform vec3 sun, C; uniform float R, dim, atm; uniform vec4 fire, fire2; varying vec3 vW;
       // the air (Rayleigh): extinction per unit (1000 km) at sea level for red, green, blue; scale height 8 km;
       // the air mass along a slant (Kasten–Young), so the Sun near the horizon shines through much more air
       const vec3 BETA = vec3(5.8, 13.5, 33.1); const float HS = 0.008;
@@ -208,6 +228,11 @@
         vec3 lit = sunT(h, ms) * smoothstep(-0.02, 0.01, ms);
         float cs = dot(d, sun), ph = 0.75 * (1.0 + cs * cs) + 0.5 * pow(max(cs, 0.0), 8.0);
         vec3 L = (1.0 - exp(-tauV)) * lit * ph * atm;
+        if (fire2.y > 0.0) {
+          // the upper air, heated by the ejecta coming back in (~60–100 km up), glowing orange-red round the limb
+          float reached = smoothstep(fire.w, fire.w - 0.2, acos(clamp(dot(up, fire.xyz), -1.0, 1.0)));
+          L += vec3(1.0, 0.35, 0.10) * fire2.y * 1.6 * reached * exp(-pow((h - 0.075) / 0.03, 2.0));
+        }
         gl_FragColor = vec4(L * (1.0 - dim), 1.0);
       }` }));
   scene.add(earth, halo);
@@ -587,6 +612,21 @@
       }` }));
   skydome.renderOrder = -10; skydome.visible = false; skydome.scale.setScalar(2); scene.add(skydome);
 
+  // ---- meteors: short glowing streaks (line segments, a bright head and a fading tail), placed by the shot ----------
+  function meteors(n) {
+    const g = new T.BufferGeometry(), pos = new Float32Array(n * 6), col = new Float32Array(n * 6);
+    g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setAttribute('color', new T.BufferAttribute(col, 3));
+    const m = new T.LineSegments(g, new T.LineBasicMaterial({ vertexColors: true, transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
+    m.frustumCulled = false; m.visible = false; m.renderOrder = 5; scene.add(m);
+    return { mesh: m, n, pos, col,
+      put(i, head, tail, b) {
+        pos.set([head.x, head.y, head.z, tail.x, tail.y, tail.z], i * 6);
+        col.set([b, b * 0.75, b * 0.45, b * 0.5, b * 0.12, b * 0.02], i * 6);
+      },
+      hide(i) { pos.fill(0, i * 6, i * 6 + 6); col.fill(0, i * 6, i * 6 + 6); },
+      done() { g.attributes.position.needsUpdate = true; g.attributes.color.needsUpdate = true; } };
+  }
+
   // ---- stars ----------------------------------------------------------------------------------------------------
   const sp = [], sc = [];
   for (let i = 0; i < 9000; i++) {
@@ -598,12 +638,12 @@
   const stars = new T.Points(sg, new T.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
   scene.add(stars);
 
-  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY };
+  window.X = { T, D, W, H, ER, renderer, scene, camera, earth, halo, U, asteroid, AU, stars, dirLL, fx, head, rnd, dome, crater, CU, skydome, SKY, meteors };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
     const s = window.SHOTS[name]; earth.visible = halo.visible = true; asteroid.visible = false; stars.visible = true;
-    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0); U.tsu.value.set(1, 0, 0, 0); U.tsu2.value.set(0, 0, 0, 0);
+    U.dim.value = 0; U.exposure.value = 1; AU.exposure.value = 1; AU.heat.value = 0; U.fball.value.set(0, 0, 0, 0); U.haze.value = 1; U.atm.value = 1.2; U.shock.value.set(1, 0, 0, 0); U.shock2.value.set(0, 0, 0, 0); U.hole.value.set(1, 0, 0, 0); crater.visible = false; skydome.visible = false; U.dfog.value.set(0, 0, 0, 0); U.tsu.value.set(1, 0, 0, 0); U.tsu2.value.set(0, 0, 0, 0); U.fire.value.set(1, 0, 0, 0); U.fire2.value.set(0, 0, 0, 0);
     head.core.visible = head.halo.visible = false;
     if (s.setup) await s.setup(window.X);
   };

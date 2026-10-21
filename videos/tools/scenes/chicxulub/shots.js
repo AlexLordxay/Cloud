@@ -343,6 +343,51 @@
         X.head.core.position.copy(glowPt); X.head.core.scale.setScalar(0.12);
         X.head.halo.position.copy(glowPt); X.head.halo.scale.setScalar(0.45);
       } },
+    // the fiery rain: the ejecta thrown out above the air come back in all over the world within the hour — countless
+    // meteors, thickest near the Gulf and on the far side of the Earth (where the debris converges); the upper air
+    // heated to a glow; fires breaking out on the land and spreading (soot in the boundary layer says vast areas
+    // burned; how far the fires went is still argued). The night side, ~10 000 km up: the Sun has set on Yucatán, so the
+    // Atlantic, Africa and Europe are in the dark. ~1.5 h in 10 s; the front reaches the far side ~7 s in.
+    fire_rain: { dur: 10,
+      front(t) { return 3.12 * Math.pow(Math.min(Math.max(t, 0) / 7, 1), 0.8); },
+      setup(X) {
+        const S = this.S = site(X), c = S.up, r = X.rnd;
+        this.sun = S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize();
+        const M = this.met = this.met || X.meteors(9000), list = this.list = [];
+        while (list.length < M.n) {
+          const z = 2 * r() - 1, ph = r() * Math.PI * 2, q = Math.sqrt(1 - z * z), P = V(q * Math.cos(ph), z, q * Math.sin(ph));
+          const ang = Math.acos(Math.max(-1, Math.min(1, P.dot(c))));
+          const dens = 0.35 + Math.exp(-ang / 0.35) + 0.8 * Math.exp(-(Math.PI - ang) / 0.3);
+          if (r() * 2.2 > dens) continue;
+          const ta = 7 * Math.pow(ang / 3.12, 1 / 0.8) + -Math.log(1 - r() * 0.98) * 1.4, L = 0.35 + 0.55 * r();
+          const tan = P.clone().multiplyScalar(P.dot(c)).sub(c).normalize();
+          const v = tan.multiplyScalar(0.7).addScaledVector(P, -0.7).normalize().multiplyScalar((0.04 + 0.03 * r()) / L);
+          list.push({ P: P.multiplyScalar(X.ER + 0.11), v, ta, L, len: 0.03 + 0.07 * r(), b: 0.35 + 0.65 * r() });
+        }
+        M.mesh.visible = true;
+      },
+      frame(X, t) {
+        const S = this.S, c = S.up, M = this.met;
+        for (let i = 0; i < M.n; i++) {
+          const m = this.list[i], age = t - m.ta;
+          if (age < 0 || age > m.L) { M.hide(i); continue; }
+          const head = m.P.clone().addScaledVector(m.v, age), dir = m.v.clone().normalize();
+          const tail = head.clone().addScaledVector(dir, -m.len * Math.min(1, age / 0.15));
+          M.put(i, head, tail, m.b * Math.sin(Math.PI * age / m.L) * 1.6);
+        }
+        M.done();
+        X.U.fire.value.set(c.x, c.y, c.z, this.front(t));
+        X.U.fire2.value.set(1.3 * smooth(t / 3), 0.9 * smooth(t / 2), 0.55, t);
+        X.U.tsu2.value.set(1e-6, 0.12 + 0.05 * t, 0, 0);                 // (the brown pall over the Gulf, no rings)
+        X.U.tsu.value.set(c.x, c.y, c.z, 0.0);
+        // the camera: over the night side, ~10 000 km up, drifting from above the Gulf's evening toward the far side
+        const night = this.sun.clone().negate();
+        const d0 = c.clone().multiplyScalar(0.55).addScaledVector(night, 0.45).normalize();
+        const d1 = c.clone().multiplyScalar(-0.35).addScaledVector(night, 0.65).normalize();
+        const k = smooth(t / this.dur), dir = d0.clone().lerp(d1, k).normalize();
+        cam(X, dir.multiplyScalar(X.ER * lerp(2.5, 2.2, k)), V(0, 0, 0), 40, V(0, 1, 0), 0.01);
+        X.U.sun.value.copy(this.sun); X.U.cloudLon.value = 0.02;
+      } },
     // checks of the detailed region by day: straight down on the site from ~700 km, and low and oblique over the coast
     site_top: { dur: 2,
       frame(X, t) {
