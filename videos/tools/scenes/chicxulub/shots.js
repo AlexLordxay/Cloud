@@ -433,8 +433,10 @@
         const U = X.U, c = this.S.up;
         // the veil going (a few years), the snow, then the green
         U.dark.value.set(c.x, c.y, c.z, 3.7);
-        U.dark2.value.set(1 - smooth(t / 3.5), 3.5 + 0.4 * t, 0.1, 0);
-        U.snow.value.set(1 - smooth((t - 3.5) / 2.2), 0, 0, 0);
+        // (the high winds carry on from where the long night left them, so the bands do not jump at the cut)
+        U.dark2.value.set(1 - smooth(t / 3.5), 0.25 * 14 + 0.02 * 14 * 14 + 0.4 * t, 0.1, 0);
+        // the snow settles under the veil (none at the cut, so nothing jumps), then melts
+        U.snow.value.set(smooth(t / 2.5) * (1 - smooth((t - 3.5) / 2.2)), 0, 0, 0);
         // the drift: 14 steps from 65 million years ago to now
         const D = 14 * smooth((t - 5.5) / 9.5), i = Math.min(Math.floor(D), 13), k = D - i, A = this.tex[this.SEQ[i]], B = this.tex[this.SEQ[i + 1]];
         U.eA.value = A.c; U.eAr.value = A.r; U.eF.value = A.f; U.eB.value = B.c; U.eBr.value = B.r;
