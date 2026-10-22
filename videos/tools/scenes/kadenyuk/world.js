@@ -37,12 +37,12 @@
   const earthMat = new THREE.ShaderMaterial({
     uniforms: { day: { value: tex('earth_day.jpg') }, night: { value: tex('earth_night.jpg') },
       spec: { value: tex('earth_specular.jpg') }, clouds: { value: tex('earth_clouds.png') },
-      patch: { value: (() => { const t = tl.load('/work/patch.jpg', () => tex.n--); tex.n++; t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; })() },
+      detail: { value: (() => { const t = tl.load('/work/patch.jpg', () => tex.n--); tex.n++; t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; })() },
       pbox: { value: new THREE.Vector4(0, 0, 67.5, 67.5) },
       sun: { value: sun }, cam: { value: pos } },
     vertexShader: `varying vec2 vUv; varying vec3 vN, vP;
       void main(){ vUv = uv; vN = normalize(position); vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
-    fragmentShader: `uniform sampler2D day, night, spec, clouds, patch; uniform vec4 pbox; uniform vec3 sun, cam; varying vec2 vUv; varying vec3 vN, vP;
+    fragmentShader: `uniform sampler2D day, night, spec, clouds, detail; uniform vec4 pbox; uniform vec3 sun, cam; varying vec2 vUv; varying vec3 vN, vP;
       vec3 lin(vec3 c){ return pow(c, vec3(2.2)); }
       void main(){
         vec3 n = normalize(vN), v = normalize(cam - vP);
@@ -50,7 +50,7 @@
         vec3 d = lin(texture2D(day, vUv).rgb);
         // the detailed patch (lon/lat box pbox) over the base map
         vec2 ll = vec2(vUv.x * 360. - 180., vUv.y * 180. - 90.), pu = (ll - pbox.xy) / (pbox.zw - pbox.xy);
-        if (pu.x > 0. && pu.x < 1. && pu.y > 0. && pu.y < 1.) d = lin(texture2D(patch, pu).rgb);
+        if (pu.x > 0. && pu.x < 1. && pu.y > 0. && pu.y < 1.) d = lin(texture2D(detail, pu).rgb);
         float cl = texture2D(clouds, vUv).r;
         d = mix(d, vec3(0.92), cl * 0.85);
         vec3 col = d * max(mu, 0.) * 1.15;
@@ -101,6 +101,12 @@
     const k = 37 / Math.max(size.x, size.y, size.z);
     raw.position.copy(c).multiplyScalar(-k); raw.scale.setScalar(k);
     ship.add(raw);
+    // the payload bay doors open, as in orbit: each swings about its hinge on the bay's outer edge (model units)
+    [['door_prt', 1], ['door_stb', -1]].forEach(([n, sd]) => {
+      const d = raw.getObjectByName(n), pv = new THREE.Group();
+      pv.position.set(0, 107 * sd, 18); raw.add(pv); pv.add(d); d.position.set(0, -107 * sd, -18);
+      pv.rotation.x = -sd * window.DOOR * D2R;
+    });
     raw.traverse(o => { if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => {
       if (m.map && !m.map.image) { m.map = null; m.color && m.color.set(0xf2f2ee); }   // the doors' textures are not in the repo
       if (m.map) { m.map.encoding = THREE.sRGBEncoding; m.map.anisotropy = 8; } m.needsUpdate = true; }); } });
@@ -110,14 +116,17 @@
   wait();
 
   // the shuttle's place: ahead of the camera and below the view centre; SHIP_* tweakable from the console
-  window.SHIP = { dist: 62, down: -9, side: 2, yaw: 0, pitch: 0, roll: 0 };
+  window.DOOR = 150;   // degrees the bay doors are swung open
+  window.SHIP = { dist: 95, down: -14, side: 0, heading: -35, roll: 25 };   // heading: from north towards east; roll: towards the camera
   window.render = () => {
     const S = window.SHIP, f = new THREE.Vector3(0, 0, -1).applyQuaternion(camS.quaternion),
       u = new THREE.Vector3(0, 1, 0).applyQuaternion(camS.quaternion), r = new THREE.Vector3(1, 0, 0).applyQuaternion(camS.quaternion);
     ship.position.copy(f).multiplyScalar(S.dist).addScaledVector(u, S.down).addScaledVector(r, S.side);
     // the shuttle's frame in the shuttle scene: same axes as the Earth scene (both are world space)
-    ship.quaternion.setFromRotationMatrix(new THREE.Matrix4().lookAt(new THREE.Vector3(), north.clone().negate(), up));
-    ship.rotateY(S.yaw * D2R); ship.rotateX(S.pitch * D2R); ship.rotateZ(S.roll * D2R);
+    // the model: +x nose, +y port wing, +z the top (bay); nose along the heading, bay up, rolled towards the camera
+    const nose = north.clone().multiplyScalar(Math.cos(S.heading * D2R)).addScaledVector(east, Math.sin(S.heading * D2R));
+    ship.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(nose, new THREE.Vector3().crossVectors(up, nose), up));
+    ship.rotateX(-S.roll * D2R);
     rd.clear(); rd.render(sE, camE); rd.clearDepth(); rd.render(sS, camS);
     return rd.domElement.toDataURL('image/jpeg', 0.93);
   };

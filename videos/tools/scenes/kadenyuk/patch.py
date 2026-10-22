@@ -9,5 +9,6 @@ im = Image.new('RGB', (2048 * len(X), 2048 * len(Y)))
 for i, x in enumerate(X):
     for j, y in enumerate(Y):
         im.paste(Image.open(f'{T}/{x}_{y}.jpg').convert('RGB'), (2048 * i, 2048 * j))
+im = im.resize((4096, 4096), Image.LANCZOS)   # swiftshader's texture limit
 im.save(OUT, quality=92)
 print(OUT, 'lon', X[0] * 22.5 - 180, (X[-1] + 1) * 22.5 - 180, 'lat', 90 - (Y[-1] + 1) * 22.5, 90 - Y[0] * 22.5)
