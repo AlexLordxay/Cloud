@@ -11,7 +11,7 @@
     // down onto Bukovina, Klishkivtsi in the middle
     home: { dur: 4.25, at: t => { const k = ease(t / 4.25); return {
       lat: 48.43, lon: 26.27, alt: lerp(7500, 1300, k), pitch: -90, heading: 0, sunAz: 200, sunEl: 42, mark: [48.43, 26.27],
-      clouds: 1 - k };   // the coarse cloud map would blur the close view: it clears on the way down } },
+      clouds: 1 - k }; } },   // the coarse cloud map would blur the close view: it clears on the way down
     // 1976: the Earth at dusk, Ukraine's lights coming on
     night: { dur: 6.3, at: t => { const k = t / 6.3; return {
       lat: 44, lon: lerp(25, 31, k), alt: 14000, pitch: -90, heading: 0, sunAt: [48, 30], sunAz: 285, sunEl: lerp(-6, -16, k) }; } },
