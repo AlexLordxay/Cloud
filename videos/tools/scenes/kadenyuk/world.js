@@ -58,7 +58,10 @@
         vec3 d = lin(texture2D(day, vUv).rgb);
         // the detailed patch (lon/lat box pbox) over the base map
         vec2 ll = vec2(vUv.x * 360. - 180., vUv.y * 180. - 90.), pu = (ll - pbox.xy) / (pbox.zw - pbox.xy);
-        if (pu.x > 0. && pu.x < 1. && pu.y > 0. && pu.y < 1.) d = lin(texture2D(detail, pu).rgb);
+        // feathered over ~4° at the patch edges, so its seam with the base map doesn't show
+        vec2 eg = min(ll - pbox.xy, pbox.zw - ll);
+        float pw = smoothstep(0., 4., min(eg.x, eg.y));
+        if (pw > 0.) d = mix(d, lin(texture2D(detail, clamp(pu, 0., 1.)).rgb), pw);
         float cl = texture2D(clouds, vUv).r * cloudAmt;
         d = mix(d, vec3(0.92), cl * 0.85);
         vec3 col = d * max(mu, 0.) * 1.15;

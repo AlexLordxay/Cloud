@@ -42,7 +42,7 @@ def shot(name, start, t):
     if marks[i]: mark(im, marks[i], t - start)
     return im
 
-F_MARK = ImageFont.truetype(os.path.join(TOOLS, 'fonts', 'Commissioner.ttf'), 30)
+F_MARK = ImageFont.truetype(os.path.join(TOOLS, 'fonts', 'Commissioner.ttf'), 40)
 def mark(im, xy, t):
     # a dot with a soft pulsing ring and the village's name, coming up once the camera is low enough
     a = min(1.0, max(0.0, (t - 1.2) / 0.8))
@@ -51,8 +51,8 @@ def mark(im, xy, t):
     r = 10 + 14 * ((t * 0.9) % 1); ra = int(200 * a * (1 - (t * 0.9) % 1))
     d.ellipse((x - r, y - r, x + r, y + r), outline=(255, 214, 120, ra), width=3)
     d.ellipse((x - 7, y - 7, x + 7, y + 7), fill=(255, 214, 120, int(255 * a)), outline=(0, 0, 0, int(160 * a)), width=2)
-    d.text((x + 1, y - 22 + 2), 'Клішківці', font=F_MARK, fill=(0, 0, 0, int(170 * a)), anchor='ms')
-    d.text((x, y - 22), 'Клішківці', font=F_MARK, fill=(255, 255, 255, int(255 * a)), anchor='ms')
+    d.text((x + 1, y - 26 + 2), 'Клішківці', font=F_MARK, fill=(0, 0, 0, int(170 * a)), anchor='ms')
+    d.text((x, y - 26), 'Клішківці', font=F_MARK, fill=(255, 255, 255, int(255 * a)), anchor='ms')
     im.paste(Image.alpha_composite(im.convert('RGBA'), lay).convert('RGB'))
 
 def piece(k, t):
