@@ -13,21 +13,29 @@
       r * Math.sin(u * 2 * Math.PI) * Math.sin(v * Math.PI));
   };
 
-  // where we are: 300 km above the northern Red Sea, looking north towards the Black Sea and Ukraine on the horizon
-  const LAT = 27, LON = 34, ALT = 300, PITCH = -22;            // PITCH: view below the local horizontal, degrees
-  const pos = geo(LAT, LON, R + ALT), up = pos.clone().normalize();
-  const north = geo(LAT + 0.01, LON).sub(geo(LAT, LON)).normalize(), east = new THREE.Vector3().crossVectors(north, up);
-  const look = north.clone().multiplyScalar(Math.cos(PITCH * D2R)).addScaledVector(up, Math.sin(PITCH * D2R));
-  // the Sun: 40 degrees up, from the west-south-west (light from the left of the picture)
-  const sunAz = 250 * D2R, sunEl = 40 * D2R;
-  const sun = up.clone().multiplyScalar(Math.sin(sunEl))
-    .addScaledVector(north, Math.cos(sunEl) * Math.cos(sunAz)).addScaledVector(east, Math.cos(sunEl) * Math.sin(sunAz)).normalize();
-
+  // the view (window.view sets it): camera lat/lon/alt (km), pitch below the local horizontal and heading of the
+  // look from north (degrees), the Sun's azimuth/elevation at that point; up/north/east are the local frame there
+  let pos = new THREE.Vector3(), up = new THREE.Vector3(), north = new THREE.Vector3(), east = new THREE.Vector3();
+  const sun = new THREE.Vector3();
   const FOV = 52;
-  const camE = new THREE.PerspectiveCamera(FOV, W / H, 1, 20000);
-  camE.position.copy(pos); camE.up.copy(up); camE.lookAt(pos.clone().add(look));
+  const camE = new THREE.PerspectiveCamera(FOV, W / H, 1, 40000);
   const camS = new THREE.PerspectiveCamera(FOV, W / H, 0.5, 2000);
-  camS.quaternion.copy(camE.quaternion);
+  const frame = (lat, lon) => {
+    const p = geo(lat, lon), u = p.clone().normalize(), n = geo(lat + 0.01, lon).sub(p).normalize();
+    return [u, n, new THREE.Vector3().crossVectors(n, u)];
+  };
+  const setView = V => {
+    pos = geo(V.lat, V.lon, R + V.alt); [up, north, east] = frame(V.lat, V.lon);
+    const pi = V.pitch * D2R, hd = (V.heading || 0) * D2R;
+    const hz = north.clone().multiplyScalar(Math.cos(hd)).addScaledVector(east, Math.sin(hd));
+    const look = hz.clone().multiplyScalar(Math.cos(pi)).addScaledVector(up, Math.sin(pi));
+    camE.position.copy(pos); camE.up.copy(V.pitch < -60 ? hz : up); camE.lookAt(pos.clone().add(look));
+    camS.quaternion.copy(camE.quaternion);
+    // the Sun from where it stands at a ground point (sunAt: [lat, lon], default under the camera)
+    const [su, sn, se] = V.sunAt ? frame(V.sunAt[0], V.sunAt[1]) : [up, north, east];
+    const az = V.sunAz * D2R, el = V.sunEl * D2R;
+    sun.copy(su).multiplyScalar(Math.sin(el)).addScaledVector(sn, Math.cos(el) * Math.cos(az)).addScaledVector(se, Math.cos(el) * Math.sin(az)).normalize();
+  };
 
   // ---- the Earth
   const sE = new THREE.Scene(), tl = new THREE.TextureLoader();
@@ -38,11 +46,11 @@
     uniforms: { day: { value: tex('earth_day.jpg') }, night: { value: tex('earth_night.jpg') },
       spec: { value: tex('earth_specular.jpg') }, clouds: { value: tex('earth_clouds.png') },
       detail: { value: (() => { const t = tl.load('/work/patch.jpg', () => tex.n--); tex.n++; t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; })() },
-      pbox: { value: new THREE.Vector4(0, 0, 67.5, 67.5) },
-      sun: { value: sun }, cam: { value: pos } },
+      pbox: { value: new THREE.Vector4(0, 0, 67.5, 67.5) }, cloudAmt: { value: 1 },
+      sun: { value: sun }, cam: { value: new THREE.Vector3() } },
     vertexShader: `varying vec2 vUv; varying vec3 vN, vP;
       void main(){ vUv = uv; vN = normalize(position); vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
-    fragmentShader: `uniform sampler2D day, night, spec, clouds, detail; uniform vec4 pbox; uniform vec3 sun, cam; varying vec2 vUv; varying vec3 vN, vP;
+    fragmentShader: `uniform sampler2D day, night, spec, clouds, detail; uniform vec4 pbox; uniform float cloudAmt; uniform vec3 sun, cam; varying vec2 vUv; varying vec3 vN, vP;
       vec3 lin(vec3 c){ return pow(c, vec3(2.2)); }
       void main(){
         vec3 n = normalize(vN), v = normalize(cam - vP);
@@ -51,7 +59,7 @@
         // the detailed patch (lon/lat box pbox) over the base map
         vec2 ll = vec2(vUv.x * 360. - 180., vUv.y * 180. - 90.), pu = (ll - pbox.xy) / (pbox.zw - pbox.xy);
         if (pu.x > 0. && pu.x < 1. && pu.y > 0. && pu.y < 1.) d = lin(texture2D(detail, pu).rgb);
-        float cl = texture2D(clouds, vUv).r;
+        float cl = texture2D(clouds, vUv).r * cloudAmt;
         d = mix(d, vec3(0.92), cl * 0.85);
         vec3 col = d * max(mu, 0.) * 1.15;
         float s = texture2D(spec, vUv).r * (1. - cl);
@@ -66,7 +74,7 @@
   sE.add(new THREE.Mesh(new THREE.SphereGeometry(R, 512, 256), earthMat));
   // the limb glow: a slightly larger sphere seen from inside-out, bright at the edge
   const atm = new THREE.ShaderMaterial({
-    uniforms: { sun: { value: sun }, cam: { value: pos } }, side: THREE.BackSide, transparent: true, depthWrite: false,
+    uniforms: { sun: { value: sun }, cam: { value: new THREE.Vector3() } }, side: THREE.BackSide, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending,
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`,
     fragmentShader: `uniform vec3 sun, cam; varying vec3 vP;
@@ -80,13 +88,13 @@
 
   // ---- the shuttle
   const sS = new THREE.Scene();
-  const sunL = new THREE.DirectionalLight(0xfff6ea, 3.2); sunL.position.copy(sun); sS.add(sunL);
+  const sunL = new THREE.DirectionalLight(0xfff6ea, 3.2); sS.add(sunL);
   sS.add(new THREE.HemisphereLight(0x0a0f18, 0x5d7fb0, 0.9));   // dark sky above, blue Earth-shine from below
   sS.add(new THREE.AmbientLight(0xffffff, 0.08));
   const ship = new THREE.Group(); sS.add(ship);
   const gl = new THREE.GLTFLoader(), draco = new THREE.DRACOLoader();
   draco.setDecoderPath('/draco/'); gl.setDRACOLoader(draco);
-  const parts = ['D', 'door_prt', 'door_stb', 'eng', 'rcs'];
+  const parts = ['D', 'door_prt', 'door_stb'];   // eng/rcs are loose duplicates of what D has
   let left = parts.length;
   const raw = new THREE.Group();
   parts.forEach(n => gl.load('/model/' + n + '.glb', g => { g.scene.name = n; raw.add(g.scene); left--; },
@@ -115,19 +123,27 @@
   const wait = () => (left || tex.n) ? setTimeout(wait, 100) : ready();
   wait();
 
-  // the shuttle's place: ahead of the camera and below the view centre; SHIP_* tweakable from the console
   window.DOOR = 150;   // degrees the bay doors are swung open
-  window.SHIP = { dist: 95, down: -14, side: 0, heading: -35, roll: 25 };   // heading: from north towards east; roll: towards the camera
-  window.render = () => {
-    const S = window.SHIP, f = new THREE.Vector3(0, 0, -1).applyQuaternion(camS.quaternion),
-      u = new THREE.Vector3(0, 1, 0).applyQuaternion(camS.quaternion), r = new THREE.Vector3(1, 0, 0).applyQuaternion(camS.quaternion);
-    ship.position.copy(f).multiplyScalar(S.dist).addScaledVector(u, S.down).addScaledVector(r, S.side);
-    // the shuttle's frame in the shuttle scene: same axes as the Earth scene (both are world space)
-    // the model: +x nose, +y port wing, +z the top (bay); nose along the heading, bay up, rolled towards the camera
-    const nose = north.clone().multiplyScalar(Math.cos(S.heading * D2R)).addScaledVector(east, Math.sin(S.heading * D2R));
-    ship.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(nose, new THREE.Vector3().crossVectors(up, nose), up));
-    ship.rotateX(-S.roll * D2R);
-    rd.clear(); rd.render(sE, camE); rd.clearDepth(); rd.render(sS, camS);
-    return rd.domElement.toDataURL('image/jpeg', 0.93);
+  // one picture: V = the view (above) plus V.ship = {dist, down, side, heading, roll} or nothing (no shuttle).
+  // Returns the JPEG and where V.mark ([lat, lon]) lands on the screen, in pixels
+  window.render = V => {
+    setView(V);
+    earthMat.uniforms.cam.value.copy(pos); earthMat.uniforms.cloudAmt.value = V.clouds == null ? 1 : V.clouds; atm.uniforms.cam.value.copy(pos); sunL.position.copy(sun);
+    const S = V.ship;
+    ship.visible = !!S;
+    if (S) {
+      const f = new THREE.Vector3(0, 0, -1).applyQuaternion(camS.quaternion),
+        u = new THREE.Vector3(0, 1, 0).applyQuaternion(camS.quaternion), r = new THREE.Vector3(1, 0, 0).applyQuaternion(camS.quaternion);
+      ship.position.copy(f).multiplyScalar(S.dist).addScaledVector(u, S.down).addScaledVector(r, S.side);
+      // the model: +x nose, +y port wing, +z the top (bay); nose along the heading, bay up, rolled towards the camera
+      const nose = north.clone().multiplyScalar(Math.cos(S.heading * D2R)).addScaledVector(east, Math.sin(S.heading * D2R));
+      ship.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(nose, new THREE.Vector3().crossVectors(up, nose), up));
+      ship.rotateX(-S.roll * D2R);
+    }
+    camE.updateMatrixWorld();
+    rd.clear(); rd.render(sE, camE); rd.clearDepth(); if (S) rd.render(sS, camS);
+    let mark = null;
+    if (V.mark) { const m = geo(V.mark[0], V.mark[1]).project(camE); mark = [(m.x + 1) / 2 * W, (1 - m.y) / 2 * H]; }
+    return { url: rd.domElement.toDataURL('image/jpeg', 0.93), mark };
   };
 })();
