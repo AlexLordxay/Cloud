@@ -123,7 +123,7 @@
   const wait = () => (left || tex.n) ? setTimeout(wait, 100) : ready();
   wait();
 
-  window.DOOR = 150;   // degrees the bay doors are swung open
+  window.DOOR = 0;     // degrees the bay doors are swung open (150 = open as in orbit; the author chose them closed)
   // one picture: V = the view (above) plus V.ship = {dist, down, side, heading, roll} or nothing (no shuttle).
   // Returns the JPEG and where V.mark ([lat, lon]) lands on the screen, in pixels
   window.render = V => {
