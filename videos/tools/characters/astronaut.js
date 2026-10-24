@@ -390,46 +390,88 @@
       g.setIndex(gl.concat(rb)); g.clearGroups(); g.addGroup(0, gl.length, 0); g.addGroup(gl.length, rb.length, 1);
       bs[2].add(tip);
     }
-    // average the normals of vertices that share a position (a sphere's seam and poles)
-    function weldNormals(g) {
-      const p = g.attributes.position, n = g.attributes.normal, acc = new Map(), key = i => p.getX(i).toFixed(5) + ',' + p.getY(i).toFixed(5) + ',' + p.getZ(i).toFixed(5);
-      for (let i = 0; i < p.count; i++) { const k = key(i), v = acc.get(k) || [0, 0, 0]; v[0] += n.getX(i); v[1] += n.getY(i); v[2] += n.getZ(i); acc.set(k, v); }
-      for (let i = 0; i < p.count; i++) { const v = acc.get(key(i)), l = Math.hypot(...v) || 1; n.setXYZ(i, v[0] / l, v[1] / l, v[2] / l); }
-      return g;
-    }
-    // The palm: a rounded slab (a superellipsoid), flatter on the palm side, with a thenar and a hypothenar pad, a
-    // shallow hollow in the middle, knuckle bumps on the back, the knuckle line an arc; at the wrist it rounds into a
-    // bulb that stays inside the gauntlet at any wrist angle. Skinned to [wrist, nearest finger, next finger, thumb], so
-    // the knuckles rise in a fist and the ball of the thumb follows the thumb.
-    function palmGeo(s, F, wr, t1) {
-      const g = new THREE.SphereGeometry(1, 56, 40), p = g.attributes.position, sp = v => Math.sign(v) * Math.abs(v) ** 0.7;
+    // The palm and the roots of the fingers and the thumb as ONE surface, so a finger grows out of the hand instead of
+    // sitting on it: a distance field (the palm slab, smoothly welded to a short capsule at the root of each finger and
+    // to the thumb's metacarpal, with fillets where they meet) turned into a mesh by surface nets, at rest. Past the
+    // fillet each capsule sinks just under the finger's own rigid phalanx, so the two meet at a grazing angle and no edge
+    // shows. Skinned: the palm to the wrist, the finger roots (and the palm's rim over them) to their fingers, the ball
+    // of the thumb to the thumb, so the hand still bends as before.
+    function gloveGeo(s, F, wr, T) {
       const G2 = (dx, dy, sx, sy) => Math.exp(-((dx / sx) ** 2 + (dy / sy) ** 2));
-      const si = [], sw = [];
-      for (let i = 0; i < p.count; i++) {
-        const X = sp(p.getX(i)), Y = sp(p.getY(i)), Z = sp(p.getZ(i)), top = 0.012, t = (1 - Y) / 2;   // t: 0 at the wrist, 1 at the knuckles
-        // the palm reaches past the knuckle line over the fingers' roots (further on the palm side: the webs), thinning to
-        // its rim, so each finger grows out of it instead of sitting on its edge
-        const x = X * (0.05 + 0.004 * t), yk = -0.1 + 4 * x * x, y = top + (yk - 0.013 - (Z < 0 ? 0.008 * -Z : 0) - top) * t;
-        let z = Z * (Z < 0 ? 0.022 * (1 - 0.3 * sstep(0.6, 1, t)) : 0.027 - 0.012 * sstep(0.2, 1, t));   // the back slopes down to the knuckles
-        if (Z < 0) {
-          z -= 0.015 * G2(x - s * 0.028, y + 0.036, 0.022, 0.032) * -Z;    // thenar pad (the ball of the thumb)
-          z -= 0.009 * G2(x + s * 0.032, y + 0.06, 0.015, 0.034) * -Z;    // hypothenar pad
-          z -= 0.004 * G2(x, y - yk + 0.004, 0.05, 0.008) * -Z;               // the pad row under the fingers
-          z += 0.006 * G2(x, y + 0.062, 0.02, 0.022) * -Z;               // a shallow hollow in the middle
-        } else for (const f of F) z += 0.0035 * G2(x - f.x, y - f.y - 0.004, 0.008, 0.012) * Z;   // knuckles on the back
-        if (y > -0.03) { const b = 0.85 * Math.sqrt(Math.max(0, 0.044 ** 2 - x * x - y * y)); if (Math.abs(z) < b) z = Math.sign(Z || 1) * b; }   // the wrist bulb
-        p.setXYZ(i, x, y, z);
-        // weights: from the knuckle line on, the palm goes with the nearest two fingers (wholly past it: the part over a
-        // finger's root bends with the finger, the web between two is shared), the thenar with the thumb, the rest the wrist
-        const a = y - yk, zone = 0.35 * sstep(0.02, 0, a) + 0.65 * sstep(0.002, -0.011, a), near = F.map((f, k) => [Math.abs(x - f.x), k]).sort((a, b) => a[0] - b[0]);
-        const w1 = zone * Math.exp(-((near[0][0] / 0.015) ** 2)), w2 = zone * Math.exp(-((near[1][0] / 0.015) ** 2));
-        const wt = 0.6 * G2(x - s * 0.027, y + 0.038, 0.02, 0.03) * (Z < 0 ? 1 : 0.5);
-        si.push(bones.indexOf(wr), bones.indexOf(F[near[0][1]].b1), bones.indexOf(F[near[1][1]].b1), bones.indexOf(t1));
-        const tot = Math.max(1, w1 + w2 + wt); sw.push(Math.max(0, 1 - w1 - w2 - wt), w1 / tot, w2 / tot, wt / tot);
+      const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+      // the capsules: a finger's root (to 0.72 of its first phalanx), the thumb's metacarpal; radius as the phalanx's,
+      // a hair fuller near the hand, a little thinner where it hides under the phalanx
+      const caps = F.map(f => ({ a: new THREE.Vector3(f.x, f.y + 0.004, -0.002), dir: new THREE.Vector3(Math.sin(s * f.fan), -Math.cos(s * f.fan), 0), L: f.L[0], r0: f.R[0], r1: f.R[1], len: 0.72 * f.L[0], bone: f.b1 }));
+      caps.push({ a: T.pos.clone(), dir: T.d.clone(), L: T.L[0], r0: T.R[0], r1: T.R[1], len: 0.75 * T.L[0], bone: T.t1 });
+      const capD = (c, x, y, z) => {
+        const vx = x - c.a.x, vy = y - c.a.y, vz = z - c.a.z, h = vx * c.dir.x + vy * c.dir.y + vz * c.dir.z, hc = Math.min(c.len, Math.max(0, h)), u = hc / c.L;
+        const r = (c.r0 + (c.r1 - c.r0) * u) * (1 + 0.09 * Math.sin(Math.PI * u)) + 0.0006 - 0.0018 * sstep(0.45, 0.7, u);
+        return [Math.hypot(vx - c.dir.x * hc, vy - c.dir.y * hc, vz - c.dir.z * hc) - r, h];
+      };
+      const palmD = (x, y, z) => {
+        const yw = y - 4 * x * x, t = clamp01((0.012 - yw) / 0.125);                // y bent so the knuckle line is an arc
+        const hx = 0.05 + 0.004 * t, zb = 0.025 - 0.009 * sstep(0.2, 1, t), zf = -0.021 + 0.004 * sstep(0.6, 1, t);   // the back slopes to the knuckles
+        const r = 0.014, qx = Math.abs(x) - hx + r, qy = Math.abs(yw + 0.0505) - 0.0625 + r, qz = Math.abs(z - (zb + zf) / 2) - (zb - zf) / 2 + r;
+        let d = Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - r;
+        if (z < 0) d -= (0.014 * G2(x - s * 0.028, y + 0.036, 0.022, 0.032) + 0.008 * G2(x + s * 0.032, y + 0.06, 0.015, 0.034) - 0.005 * G2(x, y + 0.062, 0.02, 0.022)) * sstep(0, -0.015, z);   // thenar, hypothenar, the hollow
+        return smin(d, Math.hypot(x, y, z / 0.85) - 0.044, 0.01);                   // the wrist rounds into a bulb (hidden in the cuff)
+      };
+      const sd = (x, y, z) => { let d = palmD(x, y, z); for (const c of caps) d = smin(d, capD(c, x, y, z)[0], 0.009); return d; };
+      // surface nets on a 1.25 mm grid
+      const h = 0.00125, x0 = -0.085, y0 = -0.165, z0 = -0.065, nx = Math.ceil(0.17 / h) + 1, ny = Math.ceil(0.235 / h) + 1, nz = Math.ceil(0.115 / h) + 1;
+      const f = new Float32Array(nx * ny * nz), id = (i, j, k) => i + nx * (j + ny * k);
+      for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) f[id(i, j, k)] = sd(x0 + i * h, y0 + j * h, z0 + k * h);
+      const vix = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1), cid = (i, j, k) => i + (nx - 1) * (j + (ny - 1) * k), P = [];
+      const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]], C = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+      for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+        const v = C.map(([a, b, c]) => f[id(i + a, j + b, k + c)]); let neg = 0; for (const q of v) if (q < 0) neg++;
+        if (neg === 0 || neg === 8) continue;
+        let sx = 0, sy = 0, sz = 0, n = 0;
+        for (const [a, b] of E) if ((v[a] < 0) !== (v[b] < 0)) { const t = v[a] / (v[a] - v[b]); sx += C[a][0] + (C[b][0] - C[a][0]) * t; sy += C[a][1] + (C[b][1] - C[a][1]) * t; sz += C[a][2] + (C[b][2] - C[a][2]) * t; n++; }
+        vix[cid(i, j, k)] = P.length / 3; P.push(x0 + (i + sx / n) * h, y0 + (j + sy / n) * h, z0 + (k + sz / n) * h);
       }
-      const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.3 / TEX, uv.getY(i) * 0.13 / TEX);
+      const grad = (x, y, z, e = 0.0003) => [sd(x + e, y, z) - sd(x - e, y, z), sd(x, y + e, z) - sd(x, y - e, z), sd(x, y, z + e) - sd(x, y, z - e)];
+      const nV = P.length / 3, N = new Float32Array(P.length);
+      for (let q = 0; q < nV; q++) {   // settle each vertex on the surface, then take the field's gradient as its normal
+        let x = P[3 * q], y = P[3 * q + 1], z = P[3 * q + 2];
+        for (let it = 0; it < 2; it++) { const d = sd(x, y, z), g = grad(x, y, z), l2 = (g[0] ** 2 + g[1] ** 2 + g[2] ** 2) / (0.0006 ** 2) || 1; x -= d * g[0] / 0.0006 / l2; y -= d * g[1] / 0.0006 / l2; z -= d * g[2] / 0.0006 / l2; }
+        P[3 * q] = x; P[3 * q + 1] = y; P[3 * q + 2] = z;
+        const g = grad(x, y, z), l = Math.hypot(...g) || 1; N[3 * q] = g[0] / l; N[3 * q + 1] = g[1] / l; N[3 * q + 2] = g[2] / l;
+      }
+      const idx = [], quad = (a, b, c, d) => {
+        if (a < 0 || b < 0 || c < 0 || d < 0) return;
+        const ax = P[3 * a], ay = P[3 * a + 1], az = P[3 * a + 2], ux = P[3 * b] - ax, uy = P[3 * b + 1] - ay, uz = P[3 * b + 2] - az, wx = P[3 * c] - ax, wy = P[3 * c + 1] - ay, wz = P[3 * c + 2] - az;
+        const flip = (uy * wz - uz * wy) * N[3 * a] + (uz * wx - ux * wz) * N[3 * a + 1] + (ux * wy - uy * wx) * N[3 * a + 2] < 0;   // face outward
+        if (flip) idx.push(a, c, b, a, d, c); else idx.push(a, b, c, a, c, d);
+      };
+      for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+        const s0 = f[id(i, j, k)] < 0;
+        if (s0 !== (f[id(i + 1, j, k)] < 0)) quad(vix[cid(i, j - 1, k - 1)], vix[cid(i, j, k - 1)], vix[cid(i, j, k)], vix[cid(i, j - 1, k)]);
+        if (s0 !== (f[id(i, j + 1, k)] < 0)) quad(vix[cid(i - 1, j, k - 1)], vix[cid(i, j, k - 1)], vix[cid(i, j, k)], vix[cid(i - 1, j, k)]);
+        if (s0 !== (f[id(i, j, k + 1)] < 0)) quad(vix[cid(i - 1, j - 1, k)], vix[cid(i, j - 1, k)], vix[cid(i, j, k)], vix[cid(i - 1, j, k)]);
+      }
+      // weights: each part's share by how near it is (soft), a finger's root going with the finger past its knuckle,
+      // the palm's rim past the knuckle line with the nearest fingers, the ball of the thumb with the thumb
+      const si = [], sw = [], uv = [], bw = bones.indexOf(wr);
+      for (let q = 0; q < nV; q++) {
+        const x = P[3 * q], y = P[3 * q + 1], z = P[3 * q + 2], dp = palmD(x, y, z), cd = caps.map(c => capD(c, x, y, z));
+        const dmin = Math.min(dp, ...cd.map(e => e[0])), mp = Math.exp(-(dp - dmin) / 0.003), mc = cd.map(e => Math.exp(-(e[0] - dmin) / 0.003)), tot = mp + mc.reduce((a, b) => a + b, 0);
+        const w = new Map(), add = (b, v) => { if (v > 0) w.set(b, (w.get(b) || 0) + v); };
+        caps.forEach((c, k) => add(c.bone, mc[k] / tot * sstep(-0.004, 0.012, cd[k][1])));
+        const zone = 0.35 * sstep(0.02, 0, y - (-0.1 + 4 * x * x)) + 0.65 * sstep(0.002, -0.011, y - (-0.1 + 4 * x * x));
+        F.forEach(fg => add(fg.b1, mp / tot * zone * Math.exp(-(((x - fg.x) / 0.015) ** 2))));
+        add(T.t1, mp / tot * 0.6 * G2(x - s * 0.027, y + 0.038, 0.02, 0.03) * (z < 0 ? 1 : 0.5));
+        let list = [...w.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3), sum = list.reduce((a, e) => a + e[1], 0);
+        if (sum > 1) { list = list.map(([b, v]) => [b, v / sum]); sum = 1; }
+        const all = [[wr, 1 - sum], ...list];
+        for (let k = 0; k < 4; k++) { si.push(all[k] ? bones.indexOf(all[k][0]) : bw); sw.push(all[k] ? all[k][1] : 0); }
+        uv.push((x + 0.4 * z) / TEX + 0.5, (y - 0.3 * z) / TEX + 0.6);   // the weave: one projection, offset so no tile edge crosses the hand
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
       g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
-      g.computeVertexNormals(); return weldNormals(g);
+      g.setIndex(idx); return g;
     }
     // name, MCP x (times s), MCP y, fan (times s), phalanx lengths (the last with the tip), radii [MCP, PIP, DIP, tip]
     const FING = [
@@ -470,12 +512,12 @@
       // the gauntlet: a flared cuff, open below, with a rolled lip; the hand turns under it
       el.add(mesh(lathe([[0.052, -0.349], [0.056, -0.345], [0.066, -0.334], [0.072, -0.318], [0.068, -0.303], [0.058, -0.29]], 48), glove));
       el.add(at(ringY(0.052, 0.0035, glove), 0, -0.349, 0));
-      // the glove (see fingerGeo, palmGeo): the wrist bone is the palm's base, every finger and the thumb have three bones
+      // the glove (see phalanx, finger, gloveGeo): the wrist bone is the palm's base, every finger and the thumb have three bones
       const F = FING.map(([name, mx, my, fan, Lf, Rf]) => {
         const root = joint(wr, s * mx, my + 0.004, -0.002); root.rotation.z = s * fan;      // its spread
         const b1 = bone(root, 0, 0, 0), b2 = bone(b1, 0, -Lf[0], 0), b3 = bone(b2, 0, -Lf[1], 0);
         finger([b1, b2, b3], Lf, Rf);
-        return { name, root, fan, b: [b1, b2, b3], b1, x: s * mx, y: my };
+        return { name, root, fan, b: [b1, b2, b3], b1, x: s * mx, y: my, L: Lf, R: Rf };
       });
       // the thumb: from inside the thenar pad, pointing down, out and forward, turned on its own axis so its pad faces
       // the fingers (opposition); bones: metacarpal (CMC), proximal (MCP), distal (IP)
@@ -484,8 +526,9 @@
       const yA = d.clone().negate(), zA = padDir.clone().negate().addScaledVector(yA, padDir.dot(yA)).normalize(), xA = new THREE.Vector3().crossVectors(yA, zA);
       troot.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, yA, zA));
       const TL = [0.042, 0.034, 0.032], t1 = bone(troot, 0, 0, 0), t2 = bone(t1, 0, -TL[0], 0), t3 = bone(t2, 0, -TL[1], 0);
-      finger([t1, t2, t3], TL, [0.022, 0.0158, 0.014, 0.0124]);   // thick at the base: it grows out of the ball of the thumb
-      { const m = new THREE.SkinnedMesh(palmGeo(s, F, wr, t1), glove); m.frustumCulled = false; wr.add(m); skinned.push(m); }
+      const TR = [0.022, 0.0158, 0.014, 0.0124];   // thick at the base: it grows out of the ball of the thumb
+      finger([t1, t2, t3], TL, TR);
+      { const m = new THREE.SkinnedMesh(gloveGeo(s, F, wr, { pos: troot.position, d, L: TL, R: TR, t1 }), glove); m.frustumCulled = false; wr.add(m); skinned.push(m); }
       // +abduction turns the thumb about its root's z: it must move away from the index finger on both hands
       const away = troot.position.clone().addScaledVector(d, 0.1).sub(new THREE.Vector3(s * 0.0335, -0.13, 0));
       HANDS[L] = { s, roots: F.map(f => f.root), fans: F.map(f => f.fan), fingers: F.map(f => f.b), thumb: [t1, t2, t3], sg: Math.sign(xA.dot(away)) || 1 };
