@@ -761,9 +761,9 @@
       const brief = E + (0.14 * (1 + 0.05 * Math.max(0, dz)) - E) * mb;                       // the briefs round out to their leg opening, the seat fuller
       const leg = (thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2)));   // a full knee
       let r = brief + (leg - brief) * t;
-      // the crotch: the briefs' halves meet at the middle (a little apart at their bottom), below the seam a gap opens
-      // between the thighs and widens downward (the inner side rounded off softly, not cut flat)
-      if (s * dx < -1e-6) { const g = 0.004 * m + 0.006 * sstep(-0.16, -0.28, y) + 0.022 * sstep(YB, YB - 0.1, y), c = (0.105 - g) / -(s * dx), k = 0.03 * m, h = Math.max(k - Math.abs(r - c), 0) / (k || 1);
+      // the crotch: the briefs' halves meet at the middle, below the seam a narrow gap opens between the thighs and widens
+      // a little downward (the inner side rounded off softly, not cut flat)
+      if (s * dx < -1e-6) { const g = 0.002 * m + 0.011 * sstep(YB, YB - 0.12, y), c = (0.105 - g) / -(s * dx), k = 0.03 * m, h = Math.max(k - Math.abs(r - c), 0) / (k || 1);
         r = Math.min(r, c) - h * h * k * 0.25; }
       const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.08) ** 2)) : 0;   // the knee pad, -z
       const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.3 * pm;
