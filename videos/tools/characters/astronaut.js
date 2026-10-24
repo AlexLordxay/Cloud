@@ -426,8 +426,8 @@
     // ankle (high up the shin: the foot turns inside the boot).
     const briefP = [[0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12]];
     const rb = y => { y = Math.max(y, -0.2); for (let i = 1; i < briefP.length; i++) if (y <= briefP[i][1]) { const [r0, y0] = briefP[i - 1], [r1, y1] = briefP[i]; return r0 + (r1 - r0) * (y - y0) / (y1 - y0); } return briefP[briefP.length - 1][0]; };
-    const HY = -0.13, KY = -0.68, KB = 0.11, KR = 0.1, AY = -1.24;
-    const thighR = y => { const u = clamp01((HY - y) / 0.55); return (0.128 - 0.024 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
+    const HY = -0.13, KY = -0.61, KB = 0.11, KR = 0.1, AY = -1.17;   // a short thigh: the suit sits low and sturdy
+    const thighR = y => { const u = clamp01((HY - y) / 0.48); return (0.128 - 0.02 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
     const shinR = (y, ph) => { const u = clamp01((KY - y) / 0.5); return (0.105 - 0.02 * u) * (1 + 0.1 * Math.sin(Math.PI * u)) * (1 + 0.06 * Math.max(0, Math.cos(ph))); };
     const legR = (s, y, ph) => {
       const dx = Math.sin(ph), dz = Math.cos(ph), cx = s * 0.105, cz = -0.035;
@@ -436,10 +436,10 @@
       let E = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
       if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
       const m = sstep(-0.14, -0.36, y), d = y - KY;
-      let r = E + ((thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) - E) * m;
+      let r = E + ((thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2))) - E) * m;   // a full knee
       if (s * dx < -1e-6) r = Math.min(r, (0.105 - 0.004 * m) / -(s * dx));   // the thighs press together, never through
       const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.08) ** 2)) : 0;   // the knee pad, -z
-      const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.22 * pm;
+      const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.3 * pm;
       return { r: base + fold(cx + base * dx, y, cz + base * dz, Math.max(bandEnv(d, KB), 1 - sstep(-0.05, -0.2, y))), base, pm, m };
     };
     for (const s of [-1, 1]) {
@@ -449,7 +449,7 @@
       const hpH1 = helper(hp, 1 / 3), hpH2 = helper(hp, 2 / 3);
       const knH1 = helper(kn, 1 / 3, src => { if (leg) leg.morphTargetInfluences[0] = sstep(0, 2.2, -src.rotation.x); }), knH2 = helper(kn, 2 / 3);
       const anH = helper(an, 0.5);
-      const rows = span([0.07, -0.1, 0.008], [-0.1, -0.3, 0.0025], [-0.3, KY + KB, 0.008], [KY + KB, KY - KB, 0.0025], [KY - KB, -1.0, 0.008], [-1.0, -1.1, 0.004], [-1.1, AY + 0.09, 0.008]).map(y => ({
+      const rows = span([0.07, -0.1, 0.008], [-0.1, -0.3, 0.0025], [-0.3, KY + KB, 0.008], [KY + KB, KY - KB, 0.0025], [KY - KB, AY + 0.24, 0.008], [AY + 0.24, AY + 0.14, 0.004], [AY + 0.14, AY + 0.09, 0.008]).map(y => ({
         y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => bendCol(y - KY, KB, legR(s, y, ph).pm),
         w: (ph, r) => {
           if (y > -0.1) return [[body, 1]];
@@ -459,14 +459,14 @@
           }
           if (y > KY + KB) return [[hp, 1]];
           if (y > KY - KB) return spread([hp, knH1, knH2, kn], cubic((KY + KB - y) / (2 * KB)));
-          if (y > -1.0) return [[kn, 1]];
-          if (y > -1.1) return spread([kn, anH, an], quad((-1.0 - y) / 0.1));
+          if (y > AY + 0.24) return [[kn, 1]];
+          if (y > AY + 0.14) return spread([kn, anH, an], quad((AY + 0.24 - y) / 0.1));
           return [[an, 1]];
         },
       }));
       leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz)));
-      proxy(hp, 0.25, 0.55, 0.25, -0.28); proxy(kn, 0.21, 0.5, 0.21, -0.27);
-      pocket(hp, s * (legR(s, HY - 0.3, s * Math.PI / 2).base + 0.008), -0.3, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
+      proxy(hp, 0.25, 0.48, 0.25, -0.24); proxy(kn, 0.21, 0.5, 0.21, -0.27);
+      pocket(hp, s * (legR(s, HY - 0.26, s * Math.PI / 2).base + 0.008), -0.26, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
       pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1);              // and a smaller one on each shin
       // the boot: the ankle pivot sits inside it, 0.127 above the sole
       an.add(mesh(lumpy(lathe([[0, -0.02], [0.094, -0.02], [0.1, 0.03], [0.092, 0.08]], 48), 0.004), fabric2, 0, 0.13, 0));   // a cloth cuff over the boot top, open above
