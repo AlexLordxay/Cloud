@@ -724,11 +724,11 @@
     const soleMat = (() => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64; const g = cv.getContext('2d');   // lugs across the sole
       g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#000'; for (let y = 0; y < 64; y += 16) g.fillRect(0, y, 64, 7);
       const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5); return M({ color: 0x2a2b2e, roughness: 0.85, bumpMap: t, bumpScale: 0.8 }); })();
-    const soleGeo = (() => {   // the footprint traced a few mm above the bottom, plus a welt; then bent up with the toe
-      const zs = [], hw = [], yS = BY + 0.006;
-      let zH = 0, zT = 0; for (let z = 0; z < 0.2; z += 0.001) if (bootSD(0, yS, z) < 0) zH = z; for (let z = 0; z > -0.35; z -= 0.001) if (bootSD(0, yS + spring(z), z) < 0) zT = z;
-      for (let i = 1; i < 60; i++) { const z = zH + (zT - zH) * i / 60; zs.push(z); hw.push(bootHit(new THREE.Vector3(0, yS + spring(z), z), new THREE.Vector3(1, 0, 0)).x); }
-      const sh = new THREE.Shape(), W = 0.007; sh.moveTo(0, zH + W); zs.forEach((z, i) => sh.lineTo(hw[i] + W, z)); sh.lineTo(0, zT - W); zs.slice().reverse().forEach((z, i) => sh.lineTo(-hw[hw.length - 1 - i] - W, z));
+    const soleGeo = (() => {   // the footprint: the boot's outline seen from below (its widest over the lower 7 cm), a welt wider; then bent up with the toe
+      const zs = [], hw = [], Ys = []; for (let y = BY + 0.004; y < BY + 0.07; y += 0.005) Ys.push(y);
+      let zH = 0, zT = 0; for (const y of Ys) { for (let z = 0; z < 0.2; z += 0.001) if (bootSD(0, y, z) < 0) zH = Math.max(zH, z); for (let z = 0; z > -0.35; z -= 0.001) if (bootSD(0, y + spring(z), z) < 0) zT = Math.min(zT, z); }
+      for (let i = 1; i < 60; i++) { const z = zH + (zT - zH) * i / 60; zs.push(z); hw.push(Math.max(...Ys.map(y => bootHit(new THREE.Vector3(0, y + spring(z), z), new THREE.Vector3(1, 0, 0)).x))); }
+      const sh = new THREE.Shape(), W = 0.006; sh.moveTo(0, zH + W); zs.forEach((z, i) => sh.lineTo(hw[i] + W, z)); sh.lineTo(0, zT - W); zs.slice().reverse().forEach((z, i) => sh.lineTo(-hw[hw.length - 1 - i] - W, z));
       const g = new THREE.ExtrudeGeometry(sh, { depth: 0.026, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2, curveSegments: 4 });
       g.rotateX(Math.PI / 2); g.translate(0, BY + 0.003, 0);
       const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) + spring(p.getZ(i)));
