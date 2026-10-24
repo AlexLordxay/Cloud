@@ -19,8 +19,8 @@
   window.__makeAstronaut = (THREE) => {
     const mats = [];
     const rim = { color: { value: new THREE.Color(0, 0, 0) }, power: { value: 3.0 } };
-    const M = (o) => {
-      const m = new THREE.MeshStandardMaterial(o);
+    const M = (o, Kind = THREE.MeshStandardMaterial) => {
+      const m = new Kind(o);
       m.color.convertSRGBToLinear(); m.emissive.convertSRGBToLinear();   // the hex colours are sRGB: lit in linear space they keep their real shade
       m.onBeforeCompile = sh => {
         Object.assign(sh.uniforms, { rimColor: rim.color, rimPower: rim.power });
@@ -69,6 +69,7 @@
     const torsoCloth = M({ color: 0xf2eee6, roughness: 0.93, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.035 });   // the cloth over the hard torso: the same as the sleeves
     const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.04 });        // the cloth cover over the backpack
     const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 });          // hard parts
+    const helmetMat = M({ color: 0xeeece6, roughness: 0.35, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.2 }, THREE.MeshPhysicalMaterial);   // the helmet: a lacquered shell
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
     const grey = M({ color: 0x6d7076, roughness: 0.6, metalness: 0.2 });
     const dark = M({ color: 0x26282c, roughness: 0.75, metalness: 0.1 });
@@ -343,26 +344,29 @@
       const out = new THREE.BufferGeometry(); out.setAttribute('position', new THREE.Float32BufferAttribute(keep, 3));
       const nrm = keep.map((v, i) => v / 0.188); out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); return out;   // a sphere's normals are smooth: position / radius
     })();
-    const helmet = mesh(shellGeo, shell, 0, 0.16, 0.0); helmet.scale.set(1, 1.03, 1.06); head.add(helmet);
-    // the visor covers the front (-z) of the helmet: phi centred on 1.5π in three's sphere parametrisation
-    // The visor sits recessed in the window cut in the shell; a thick dark rubber gasket lines the window's edge and
-    // covers the depth between the shell and the glass.
-    const vis = mesh(new THREE.SphereGeometry(0.177, 72, 48, P0 - 0.06, PL + 0.12, T0 - 0.05, TL + 0.1), visor, 0, 0.16, 0);   // set back inside the shell
-    vis.scale.set(1, 1.03, 1.06); head.add(vis);
-    {
-      const pts = [], r = 0.1855, sp = (ph, th) => new THREE.Vector3(-r * Math.cos(ph) * Math.sin(th), r * Math.cos(th), r * Math.sin(ph) * Math.sin(th));
-      const n = 24, e = 0.01;   // walk round the window's edge (a rectangle in angles), corners rounded by the curve
-      for (let k = 0; k < n; k++) pts.push(sp(P0 + e + (PL - 2 * e) * k / n, T0 + e));
+    const helmet = mesh(shellGeo, helmetMat, 0, 0.16, 0.0); helmet.scale.set(1, 1.03, 1.06); head.add(helmet);
+    // The visor covers the front (-z) of the helmet (phi centred on 1.5π in three's sphere parametrisation). It bulges out
+    // of the shell, as on an EVA visor assembly: a housing lip runs round the window and a thin dark seal lines it.
+    const VIS = { r: 0.197, center: new THREE.Vector3(0, 0.16, -0.012), scale: new THREE.Vector3(1, 1.03, 1.06), P0, PL, T0, TL };
+    const vis = mesh(new THREE.SphereGeometry(VIS.r, 72, 48, P0 - 0.06, PL + 0.12, T0 - 0.05, TL + 0.1), visor); vis.position.copy(VIS.center);
+    vis.scale.copy(VIS.scale); head.add(vis);
+    const winEdge = (r, e) => { const pts = [], sp = (ph, th) => new THREE.Vector3(-r * Math.cos(ph) * Math.sin(th), r * Math.cos(th), r * Math.sin(ph) * Math.sin(th)), n = 24;
+      for (let k = 0; k < n; k++) pts.push(sp(P0 + e + (PL - 2 * e) * k / n, T0 + e));       // round the window's edge (a rectangle in angles)
       for (let k = 0; k < n; k++) pts.push(sp(P0 + PL - e, T0 + e + (TL - 2 * e) * k / n));
       for (let k = 0; k < n; k++) pts.push(sp(P0 + PL - e - (PL - 2 * e) * k / n, T0 + TL - e));
       for (let k = 0; k < n; k++) pts.push(sp(P0 + e, T0 + TL - e - (TL - 2 * e) * k / n));
-      const rim = mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 200, 0.0095, 12, true), gasket, 0, 0.16, 0);
-      rim.scale.set(1, 1.03, 1.06); head.add(rim);
+      return new THREE.CatmullRomCurve3(pts, true); };
+    for (const [r, e, tube, mat] of [[0.197, -0.005, 0.012, helmetMat], [0.203, 0.018, 0.0042, gasket]]) {   // the housing lip, the seal
+      const m = mesh(new THREE.TubeGeometry(winEdge(r, e), 240, tube, 14, true), mat, 0, 0.16, 0); m.scale.copy(VIS.scale); head.add(m); }
+    // pivot bosses at the temples (the visor assembly turns on them; the lamp and the camera mount on them), screwed on
+    for (const sd of [-1, 1]) {
+      const bo = joint(head, sd * 0.188, 0.165, -0.02); bo.rotation.z = Math.PI / 2;
+      bo.add(mesh(new THREE.CylinderGeometry(0.035, 0.037, 0.016, 40), helmetMat, 0, sd * 0.008, 0), mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.004, 6), machined, 0, sd * 0.017, 0));
     }
-    const brow = mesh(new THREE.SphereGeometry(0.195, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.16, Math.PI * 0.05), shell, 0, 0.16, 0); brow.scale.set(1, 1.03, 1.06); head.add(brow);
+    const brow = mesh(new THREE.SphereGeometry(0.2, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.13, Math.PI * 0.06), helmetMat, 0, 0.16, 0);   // the eyeshade ridge over the visor brow.scale.set(1, 1.03, 1.06); head.add(brow);
     // Left of the helmet: a lamp — a cylinder on a bracket, a glowing lens with a soft halo, a row of small LEDs under it.
     // Right: a sensor/camera pod — a dark body, a big glass lens in a metal ring, a red indicator, a thin antenna.
-    const glows = [];
+    const glows = []; let glowK = 1;
     const glowTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
       const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, 'rgba(255,244,215,1)'); gr.addColorStop(0.25, 'rgba(255,236,200,0.45)'); gr.addColorStop(1, 'rgba(255,230,190,0)');
       g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(cv); })();
@@ -370,7 +374,7 @@
     const ledMat = M({ color: 0xdff0ff, emissive: 0xcfe8ff, emissiveIntensity: 1.6, roughness: 0.3 });
     const redLed = M({ color: 0xff3a2a, emissive: 0xff2a1a, emissiveIntensity: 2.0, roughness: 0.3 });
     {
-      const lamp = joint(head, -0.196, 0.19, -0.035);
+      const lamp = joint(head, -0.214, 0.2, -0.035);
       lamp.add(mesh(rbox(0.03, 0.05, 0.05, 0.008), grey, 0.012, -0.005, 0.02));                                         // bracket
       const body1 = mesh(new THREE.CylinderGeometry(0.03, 0.026, 0.12, 28), shell, -0.012, 0.0, -0.02); body1.rotation.x = Math.PI / 2; lamp.add(body1);
       const bezel = mesh(new THREE.TorusGeometry(0.029, 0.0055, 10, 28), metal, -0.012, 0.0, -0.081); lamp.add(bezel);
@@ -379,16 +383,17 @@
       lamp.add(mesh(rbox(0.02, 0.014, 0.075, 0.004), grey, -0.012, -0.045, -0.026));
       const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 }));
       halo.scale.setScalar(0.13); halo.position.set(-0.012, 0, -0.09); lamp.add(halo); glows.push(halo);
+      const fw = new THREE.Vector3(), tc = new THREE.Vector3();   // the glow shows only while the lamp faces the camera
+      halo.onBeforeRender = (r, sc, cam) => { lamp.getWorldDirection(fw).negate(); halo.getWorldPosition(tc); tc.subVectors(cam.position, tc).normalize();
+        halo.material.opacity = 0.85 * glowK * sstep(0, 0.4, fw.dot(tc)); };
     }
     {
-      const pod = joint(head, 0.192, 0.2, -0.03);
+      const pod = joint(head, 0.21, 0.205, -0.03);
       pod.add(mesh(rbox(0.03, 0.05, 0.05, 0.008), grey, -0.012, -0.008, 0.02));                                         // bracket
       pod.add(mesh(rbox(0.05, 0.055, 0.09, 0.014), dcmMat, 0.01, 0, -0.01));                                              // dark body
       const ring = mesh(new THREE.TorusGeometry(0.019, 0.005, 10, 24), metal, 0.01, 0.002, -0.056); pod.add(ring);
       const glass = mesh(new THREE.SphereGeometry(0.017, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2), lens, 0.01, 0.002, -0.056); glass.rotation.x = -Math.PI / 2; pod.add(glass);
       pod.add(mesh(new THREE.SphereGeometry(0.004, 10, 8), redLed, 0.03, 0.02, -0.055));                                    // a red "recording" light
-      const ant = mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.11, 6), metal, 0.022, 0.08, 0.02); pod.add(ant);
-      pod.add(mesh(new THREE.SphereGeometry(0.0055, 10, 8), dark, 0.022, 0.136, 0.02));
     }
 
     // a cloth pocket with a flap and a press stud, lying on a limb's outside (local +z of the joint faces out)
@@ -770,10 +775,10 @@
       for (const l of lights) { l.position.copy(c).addScaledVector(l.userData.dir, 4); l.target.position.copy(c); l.target.updateMatrixWorld(); }
     }
     return {
-      group, joints: J, materials: mats, pose, rim, light, aim, lights, ready, hand, handCurl, hands: HANDS, shapes: SHAPES,
+      group, joints: J, materials: mats, pose, rim, light, aim, lights, ready, hand, handCurl, hands: HANDS, shapes: SHAPES, visor: VIS,
       setTint(r, g, b) { const c = new THREE.Color(r, g, b); for (const m of mats) m.color.copy(m.userData.base).multiply(c); },
       // opaque until it fades: a transparent material lets the parts behind show through
-      setOpacity(x) { for (const g of glows) g.material.opacity = 0.85 * x; const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
+      setOpacity(x) { glowK = x; for (const g of glows) g.material.opacity = 0.85 * x; const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
     };
   };
 

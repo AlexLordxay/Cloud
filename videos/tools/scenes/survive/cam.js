@@ -208,9 +208,10 @@
     const [fc, fg] = canvas(512), frostT = new T.CanvasTexture(fc);
     const P0 = 1.13 * Math.PI, PL = 0.74 * Math.PI, T0 = 0.2 * Math.PI, TL = 0.46 * Math.PI;
     const shell = (tex) => {
-      const m = new T.Mesh(new T.SphereGeometry(0.1792, 48, 32, P0 - 0.06, PL + 0.12, T0 - 0.05, TL + 0.1),
+      const m = new T.Mesh(new T.SphereGeometry(a.visor ? a.visor.r + 0.0025 : 0.1792, 48, 32, P0 - 0.06, PL + 0.12, T0 - 0.05, TL + 0.1),
         new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0.9 }));
-      m.position.set(0, 0.16, 0); m.scale.set(1, 1.03, 1.06); m.renderOrder = 3; a.joints.head.add(m); return m;
+      if (a.visor) m.position.copy(a.visor.center); else m.position.set(0, 0.16, 0);
+      m.scale.set(1, 1.03, 1.06); m.renderOrder = 3; a.joints.head.add(m); return m;
     };
     const crack = shell(crackT), frost = shell(frostT);
 
