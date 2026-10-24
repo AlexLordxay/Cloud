@@ -43,7 +43,7 @@ const page = `<!doctype html><html><body style="margin:0;background:#000">
   const cam = new THREE.PerspectiveCamera(mode === 'full' ? 30 : 18, (W / 4) / H, 0.02, 100);
   // full: the whole figure from four sides; hands/limbs: close-ups aimed at the joints, from front and back
   const wp = n => a.joints[n].getWorldPosition(new THREE.Vector3());
-  const hand = n => wp(n).lerp(a.joints[n].localToWorld(new THREE.Vector3(0, -0.15, 0)), 1);   // the middle of the hand
+  const hand = n => wp(n).lerp(a.joints[n].localToWorld(new THREE.Vector3(0, -0.075, 0)), 1);   // the middle of the hand
   const focus = mode === 'hands' ? [hand('wristL'), hand('wristL'), hand('wristR'), hand('wristR')]
               : mode === 'limbs' ? [wp('elbowL'), wp('elbowR'), wp('kneeL'), wp('kneeR')] : null;
   const close = mode === 'hands' ? [[-0.45, 0.1, -1.3], [-0.55, 0.15, 1.2], [0.45, 0.1, -1.3], [0.55, 0.15, 1.2]]

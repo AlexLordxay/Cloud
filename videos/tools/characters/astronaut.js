@@ -13,7 +13,8 @@
 //   const env = window.__astronautEnv(THREE, renderer, { warm: dirVector });   // reflections: dark space, a warm glow
 //   scene.add(a.light(color, intensity, dir)); a.aim();   // shadow-casting lights that follow the figure (aim each frame)
 //
-// Joints are plain groups (a.joints.shoulderL, elbowL, wristL, hipL, kneeL, ankleL, … head, body).
+// Joints are bones of one skeleton (a.joints.shoulderL, elbowL, wristL, hipL, kneeL, ankleL, … head, body): the arms and
+// legs are each one skinned sleeve that bends smoothly at the joints, with bellows folding on the inside of a bend.
 (() => {
   window.__makeAstronaut = (THREE) => {
     const mats = [];
@@ -104,24 +105,6 @@
       const g = new THREE.ExtrudeGeometry(s, { depth: Math.max(1e-3, d - 2 * bv), bevelEnabled: true, bevelThickness: bv, bevelSize: bv * 0.9, bevelSegments: 5, curveSegments: 10 });
       g.translate(0, 0, -Math.max(1e-3, d - 2 * bv) / 2); g.computeVertexNormals(); return g;
     }
-    // a puffy limb segment hanging down from its joint: radius r0 → r1 over len, bulging in the middle, rounded ends
-    function limb(len, r0, r1, bulge, ph = 0) {
-      const p = [];
-      for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; p.push([r0 * Math.sin(a), r0 * 0.45 * Math.cos(a)]); }
-      for (let i = 1; i < 30; i++) {
-        const u = i / 30, r = (r0 + (r1 - r0) * u) * (1 + bulge * Math.sin(Math.PI * u)) * (1 - 0.04 * Math.pow(Math.abs(Math.sin(u * 11 + ph)), 6) * Math.sin(Math.PI * u) + 0.012 * Math.sin(u * 29 + 2 * ph));
-        p.push([r, -u * len]);
-      }
-      for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; p.push([r1 * Math.cos(a), -len - r1 * 0.45 * Math.sin(a)]); }
-      return lumpy(lathe(p.reverse(), 64), r0 * 0.085);
-    }
-    // bellows at a bend: n soft ridges
-    function bellows(len, r, n) {
-      const p = [[1e-4, len / 2 + r * 0.3]];
-      for (let i = 0; i <= 40; i++) { const u = i / 40; p.push([r * (0.93 + 0.1 * Math.cos(2 * Math.PI * n * u)), len / 2 - u * len]); }
-      p.push([1e-4, -len / 2 - r * 0.3]);
-      return lumpy(lathe(p.reverse(), 64), r * 0.08, 20);
-    }
     let seed = 0;
     function lumpy(geo, amp, f = 14, weight = null) {
       geo.computeVertexNormals();
@@ -135,17 +118,77 @@
     }
     const shadowed = o => o.traverse(m => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
 
+    // ---- the rig ----
+    // The joints are bones of one skeleton. Next to a joint sit helper bones that turn by a fixed share of its rotation
+    // (computed while matrices update, so a scene can set the joints however it likes after pose()). A sleeve vertex in
+    // a bend is spread over [parent, 1/3, 2/3, child] with cubic Bernstein weights: the bend becomes a smooth arc that
+    // keeps the sleeve's thickness (a plain two-bone blend folds it flat like a hose).
+    const bones = [], skinned = [], QI = new THREE.Quaternion();
+    const bone = (p, x, y, z) => { const b = new THREE.Bone(); b.position.set(x, y, z); p.add(b); bones.push(b); return b; };
+    const helper = (src, k, after) => { const h = bone(src.parent, src.position.x, src.position.y, src.position.z);
+      h.updateMatrix = function () { this.quaternion.slerpQuaternions(QI, src.quaternion, k); if (after) after(src); THREE.Object3D.prototype.updateMatrix.call(this); }; return h; };
+    const clamp01 = x => Math.min(1, Math.max(0, x)), sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+    const cubic = t => [(1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3];
+    // bellows ridges across a bend band |d| < B: three soft rings, fading out at the band's ends (0..1)
+    const ridgeS = (d, B) => Math.abs(d) < B ? (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2 * Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
+    // cloth folds on the skinned sleeves (a radius offset): none yet
+    const fold = (y, phi, part) => 0;
+    // the sleeves' cloth: the seamed fabric, shaded per vertex (darker in the bellows' valleys and on the pads)
+    const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05, vertexColors: true });
+    // the row heights of a tube: spans [from, to, step] laid end to end
+    const span = (...sp) => { const out = []; sp.forEach(([a, b, st], i) => { const n = Math.max(1, Math.round((a - b) / st)); for (let k = 0; k < n; k++) out.push(a + (b - a) * k / n); if (i === sp.length - 1) out.push(b); }); return out; };
+    // A skinned tube in body space, built at rest (every limb hanging straight down, so a row is a horizontal slice).
+    // rows: { y, cx, cz, r(phi), w(phi) -> up to 4 [bone, weight], col(phi), phi(j) }; a vertex is
+    // (cx + r sin phi, y, cz + r cos phi), phi = 2 pi j / seg unless the row maps it; the seam column is doubled.
+    // morphFn(row, phi, nx, ny, nz) -> how far to push that vertex along its normal in the corrective shape (morph 0).
+    function skinTube(rows, seg, morphFn) {
+      const N = seg + 1, pos = [], uv = [], col = [], si = [], sw = [], idx = [], phs = [];
+      let v = 0, last = null;
+      for (const rw of rows) {
+        const ring = []; for (let j = 0; j <= seg; j++) { const ph = rw.phi ? rw.phi(j) : 2 * Math.PI * j / seg; ring.push([ph, rw.r(ph)]); }
+        const mr = ring.reduce((a, q) => a + q[1], 0) / N;
+        if (last) v += Math.hypot(last[0] - rw.y, last[1] - mr); last = [rw.y, mr];
+        ring.forEach(([ph, r], j) => {
+          pos.push(rw.cx + r * Math.sin(ph), rw.y, rw.cz + r * Math.cos(ph)); uv.push(j / seg, v / 0.45); phs.push(ph);
+          const c = rw.col ? rw.col(ph) : 1; col.push(c, c, c);
+          const w = rw.w(ph, r).filter(e => e[1] > 1e-5), tot = w.reduce((a, e) => a + e[1], 0);
+          for (let k = 0; k < 4; k++) { si.push(w[k] ? bones.indexOf(w[k][0]) : 0); sw.push(w[k] ? w[k][1] / tot : 0); }
+        });
+      }
+      for (let i = 0; i < rows.length - 1; i++) for (let j = 0; j < seg; j++) { const a = i * N + j, b = a + N; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+      g.setIndex(idx); g.computeVertexNormals();
+      const n = g.attributes.normal, t = new THREE.Vector3();
+      rows.forEach((rw, i) => {   // one normal on both copies of the seam column; a row may correct its own (fixN)
+        const a = i * N, b = a + seg; t.set(n.getX(a) + n.getX(b), n.getY(a) + n.getY(b), n.getZ(a) + n.getZ(b)).normalize();
+        n.setXYZ(a, t.x, t.y, t.z); n.setXYZ(b, t.x, t.y, t.z);
+        if (rw.fixN) rw.fixN(n, a);
+      });
+      if (morphFn) {
+        const mo = [];
+        rows.forEach((rw, i) => { for (let j = 0; j <= seg; j++) { const k = i * N + j, nx = n.getX(k), ny = n.getY(k), nz = n.getZ(k), d = morphFn(rw, phs[k], nx, ny, nz); mo.push(nx * d, ny * d, nz * d); } });
+        g.morphAttributes.position = [new THREE.Float32BufferAttribute(mo, 3)]; g.morphTargetsRelative = true;
+      }
+      // Box3.setFromObject (survive's placeOnGround) reads the rest-pose box and ignores skinning: a tiny box here, and
+      // invisible proxy boxes on the bones stand in for the limbs
+      g.boundingBox = new THREE.Box3(new THREE.Vector3(-0.01, -0.01, -0.01), new THREE.Vector3(0.01, 0.01, 0.01));
+      const m = new THREE.SkinnedMesh(g, limbCloth); m.frustumCulled = false; body.add(m); skinned.push(m); return m;
+    }
+    const proxyMat = new THREE.MeshBasicMaterial({ visible: false });
+    const proxy = (p, w, h, d, y, z = 0) => { const m = mesh(new THREE.BoxGeometry(w, h, d), proxyMat, 0, y, z); m.visible = false; p.add(m); return m; };
+
     const group = new THREE.Group();
-    const body = joint(group, 0, 0, 0);
+    const body = bone(group, 0, 0, 0);
     const J = { body };
 
     /* torso */
     // hard upper torso: a shell wider than deep, from the waist bearing to the neck ring
     const hut = mesh(lathe([[0, 0.06], [0.172, 0.06], [0.176, 0.1], [0.19, 0.17], [0.215, 0.27], [0.232, 0.38], [0.236, 0.46], [0.222, 0.53], [0.185, 0.585], [0.145, 0.615], [0, 0.625]], 64), torsoCloth);
     hut.scale.set(1.26, 1, 0.9); body.add(hut);
-    // lower torso / briefs: soft fabric, the waist bearing on top
-    const brief = mesh(lumpy(lathe([[0, -0.27], [0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12], [0, 0.13]], 64), 0.006, 10, (x, y) => Math.min(1, Math.max(0, (0.04 - y) / 0.12))), fabric);   // one piece down to the top of the thighs: the legs come out of it
-    brief.scale.set(1.26, 1, 0.9); body.add(brief);   // the same cross-section as the torso where they meet: one garment
+    // (the lower torso, the briefs, is the top of the two skinned pants halves: see the legs)
     // the waist: a soft band of the suit's own cloth over the bearing (no bare metal), the torso narrowing into it
     const waist = at(ringY(0.175, 0.015, grey), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
     // chest control box with two hoses to the backpack
@@ -214,9 +257,9 @@
     }
 
     /* neck ring, helmet with side lamps and the gold visor */
-    const head = joint(body, 0, 0.625, -0.01); J.head = head;
-    head.add(at(ringY(0.148, 0.026, metal), 0, 0, 0));
-    head.add(at(ringY(0.16, 0.012, grey), 0, -0.03, 0));
+    const head = bone(body, 0, 0.625, -0.01); J.head = head;
+    body.add(at(ringY(0.148, 0.026, metal), 0, 0.625, -0.01));   // the neck ring stays on the suit: only the helmet turns
+    body.add(at(ringY(0.16, 0.012, grey), 0, 0.595, -0.01));
     // the helmet shell with the window cut out of it (triangles whose centre falls inside the window are dropped)
     const P0 = Math.PI * 1.13, PL = Math.PI * 0.74, T0 = Math.PI * 0.2, TL = Math.PI * 0.46;
     const shellGeo = (() => {
@@ -288,40 +331,63 @@
     }
 
     /* arms */
+    // Each arm is one skinned sleeve from inside the torso's side to the wrist ring. Its root stays with the torso, the
+    // shoulder band (cubic over the torso, two helpers and the shoulder) lets the arm swing out of it with no edge, and the
+    // elbow band bends round with bellows on the inside and a pad over the back. The forearm ends in a gauntlet and the
+    // hand turns below its lip at the wrist pivot.
+    const EY = 0.05, EB = 0.09, ER = 0.082;   // the elbow pivot's height in the torso, the bend band's half-length, the radius
+    const upperR = y => { const u = (0.47 - y) / 0.42; return 0.082 + 0.02 * Math.exp(-(((u - 0.2) / 0.18) ** 2)); };   // full where it leaves the torso
+    const foreR = y => { const u = clamp01((EY - y) / 0.3); return (0.078 - 0.016 * u) * (1 + 0.05 * Math.sin(Math.PI * u)); };
+    const armR = (y, ph) => {
+      const d = y - EY, base = upperR(y) + (foreR(y) - upperR(y)) * sstep(EB, -EB, d);
+      const pm = Math.abs(d) < EB ? sstep(0.3, 0.75, Math.cos(ph)) * Math.exp(-((d / 0.055) ** 2)) : 0;   // the elbow pad, +z
+      return { r: base * (1 + 0.07 * ridgeS(d, EB) * (1 - pm)) + ER * 0.08 * pm + fold(y, ph, 'arm'), pm };
+    };
+    // the shade of the cloth in a bend: darker in the bellows' valleys, the pad a little darker too
+    const bendCol = (d, B, pm) => { if (Math.abs(d) >= B) return 1; const env = Math.sin(Math.PI * (d + B) / (2 * B)), sh = (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2;
+      const c = 1 - env * (0.05 + 0.07 * (1 - sh)); return c + (0.92 - c) * pm * env; };
+    // the corrective shape of a bend (morph 0, grows with the angle): cloth bunches on the inside, the outside stays full
+    const bendMorph = (d, B, R, inside, ins, outs) => { const g = Math.exp(-((d / (0.9 * B)) ** 2)); return R * g * (0.22 * ins * ins + 0.1 * outs) + R * 0.035 * ridgeS(d, B) * ins; };
+    const quad = t => [(1 - t) ** 2, 2 * t * (1 - t), t * t];
+    const spread = (bs, ws) => bs.map((b, i) => [b, ws[i]]);
+    // a flat patch bent round a limb of radius r (its local +z points out of the limb)
+    const wrapPlane = (w, h, r) => { const g = new THREE.PlaneGeometry(w, h, 12, 1), p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { const x = p.getX(i); p.setZ(i, -(r - Math.sqrt(r * r - x * x))); } g.computeVertexNormals(); return g; };
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
-      // the hard torso reaches over the shoulder (a shell cap), with the shoulder bearing set into its side opening
-      const sh = joint(body, s * 0.25, 0.44, 0);   // inside the torso's side, so the sleeve grows out of it
-      // the shoulder and upper sleeve as one smooth surface: full at the shoulder, narrowing to the elbow (moves with the arm)
-      const sleeve = [];
-      // narrow at the very top (hidden inside the torso), fullest just where it leaves the torso, narrowing to the elbow
-      const sr = u => 0.082 + 0.02 * Math.exp(-(((u - 0.2) / 0.18) ** 2)) - 0.004 * Math.pow(Math.abs(Math.sin(u * 9 + s)), 6);
-      for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI / 2; sleeve.push([sr(0) * Math.sin(a), 0.035 * Math.cos(a)]); }
-      for (let i = 1; i <= 34; i++) { const u = i / 34; sleeve.push([sr(u), -u * 0.37]); }
-      sleeve.push([0, -0.34]);
-      sh.add(mesh(lumpy(lathe(sleeve.reverse(), 64), 0.007, 12, (x, y) => Math.min(1, Math.max(0, -y / 0.2))), fabric));   // smooth over the shoulder, cloth wrinkles further down
-      sh.add(at(ringY(0.0825, 0.005, grey), 0, -0.2, 0));                                     // a seam / restraint line
-      if (s < 0) {   // the flag on the outside of the left upper arm
-        const f = joint(sh, -0.097, -0.15, 0); f.rotation.y = -Math.PI / 2;
-        f.add(mesh(new THREE.PlaneGeometry(0.112, 0.08), white, 0, 0, -0.001));
-        f.add(mesh(new THREE.PlaneGeometry(0.1, 0.034), blue, 0, 0.017, 0), mesh(new THREE.PlaneGeometry(0.1, 0.034), yellow, 0, -0.017, 0));
+      const sh = bone(body, s * 0.25, 0.47, 0), el = bone(sh, 0, -0.42, 0), wr = bone(el, 0, -0.36, 0);
+      let arm = null;
+      const shH1 = helper(sh, 1 / 3), shH2 = helper(sh, 2 / 3);
+      const elH1 = helper(el, 1 / 3, src => { if (arm) arm.morphTargetInfluences[0] = sstep(0, 2.1, src.rotation.x); }), elH2 = helper(el, 2 / 3);
+      const rows = span([0.5, 0.43, 0.01], [0.43, 0.27, 0.004], [0.27, EY + EB, 0.008], [EY + EB, EY - EB, 0.0025], [EY - EB, -0.25, 0.008]).map(y => {
+        const k = sstep(0.43, 0.5, y);   // the root leans into the torso and narrows: hidden inside it
+        const w = y > 0.43 ? [[body, 1]] : y > 0.27 ? spread([body, shH1, shH2, sh], cubic((0.43 - y) / 0.16))
+          : y > EY + EB ? [[sh, 1]] : y > EY - EB ? spread([sh, elH1, elH2, el], cubic((EY + EB - y) / (2 * EB))) : [[el, 1]];
+        return { y, cx: s * (0.25 - 0.04 * k), cz: 0, r: ph => armR(y, ph).r * (1 - k) + 0.05 * k, w: () => w,
+          col: ph => bendCol(y - EY, EB, armR(y, ph).pm) };
+      });
+      arm = skinTube(rows, 48, (rw, ph, nx, ny, nz) => bendMorph(rw.y - EY, EB, ER, 1, Math.max(0, -nz), Math.max(0, nz)));
+      proxy(sh, 0.2, 0.42, 0.2, -0.21); proxy(el, 0.16, 0.32, 0.16, -0.16);
+      if (s < 0) {   // the flag on the outside of the left upper arm, bent round the sleeve
+        const r = armR(0.47 - 0.265, 1.5 * Math.PI).r, f = joint(sh, -(r + 0.002), -0.265, 0); f.rotation.y = -Math.PI / 2;
+        f.add(mesh(wrapPlane(0.112, 0.08, r + 0.001), white, 0, 0, -0.001));
+        f.add(mesh(wrapPlane(0.1, 0.034, r + 0.002), blue, 0, 0.017, 0), mesh(wrapPlane(0.1, 0.034, r + 0.002), yellow, 0, -0.017, 0));
       }
-      const el = joint(sh, 0, -0.37, 0);
-      el.add(mesh(bellows(0.1, 0.08, 3), fabric2));
-      const epad = mesh(new THREE.SphereGeometry(0.082, 32, 20, Math.PI * 0.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), fabric2, 0, -0.01, 0); epad.scale.set(1.08, 1.2, 1.12); el.add(epad);   // and over the back of the elbow
-      el.add(mesh(limb(0.265, 0.078, 0.062, 0.05, 2 + s), fabric, 0, -0.055, 0));   // reaches into the wrist ring
       if (s < 0) {   // the cuff checklist on the left forearm: a little book of cards on a strap
-        const ck = joint(el, 0, -0.17, -0.072); ck.rotation.y = Math.PI;
+        const ck = joint(el, 0, -0.19, -(armR(EY - 0.19, Math.PI).r + 0.006)); ck.rotation.y = Math.PI;
         ck.add(mesh(rbox(0.085, 0.062, 0.018, 0.006), grey));
         for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
       }
-      const wr = joint(el, 0, -0.33, 0);
       // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
-      wr.add(at(ringY(0.064, 0.0105, metal), 0, 0.004, 0));                                    // a slim wrist ring, the sleeve's own width
-      wr.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -0.007, 0));
-      // the glove: a flared gauntlet, a full palm with a plate on the back, jointed fingers with blue rubber tips
-      wr.add(mesh(lumpy(lathe([[0, -0.1], [0.06, -0.1], [0.07, -0.085], [0.074, -0.05], [0.07, -0.025], [0.062, -0.008], [0.058, 0.01], [0, 0.012]], 40), 0.003, 16), glove));   // the gauntlet: a cuff, not a plate
-      const hand = joint(wr, 0, -0.085, 0);
+      el.add(at(ringY(0.064, 0.0105, metal), 0, -0.295, 0));                                   // a slim wrist ring, the sleeve's own width
+      el.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -0.306, 0));
+      // the gauntlet: a flared cuff, open below, with a rolled lip; the hand turns under it
+      el.add(mesh(lathe([[0.052, -0.349], [0.056, -0.345], [0.066, -0.334], [0.072, -0.318], [0.068, -0.303], [0.058, -0.29]], 48), glove));
+      el.add(at(ringY(0.052, 0.0035, glove), 0, -0.349, 0));
+      // the glove: a full palm with a plate on the back, jointed fingers with blue rubber tips. The wrist bone is the
+      // palm's base; a ball at the pivot fills the gauntlet's opening at any wrist angle.
+      const hand = wr;
+      hand.add(mesh(new THREE.SphereGeometry(0.045, 32, 24), glove));
       // a rounded, padded hand: an ellipsoid palm with a fuller back, not a flat box
       const palm = mesh(lumpy(new THREE.SphereGeometry(1, 40, 30), 0.012, 3), glove, 0, -0.052, 0); palm.scale.set(0.058, 0.064, 0.04); hand.add(palm);
       const backH = mesh(new THREE.SphereGeometry(1, 32, 24), glove, 0, -0.06, 0.012); backH.scale.set(0.052, 0.05, 0.03); hand.add(backH);
@@ -351,31 +417,63 @@
     bootShape.quadraticCurveTo(0.095, 0.1, 0.085, 0.03); bootShape.quadraticCurveTo(0.082, 0.0, 0.07, 0.0);
     const bootGeo = new THREE.ExtrudeGeometry(bootShape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.028, bevelSize: 0.024, bevelSegments: 6, curveSegments: 14 });
     bootGeo.translate(0, -0.2, -0.05); bootGeo.rotateY(-Math.PI / 2); bootGeo.scale(1.12, 1.05, 1.05); bootGeo.computeVertexNormals();
+    // Each leg is one skinned half of the pants, from under the waist ring to inside the boot cuff. At the top its cross
+    // section is half of the briefs (a D: the briefs' ellipse cut at the middle), lower down it becomes the round thigh;
+    // the middle seam stays with the torso, so the two halves always meet. Bends: hip, knee (bellows, a pad in front),
+    // ankle (high up the shin: the foot turns inside the boot).
+    const briefP = [[0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12]];
+    const rb = y => { y = Math.max(y, -0.2); for (let i = 1; i < briefP.length; i++) if (y <= briefP[i][1]) { const [r0, y0] = briefP[i - 1], [r1, y1] = briefP[i]; return r0 + (r1 - r0) * (y - y0) / (y1 - y0); } return briefP[briefP.length - 1][0]; };
+    const HY = -0.13, KY = -0.68, KB = 0.11, KR = 0.1, AY = -1.24;
+    const thighR = y => { const u = clamp01((HY - y) / 0.55); return (0.116 - 0.02 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
+    const shinR = (y, ph) => { const u = clamp01((KY - y) / 0.5); return (0.098 - 0.018 * u) * (1 + 0.1 * Math.sin(Math.PI * u)) * (1 + 0.06 * Math.max(0, Math.cos(ph))); };
+    const legR = (s, y, ph) => {
+      const dx = Math.sin(ph), dz = Math.cos(ph), cx = s * 0.105, cz = -0.035;
+      // the distance from the thigh's centre to the edge of the briefs' half (the ellipse, or the middle plane x = 0)
+      const A = 1.26 * rb(y), Bz = 0.9 * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
+      let E = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
+      if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
+      const m = sstep(-0.12, -0.32, y), d = y - KY;
+      let r = E + ((thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) - E) * m;
+      if (s * dx < -1e-6) r = Math.min(r, (0.105 - 0.004 * m) / -(s * dx));   // the thighs press together, never through
+      const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.07) ** 2)) : 0;   // the knee pad, -z
+      return { r: r * (1 + 0.07 * ridgeS(d, KB) * (1 - pm)) + KR * 0.09 * pm + fold(y, ph, 'leg'), pm, m };
+    };
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
-      const hp = joint(body, s * 0.105, -0.13, -0.035);
-      // thigh: full at the top (it starts inside the briefs), narrowing to the knee
-      hp.add(mesh(limb(0.37, 0.116, 0.096, 0.06, 3 * s), fabric, 0, -0.09, 0));
-      pocket(hp, s * 0.112, -0.26, -0.005, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
-      // the seat: cloth from inside the briefs narrowing into the thigh. It hangs from the torso (not the leg), turned
-      // the way the thigh rests, so it never pokes out in front when the leg moves; the thigh slides inside it.
-      const seat = mesh(lumpy(lathe([[0, -0.26], [0.122, -0.26], [0.126, -0.19], [0.136, -0.1], [0.148, -0.02], [0.15, 0.04], [0.13, 0.09], [0, 0.1]], 64), 0.005, 10), fabric, s * 0.105 - s * 0.01, -0.13, -0.035);
-      seat.scale.set(1, 1, 0.92); seat.rotation.set(0.32 + 0.14 * (s < 0 ? 1 : -1), 0, s * 0.1); body.add(seat);
-      const kn = joint(hp, 0, -0.5, 0);
-      kn.add(mesh(bellows(0.11, 0.1, 3), fabric2));
-      const pad = mesh(lumpy(new THREE.SphereGeometry(0.104, 40, 24, Math.PI * 1.25, Math.PI * 0.5, Math.PI * 0.3, Math.PI * 0.4), 0.004), fabric2, 0, -0.02, 0); pad.scale.set(1.08, 1.25, 1.12); kn.add(pad);   // a padded patch over the knee
-      // shin with a calf: fuller just below the knee at the back, slimmer to the ankle
-      const shin = mesh(limb(0.38, 0.098, 0.08, 0.1, 1 - s), fabric, 0, -0.06, 0.008); shin.scale.set(1, 1, 1.06); kn.add(shin);
-      pocket(kn, s * 0.092, -0.2, 0.0, s * Math.PI / 2, 0.075, 0.1);                               // and a smaller one on each shin
-      const an = joint(kn, 0, -0.5, 0);
-      an.add(mesh(lumpy(lathe([[0, -0.02], [0.094, -0.02], [0.1, 0.03], [0.092, 0.08], [0, 0.085]], 48), 0.004), fabric2, 0, 0.02, 0));   // a cloth cuff over the boot top
-      an.add(at(ringY(0.096, 0.015, metal), 0, 0.03, 0));
-      an.add(mesh(bootGeo, shell, 0, 0.02, 0));
-      an.add(mesh(rbox(0.175, 0.04, 0.34, 0.016), dark, 0, -0.2, -0.078));                      // sole
-      for (let k = 0; k < 6; k++) an.add(mesh(new THREE.BoxGeometry(0.17, 0.01, 0.018), grey, 0, -0.222, 0.06 - k * 0.055));   // tread
-      an.add(mesh(new THREE.BoxGeometry(0.185, 0.024, 0.07), grey, 0, -0.09, 0.02));               // strap
+      const hp = bone(body, s * 0.105, HY, -0.035), kn = bone(hp, 0, KY - HY, 0.02), an = bone(kn, 0, AY - KY, -0.02);
+      let leg = null;
+      const hpH1 = helper(hp, 1 / 3), hpH2 = helper(hp, 2 / 3);
+      const knH1 = helper(kn, 1 / 3, src => { if (leg) leg.morphTargetInfluences[0] = sstep(0, 2.2, -src.rotation.x); }), knH2 = helper(kn, 2 / 3);
+      const anH = helper(an, 0.5);
+      const rows = span([0.07, -0.1, 0.008], [-0.1, -0.3, 0.0025], [-0.3, KY + KB, 0.008], [KY + KB, KY - KB, 0.0025], [KY - KB, -1.0, 0.008], [-1.0, -1.1, 0.004], [-1.1, AY + 0.09, 0.008]).map(y => ({
+        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => bendCol(y - KY, KB, legR(s, y, ph).pm),
+        w: (ph, r) => {
+          if (y > -0.1) return [[body, 1]];
+          if (y > -0.3) {   // the hip: the middle seam is pinned to the torso until the leg is round
+            const x = s * 0.105 + r * Math.sin(ph), m = legR(s, y, ph).m, p = sstep(0, 0.035, s * x) * (1 - m) + m;
+            return spread([body, hpH1, hpH2, hp], cubic(clamp01((-0.1 - y) / 0.2) * p));
+          }
+          if (y > KY + KB) return [[hp, 1]];
+          if (y > KY - KB) return spread([hp, knH1, knH2, kn], cubic((KY + KB - y) / (2 * KB)));
+          if (y > -1.0) return [[kn, 1]];
+          if (y > -1.1) return spread([kn, anH, an], quad((-1.0 - y) / 0.1));
+          return [[an, 1]];
+        },
+      }));
+      leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz)));
+      proxy(hp, 0.25, 0.55, 0.25, -0.28); proxy(kn, 0.21, 0.5, 0.21, -0.27);
+      pocket(hp, s * (legR(s, HY - 0.3, s * Math.PI / 2).r + 0.004), -0.3, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
+      pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).r + 0.004), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1);              // and a smaller one on each shin
+      // the boot: the ankle pivot sits inside it, 0.127 above the sole
+      an.add(mesh(lumpy(lathe([[0, -0.02], [0.094, -0.02], [0.1, 0.03], [0.092, 0.08]], 48), 0.004), fabric2, 0, 0.13, 0));   // a cloth cuff over the boot top, open above
+      an.add(at(ringY(0.096, 0.015, metal), 0, 0.14, 0));
+      an.add(mesh(bootGeo, shell, 0, 0.13, 0));
+      an.add(mesh(rbox(0.175, 0.04, 0.34, 0.016), dark, 0, -0.09, -0.078));                      // sole
+      for (let k = 0; k < 6; k++) an.add(mesh(new THREE.BoxGeometry(0.17, 0.01, 0.018), grey, 0, -0.112, 0.06 - k * 0.055));   // tread
+      an.add(mesh(new THREE.BoxGeometry(0.185, 0.024, 0.07), grey, 0, 0.02, 0.02));               // strap
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
+    proxy(body, 0.48, 0.4, 0.34, -0.07);   // the briefs
 
     /* the Nebozvid emblem: a round patch with the site's wordmark (characters/emblem.js, made by emblem.py) */
     const emblemImg = new Image(), emblemTex = new THREE.Texture(emblemImg);
@@ -394,6 +492,10 @@
       tag.add(mesh(rbox(0.1, 0.032, 0.006, 0.004), grey)); tag.add(mesh(new THREE.PlaneGeometry(0.084, 0.012), white, 0, 0, 0.0035)); }
     const back = mesh(patch(0.085, 0.35), emblemMat, 0, 0.03, 0.127); pack.add(back);                                                // on the backpack flap
 
+    // bind the sleeves to the skeleton at rest (every bone made, nothing turned yet)
+    group.updateMatrixWorld(true);
+    const skeleton = new THREE.Skeleton(bones);
+    skinned.forEach(m => m.bind(skeleton));
     shadowed(group);
 
     // The free-fall rest pose (arms afloat, knees bent), the two sides a little different, each joint drifting slowly.
