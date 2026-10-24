@@ -131,8 +131,11 @@
     const cubic = t => [(1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3];
     // bellows ridges across a bend band |d| < B: three soft rings, fading out at the band's ends (0..1)
     const ridgeS = (d, B) => Math.abs(d) < B ? (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2 * Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
-    // cloth folds on the skinned sleeves (a radius offset): none yet
-    const fold = (y, phi, part) => 0;
+    // the cloth's own unevenness on the skinned sleeves (a radius offset at a rest-pose point): soft lumps and shallow
+    // creases across the limb; calm (0..1) quiets it in the bends, where the bellows are
+    const fold = (x, y, z, calm) => (1 - 0.6 * calm) * (0.0055 * ((vnoise(x * 14 + 3.1, y * 30, z * 14) - 0.5) * 1.4 + (vnoise(x * 36, y * 70 + 5.3, z * 36) - 0.5) * 0.6)
+      - 0.0045 * Math.abs(Math.sin(y * 31 + 4 * x + 3 * z)) ** 6);
+    const bandEnv = (d, B) => Math.abs(d) < B ? Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
     // the sleeves' cloth: the seamed fabric, shaded per vertex (darker in the bellows' valleys and on the pads)
     const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05, vertexColors: true });
     // the row heights of a tube: spans [from, to, step] laid end to end
@@ -338,10 +341,11 @@
     const EY = 0.05, EB = 0.09, ER = 0.082;   // the elbow pivot's height in the torso, the bend band's half-length, the radius
     const upperR = y => { const u = (0.47 - y) / 0.42; return 0.082 + 0.02 * Math.exp(-(((u - 0.2) / 0.18) ** 2)); };   // full where it leaves the torso
     const foreR = y => { const u = clamp01((EY - y) / 0.3); return (0.078 - 0.016 * u) * (1 + 0.05 * Math.sin(Math.PI * u)); };
-    const armR = (y, ph) => {
-      const d = y - EY, base = upperR(y) + (foreR(y) - upperR(y)) * sstep(EB, -EB, d);
-      const pm = Math.abs(d) < EB ? sstep(0.3, 0.75, Math.cos(ph)) * Math.exp(-((d / 0.055) ** 2)) : 0;   // the elbow pad, +z
-      return { r: base * (1 + 0.07 * ridgeS(d, EB) * (1 - pm)) + ER * 0.08 * pm + fold(y, ph, 'arm'), pm };
+    const armR = (s, y, ph) => {
+      const d = y - EY, prof = upperR(y) + (foreR(y) - upperR(y)) * sstep(EB, -EB, d);
+      const pm = Math.abs(d) < EB ? sstep(0.3, 0.75, Math.cos(ph)) * Math.exp(-((d / 0.06) ** 2)) : 0;   // the elbow pad, +z
+      const base = prof * (1 + 0.1 * ridgeS(d, EB) * (1 - pm)) + ER * 0.2 * pm;
+      return { r: base + fold(s * 0.25 + base * Math.sin(ph), y, base * Math.cos(ph), bandEnv(d, EB)), base, pm };
     };
     // the shade of the cloth in a bend: darker in the bellows' valleys, the pad a little darker too
     const bendCol = (d, B, pm) => { if (Math.abs(d) >= B) return 1; const env = Math.sin(Math.PI * (d + B) / (2 * B)), sh = (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2;
@@ -357,24 +361,24 @@
       const L = s < 0 ? 'L' : 'R';
       const sh = bone(body, s * 0.25, 0.47, 0), el = bone(sh, 0, -0.42, 0), wr = bone(el, 0, -0.36, 0);
       let arm = null;
-      const shH1 = helper(sh, 1 / 3), shH2 = helper(sh, 2 / 3);
       const elH1 = helper(el, 1 / 3, src => { if (arm) arm.morphTargetInfluences[0] = sstep(0, 2.1, src.rotation.x); }), elH2 = helper(el, 2 / 3);
-      const rows = span([0.5, 0.43, 0.01], [0.43, 0.27, 0.004], [0.27, EY + EB, 0.008], [EY + EB, EY - EB, 0.0025], [EY - EB, -0.25, 0.008]).map(y => {
-        const k = sstep(0.43, 0.5, y);   // the root leans into the torso and narrows: hidden inside it
-        const w = y > 0.43 ? [[body, 1]] : y > 0.27 ? spread([body, shH1, shH2, sh], cubic((0.43 - y) / 0.16))
-          : y > EY + EB ? [[sh, 1]] : y > EY - EB ? spread([sh, elH1, elH2, el], cubic((EY + EB - y) / (2 * EB))) : [[el, 1]];
-        return { y, cx: s * (0.25 - 0.04 * k), cz: 0, r: ph => armR(y, ph).r * (1 - k) + 0.05 * k, w: () => w,
-          col: ph => bendCol(y - EY, EB, armR(y, ph).pm) };
+      // The shoulder is a ball joint: the sleeve turns with the arm as a whole, its open top (a ring round the pivot)
+      // always inside a round shoulder cap of the suit, and it leaves the cap through a soft bearing ring.
+      const rows = span([0.47, EY + EB, 0.007], [EY + EB, EY - EB, 0.0025], [EY - EB, -0.25, 0.008]).map(y => {
+        const w = y > EY + EB ? [[sh, 1]] : y > EY - EB ? spread([sh, elH1, elH2, el], cubic((EY + EB - y) / (2 * EB))) : [[el, 1]];
+        return { y, cx: s * 0.25, cz: 0, r: ph => armR(s, y, ph).r, w: () => w, col: ph => bendCol(y - EY, EB, armR(s, y, ph).pm) };
       });
+      const cap = mesh(new THREE.SphereGeometry(0.112, 56, 40), torsoCloth, s * 0.25, 0.47, 0); body.add(cap);
+      sh.add(at(ringY(0.097, 0.011, fabric2), 0, -0.058, 0));
       arm = skinTube(rows, 48, (rw, ph, nx, ny, nz) => bendMorph(rw.y - EY, EB, ER, 1, Math.max(0, -nz), Math.max(0, nz)));
       proxy(sh, 0.2, 0.42, 0.2, -0.21); proxy(el, 0.16, 0.32, 0.16, -0.16);
       if (s < 0) {   // the flag on the outside of the left upper arm, bent round the sleeve
-        const r = armR(0.47 - 0.265, 1.5 * Math.PI).r, f = joint(sh, -(r + 0.002), -0.265, 0); f.rotation.y = -Math.PI / 2;
+        const r = armR(s, 0.47 - 0.265, 1.5 * Math.PI).base + 0.005, f = joint(sh, -(r + 0.002), -0.265, 0); f.rotation.y = -Math.PI / 2;
         f.add(mesh(wrapPlane(0.112, 0.08, r + 0.001), white, 0, 0, -0.001));
         f.add(mesh(wrapPlane(0.1, 0.034, r + 0.002), blue, 0, 0.017, 0), mesh(wrapPlane(0.1, 0.034, r + 0.002), yellow, 0, -0.017, 0));
       }
       if (s < 0) {   // the cuff checklist on the left forearm: a little book of cards on a strap
-        const ck = joint(el, 0, -0.19, -(armR(EY - 0.19, Math.PI).r + 0.006)); ck.rotation.y = Math.PI;
+        const ck = joint(el, 0, -0.19, -(armR(s, EY - 0.19, Math.PI).base + 0.012)); ck.rotation.y = Math.PI;
         ck.add(mesh(rbox(0.085, 0.062, 0.018, 0.006), grey));
         for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
       }
@@ -424,19 +428,20 @@
     const briefP = [[0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12]];
     const rb = y => { y = Math.max(y, -0.2); for (let i = 1; i < briefP.length; i++) if (y <= briefP[i][1]) { const [r0, y0] = briefP[i - 1], [r1, y1] = briefP[i]; return r0 + (r1 - r0) * (y - y0) / (y1 - y0); } return briefP[briefP.length - 1][0]; };
     const HY = -0.13, KY = -0.68, KB = 0.11, KR = 0.1, AY = -1.24;
-    const thighR = y => { const u = clamp01((HY - y) / 0.55); return (0.116 - 0.02 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
-    const shinR = (y, ph) => { const u = clamp01((KY - y) / 0.5); return (0.098 - 0.018 * u) * (1 + 0.1 * Math.sin(Math.PI * u)) * (1 + 0.06 * Math.max(0, Math.cos(ph))); };
+    const thighR = y => { const u = clamp01((HY - y) / 0.55); return (0.128 - 0.024 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
+    const shinR = (y, ph) => { const u = clamp01((KY - y) / 0.5); return (0.105 - 0.02 * u) * (1 + 0.1 * Math.sin(Math.PI * u)) * (1 + 0.06 * Math.max(0, Math.cos(ph))); };
     const legR = (s, y, ph) => {
       const dx = Math.sin(ph), dz = Math.cos(ph), cx = s * 0.105, cz = -0.035;
       // the distance from the thigh's centre to the edge of the briefs' half (the ellipse, or the middle plane x = 0)
       const A = 1.26 * rb(y), Bz = 0.9 * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
       let E = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
       if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
-      const m = sstep(-0.12, -0.32, y), d = y - KY;
+      const m = sstep(-0.14, -0.36, y), d = y - KY;
       let r = E + ((thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) - E) * m;
       if (s * dx < -1e-6) r = Math.min(r, (0.105 - 0.004 * m) / -(s * dx));   // the thighs press together, never through
-      const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.07) ** 2)) : 0;   // the knee pad, -z
-      return { r: r * (1 + 0.07 * ridgeS(d, KB) * (1 - pm)) + KR * 0.09 * pm + fold(y, ph, 'leg'), pm, m };
+      const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.08) ** 2)) : 0;   // the knee pad, -z
+      const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.22 * pm;
+      return { r: base + fold(cx + base * dx, y, cz + base * dz, Math.max(bandEnv(d, KB), 1 - sstep(-0.05, -0.2, y))), base, pm, m };
     };
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
@@ -462,8 +467,8 @@
       }));
       leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz)));
       proxy(hp, 0.25, 0.55, 0.25, -0.28); proxy(kn, 0.21, 0.5, 0.21, -0.27);
-      pocket(hp, s * (legR(s, HY - 0.3, s * Math.PI / 2).r + 0.004), -0.3, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
-      pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).r + 0.004), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1);              // and a smaller one on each shin
+      pocket(hp, s * (legR(s, HY - 0.3, s * Math.PI / 2).base + 0.008), -0.3, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
+      pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1);              // and a smaller one on each shin
       // the boot: the ankle pivot sits inside it, 0.127 above the sole
       an.add(mesh(lumpy(lathe([[0, -0.02], [0.094, -0.02], [0.1, 0.03], [0.092, 0.08]], 48), 0.004), fabric2, 0, 0.13, 0));   // a cloth cuff over the boot top, open above
       an.add(at(ringY(0.096, 0.015, metal), 0, 0.14, 0));
