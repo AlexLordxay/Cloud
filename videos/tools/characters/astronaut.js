@@ -747,17 +747,23 @@
     const HY = -0.13, KY = -0.61, KB = 0.11, KR = 0.1, AY = -1.17;   // a short thigh: the suit sits low and sturdy
     const thighR = y => { const u = clamp01((HY - y) / 0.48); return (0.12 - 0.016 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
     const shinR = (y, ph) => { const u = clamp01((KY - y) / 0.5); return (0.105 - 0.02 * u) * (1 + 0.1 * Math.sin(Math.PI * u)) * (1 + 0.06 * Math.max(0, Math.cos(ph))); };
+    // The lower torso is its own garment, the briefs: wider than the waist and full, down to a seam at YB where each
+    // leg comes out of it, a size narrower (a step you can see). Below the seam: the thigh, knee, shin.
+    const YB = -0.305;
     const legR = (s, y, ph) => {
       const dx = Math.sin(ph), dz = Math.cos(ph), cx = s * 0.105, cz = -0.035;
-      // the distance from the thigh's centre to the edge of the briefs' half (the ellipse, or the middle plane x = 0)
-      const A = 1.26 * rb(y), Bz = 0.9 * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
+      // the distance from the thigh's centre to the edge of the briefs' half (the ellipse, or the middle plane x = 0);
+      // the hips fill out below the waist
+      const A = (1.26 + 0.1 * sstep(0.02, -0.16, y)) * rb(y), Bz = (0.9 + 0.08 * sstep(0.02, -0.16, y)) * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
       let E = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
       if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
-      const m = sstep(-0.14, -0.36, y), d = y - KY;
-      let r = E + ((thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2))) - E) * m;   // a full knee
-      // the crotch: the two halves meet at the middle down to about -0.17, then a gap opens between the thighs and widens
-      // downward (the inner side rounded off softly, not cut flat)
-      if (s * dx < -1e-6) { const g = 0.004 * m + 0.03 * sstep(-0.16, -0.34, y), c = (0.105 - g) / -(s * dx), k = 0.03 * m, h = Math.max(k - Math.abs(r - c), 0) / (k || 1);
+      const d = y - KY, mb = sstep(-0.1, -0.27, y), t = sstep(YB + 0.003, YB - 0.007, y), m = Math.max(mb, t);
+      const brief = E + (0.14 * (1 + 0.05 * Math.max(0, dz)) - E) * mb;                       // the briefs round out to their leg opening, the seat fuller
+      const leg = (thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2)));   // a full knee
+      let r = brief + (leg - brief) * t;
+      // the crotch: the briefs' halves meet at the middle (a little apart at their bottom), below the seam a gap opens
+      // between the thighs and widens downward (the inner side rounded off softly, not cut flat)
+      if (s * dx < -1e-6) { const g = 0.004 * m + 0.006 * sstep(-0.16, -0.28, y) + 0.022 * sstep(YB, YB - 0.1, y), c = (0.105 - g) / -(s * dx), k = 0.03 * m, h = Math.max(k - Math.abs(r - c), 0) / (k || 1);
         r = Math.min(r, c) - h * h * k * 0.25; }
       const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.08) ** 2)) : 0;   // the knee pad, -z
       const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.3 * pm;
@@ -771,11 +777,11 @@
       const knH1 = helper(kn, 1 / 3, src => { if (leg) leg.morphTargetInfluences[0] = sstep(0, 2.2, -src.rotation.x); }), knH2 = helper(kn, 2 / 3);
       const anH = helper(an, 0.5);
       // the commander's red stripe round the thigh, woven into the cloth's colour (a sharp edge: a pair of rows at each edge)
-      const ST = [HY - 0.169, HY - 0.201], RED = [0.5, 0.032, 0.024];
+      const ST = [HY - 0.345, HY - 0.377], RED = [0.5, 0.032, 0.024];
       const ys = span([0.07, -0.1, 0.008], [-0.1, -0.3, 0.0025], [-0.3, KY + KB, 0.008], [KY + KB, KY - KB, 0.0025], [KY - KB, AY + 0.24, 0.008], [AY + 0.24, AY + 0.14, 0.004], [AY + 0.14, AY + 0.09, 0.008])
-        .filter(y => ST.every(e => Math.abs(y - e) > 0.002)).concat(ST.flatMap(e => [e + 0.0004, e - 0.0004])).sort((p, q) => q - p);
+        .filter(y => ST.every(e => Math.abs(y - e) > 0.002) && Math.abs(y - YB) > 0.011).concat(ST.flatMap(e => [e + 0.0004, e - 0.0004]), [5, 3, 1, -1, -3, -5, -7, -9].map(k => YB + k * 0.001)).sort((p, q) => q - p);
       const rows = ys.map(y => ({
-        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => y < ST[0] && y > ST[1] ? RED : bendCol(y - KY, KB, legR(s, y, ph).pm) * (1 - 0.08 * legR(s, y, ph).pm) * (1 - 0.1 * sstep(0.03, 0.06, y)) * (1 - 0.1 * sstep(AY + 0.13, AY + 0.1, y)),   // soiled knee pads; shadowed under the waist ring and into the boot
+        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => y < ST[0] && y > ST[1] ? RED : Math.abs(y - YB) < 0.0045 ? 0.62 : bendCol(y - KY, KB, legR(s, y, ph).pm) * (1 - 0.08 * legR(s, y, ph).pm) * (1 - 0.1 * sstep(0.03, 0.06, y)) * (1 - 0.1 * sstep(AY + 0.13, AY + 0.1, y)),   // soiled knee pads; shadowed under the waist ring and into the boot
         w: (ph, r) => {
           if (y > -0.1) return [[body, 1]];
           if (y > -0.3) {   // the hip: the middle seam is pinned to the torso until the leg is round
