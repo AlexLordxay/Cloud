@@ -455,9 +455,10 @@
     // shoulder band (cubic over the torso, two helpers and the shoulder) lets the arm swing out of it with no edge, and the
     // elbow band bends round with bellows on the inside and a pad over the back. The forearm ends in a gauntlet and the
     // hand turns below its lip at the wrist pivot.
-    const EY = 0.05, EB = 0.09, ER = 0.082;   // the elbow pivot's height in the torso, the bend band's half-length, the radius
-    const upperR = y => { const u = (0.47 - y) / 0.42; return 0.082 + 0.02 * Math.exp(-(((u - 0.2) / 0.18) ** 2)); };   // full where it leaves the torso
-    const foreR = y => { const u = clamp01((EY - y) / 0.3); return (0.078 - 0.016 * u) * (1 + 0.05 * Math.sin(Math.PI * u)); };
+    const UA = 0.38, FA = 0.33;   // the upper arm (shoulder to elbow) and the forearm (elbow to the palm's base): short and thick, as in a pressurised suit
+    const EY = 0.47 - UA, EB = 0.09, ER = 0.092;   // the elbow pivot's height in the torso, the bend band's half-length, the radius
+    const upperR = y => { const u = (0.47 - y) / UA; return 0.092 + 0.022 * Math.exp(-(((u - 0.2) / 0.18) ** 2)); };   // full where it leaves the torso
+    const foreR = y => { const u = clamp01((EY - y) / (FA - 0.06)); return (0.088 - 0.022 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
     const armR = (s, y, ph) => {
       const d = y - EY, prof = upperR(y) + (foreR(y) - upperR(y)) * sstep(EB, -EB, d);
       const pm = Math.abs(d) < EB ? sstep(0.3, 0.75, Math.cos(ph)) * Math.exp(-((d / 0.06) ** 2)) : 0;   // the elbow pad, +z
@@ -607,21 +608,21 @@
     const HANDS = {};
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
-      const sh = bone(body, s * 0.25, 0.47, 0), el = bone(sh, 0, -0.42, 0), wr = bone(el, 0, -0.36, 0);
+      const sh = bone(body, s * 0.25, 0.47, 0), el = bone(sh, 0, -UA, 0), wr = bone(el, 0, -FA, 0);
       let arm = null;
       const elH1 = helper(el, 1 / 3, src => { if (arm) arm.morphTargetInfluences[0] = sstep(0, 2.1, src.rotation.x); }), elH2 = helper(el, 2 / 3);
       // The shoulder is a ball joint: the sleeve turns with the arm as a whole, its open top (a ring round the pivot)
       // always inside a round shoulder cap of the suit, and it leaves the cap through a soft bearing ring.
-      const rows = span([0.47, EY + EB, 0.007], [EY + EB, EY - EB, 0.0025], [EY - EB, -0.25, 0.008]).map(y => {
+      const rows = span([0.47, EY + EB, 0.007], [EY + EB, EY - EB, 0.0025], [EY - EB, EY - FA + 0.06, 0.008]).map(y => {
         const w = y > EY + EB ? [[sh, 1]] : y > EY - EB ? spread([sh, elH1, elH2, el], cubic((EY + EB - y) / (2 * EB))) : [[el, 1]];
-        return { y, cx: s * 0.25, cz: 0, r: ph => armR(s, y, ph).r, w: () => w, col: ph => bendCol(y - EY, EB, armR(s, y, ph).pm) * (1 - 0.1 * sstep(-0.23, -0.25, y)) };   // shadowed going into the wrist ring
+        return { y, cx: s * 0.25, cz: 0, r: ph => armR(s, y, ph).r, w: () => w, col: ph => bendCol(y - EY, EB, armR(s, y, ph).pm) * (1 - 0.1 * sstep(EY - FA + 0.08, EY - FA + 0.06, y)) };   // shadowed going into the wrist ring
       });
-      const cap = mesh(new THREE.SphereGeometry(0.112, 56, 40), torsoCloth, s * 0.25, 0.47, 0); body.add(cap);
-      sh.add(at(ringY(0.097, 0.011, fabric2), 0, -0.058, 0));
+      const cap = mesh(new THREE.SphereGeometry(0.122, 56, 40), torsoCloth, s * 0.25, 0.47, 0); body.add(cap);
+      sh.add(at(ringY(0.107, 0.012, fabric2), 0, -0.06, 0));
       arm = skinTube(rows, 48, (rw, ph, nx, ny, nz) => bendMorph(rw.y - EY, EB, ER, 1, Math.max(0, -nz), Math.max(0, nz)));
-      proxy(sh, 0.2, 0.42, 0.2, -0.21); proxy(el, 0.16, 0.32, 0.16, -0.16);
+      proxy(sh, 0.22, UA, 0.22, -UA / 2); proxy(el, 0.18, FA - 0.04, 0.18, -(FA - 0.04) / 2);
       if (s < 0) {   // the flag on the outside of the left upper arm, bent round the sleeve
-        const r = armR(s, 0.47 - 0.265, 1.5 * Math.PI).base + 0.005, f = joint(sh, -(r + 0.002), -0.265, 0); f.rotation.y = -Math.PI / 2;
+        const r = armR(s, 0.47 - 0.24, 1.5 * Math.PI).base + 0.005, f = joint(sh, -(r + 0.002), -0.24, 0); f.rotation.y = -Math.PI / 2;
         const tex = (() => { const cv = document.createElement('canvas'); cv.width = 220; cv.height = 150; const g = cv.getContext('2d');
           g.fillStyle = '#e9e6de'; g.fillRect(0, 0, 220, 150); g.fillStyle = '#0057b7'; g.fillRect(8, 8, 204, 67); g.fillStyle = '#ffd500'; g.fillRect(8, 75, 204, 67);
           g.strokeStyle = 'rgba(80,76,70,0.8)'; g.lineWidth = 2; g.setLineDash([6, 5]); g.strokeRect(4, 4, 212, 142);   // the stitched edge
@@ -629,7 +630,7 @@
         f.add(mesh(wrapPlane(0.11, 0.075, r + 0.001), M({ map: tex, roughness: 0.85 }), 0, 0, 0));
       }
       if (s < 0) {   // the cuff checklist on the left forearm: a little book of cards on a strap
-        const ck = joint(el, 0, -0.19, -(armR(s, EY - 0.19, Math.PI).base + 0.012)); ck.rotation.y = Math.PI;
+        const ck = joint(el, 0, -0.165, -(armR(s, EY - 0.165, Math.PI).base + 0.012)); ck.rotation.y = Math.PI;
         ck.add(mesh(rbox(0.085, 0.062, 0.018, 0.006), grey));
         for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
       }
@@ -637,7 +638,7 @@
       const armStrap = (y, W = 0.018) => { const pts = []; for (let k = 0; k <= 40; k++) { const a = 2 * Math.PI * k / 40; const r = armR(s, EY + y, a).r + 0.002; pts.push(new THREE.Vector3(r * Math.sin(a), y, r * Math.cos(a))); }
         el.add(webbing(pts, W, 0.003, new THREE.Vector3(0, y, 0), dark, 80)); };
       if (s < 0) {   // a chronograph strapped over the left cuff, on the back of the wrist (as astronauts wear them)
-        const y = -0.262, r = armR(s, EY + y, 0).base + 0.006; armStrap(y);
+        const y = -FA + 0.098, r = armR(s, EY + y, 0).base + 0.006; armStrap(y);
         const wt = joint(el, 0, y, r + 0.004); wt.rotation.x = Math.PI / 2;
         wt.add(mesh(new THREE.CylinderGeometry(0.017, 0.018, 0.009, 36), metal), mesh(new THREE.TorusGeometry(0.0165, 0.0025, 8, 36), dark, 0, 0.0048, 0).rotateX(Math.PI / 2));
         const dial = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
@@ -649,17 +650,17 @@
         wt.add(mesh(new THREE.CircleGeometry(0.0145, 36), M({ map: dial, roughness: 0.25 }), 0, 0.0047, 0).rotateX(-Math.PI / 2));
         wt.add(mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.005, 10), metal, 0.019, 0, 0).rotateZ(Math.PI / 2));   // the crown
       } else {   // the wrist mirror on the right forearm: to see the controls on the chest box
-        const y = -0.215, r = armR(s, EY + y, Math.PI / 2).base; armStrap(y, 0.022);
+        const y = -FA + 0.14, r = armR(s, EY + y, Math.PI / 2).base; armStrap(y, 0.022);
         const mr = joint(el, r + 0.008, y, 0); mr.rotation.set(0, Math.PI / 2, 0.25);
         mr.add(mesh(rbox(0.062, 0.046, 0.006, 0.006), grey), mesh(new THREE.PlaneGeometry(0.054, 0.038), M({ color: 0xdfe6ee, metalness: 1, roughness: 0.04 }), 0, 0, 0.0032));
         mr.add(mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.05, 10), metal, 0, 0, -0.006).rotateZ(Math.PI / 2));   // its hinge
       }
       // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
-      el.add(at(band(0.069, 0.024, 0.009), 0, -0.293, 0));                                   // a slim wrist ring, the sleeve's own width
-      el.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -0.306, 0));
+      el.add(at(band(0.069, 0.024, 0.009), 0, -FA + 0.067, 0));                                   // a slim wrist ring, the sleeve's own width
+      el.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -FA + 0.054, 0));
       // the gauntlet: a flared cuff, open below, with a rolled lip; the hand turns under it
-      el.add(mesh(lathe([[0.052, -0.349], [0.056, -0.345], [0.066, -0.334], [0.072, -0.318], [0.068, -0.303], [0.058, -0.29]], 48), glove));
-      el.add(at(ringY(0.052, 0.0035, glove), 0, -0.349, 0));
+      el.add(mesh(lathe([[0.052, 0.011], [0.056, 0.015], [0.066, 0.026], [0.072, 0.042], [0.068, 0.057], [0.058, 0.07]].map(([r, y]) => [r, y - FA]), 48), glove));
+      el.add(at(ringY(0.052, 0.0035, glove), 0, -FA + 0.011, 0));
       // the glove (see phalanx, finger, gloveGeo): the wrist bone is the palm's base, every finger and the thumb have three bones
       const F = FING.map(([name, mx, my, fan, Lf, Rf]) => {
         const root = joint(wr, s * mx, my + 0.004, -0.002); root.rotation.z = s * fan;      // its spread
@@ -839,7 +840,7 @@
       const tag = joint(body, tx, 0.5, tz - 0.004); tag.rotation.set(-0.08, Math.PI - ts, 0, 'YXZ');   // a name tag on the right of the chest
       tag.add(mesh(rbox(0.1, 0.032, 0.006, 0.004), grey)); tag.add(mesh(new THREE.PlaneGeometry(0.084, 0.012), white, 0, 0, 0.0035)); }
     const back = mesh(patch(0.085, 0.32), emblemMat, 0, 0.03, 0.137); pack.add(back);
-    { const r = armR(1, 0.47 - 0.265, Math.PI / 2).base + 0.006, ap = mesh(patch(0.038, 1 / (2 * r)), emblemMat, r, -0.265, 0); ap.rotation.y = Math.PI / 2; J.shoulderR.add(ap); }   // and on the right sleeve                                                // on the backpack flap
+    { const r = armR(1, 0.47 - 0.24, Math.PI / 2).base + 0.006, ap = mesh(patch(0.038, 1 / (2 * r)), emblemMat, r, -0.24, 0); ap.rotation.y = Math.PI / 2; J.shoulderR.add(ap); }   // and on the right sleeve                                                // on the backpack flap
 
     // bind the sleeves to the skeleton at rest (every bone made, nothing turned yet)
     group.updateMatrixWorld(true);
