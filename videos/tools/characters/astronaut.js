@@ -654,14 +654,37 @@
     }
 
     /* legs */
-    // the boot: a side profile with a rounded toe and heel, extruded and bevelled, on a thicker ridged sole
-    const bootShape = new THREE.Shape();
-    bootShape.moveTo(0.07, 0.0); bootShape.lineTo(-0.15, 0.0);
-    bootShape.quadraticCurveTo(-0.235, 0.0, -0.232, 0.05); bootShape.quadraticCurveTo(-0.225, 0.1, -0.13, 0.115);
-    bootShape.quadraticCurveTo(-0.085, 0.13, -0.075, 0.2); bootShape.lineTo(0.07, 0.2);
-    bootShape.quadraticCurveTo(0.095, 0.1, 0.085, 0.03); bootShape.quadraticCurveTo(0.082, 0.0, 0.07, 0.0);
-    const bootGeo = new THREE.ExtrudeGeometry(bootShape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.028, bevelSize: 0.024, bevelSegments: 6, curveSegments: 14 });
-    bootGeo.translate(0, -0.2, -0.05); bootGeo.rotateY(-Math.PI / 2); bootGeo.scale(1.12, 1.05, 1.05);
+    // The boot (in the ankle's frame, toe to -z): a loft of cross-sections from heel to toe. A section is a rounded
+    // shape, flat underneath, its half-width bW(z) narrower at the heel and widest at the ball, its top bTop(z) high at
+    // the ankle and sloping over the instep to a rounded toe. The fabric upper, a lacquered toe cap and heel counter
+    // (the same surface over part of the boot, a hair out), a dark rubber sole with grooves, and a strap over the instep.
+    const BZ0 = 0.115, BZ1 = -0.27, BY = -0.085;   // heel end, toe tip, the bottom of the upper
+    const bW = z => { let w = 0.068 + 0.02 * sstep(0.06, -0.14, z); if (z < BZ1 + 0.065) w *= Math.sqrt(Math.max(0, 1 - ((z - (BZ1 + 0.065)) / 0.065) ** 2));
+      if (z > BZ0 - 0.045) w *= Math.sqrt(Math.max(0, 1 - ((z - (BZ0 - 0.045)) / 0.045) ** 2)); return w; };
+    const bTop = z => { let t = 0.15 + (0.058 - 0.15) * sstep(-0.075, -0.18, z) - 0.012 * sstep(-0.18, -0.24, z); if (z < BZ1 + 0.05) t = BY + (t - BY) * Math.sqrt(Math.max(0.05, 1 - ((z - (BZ1 + 0.05)) / 0.05) ** 2)); return t; };
+    function bootLoft(z0 = BZ0, z1 = BZ1, a0 = 0, a1 = 2 * Math.PI, grow = 0, nz = 70, na = 48) {
+      const pos = [], uv = [], idx = [];
+      for (let i = 0; i <= nz; i++) {
+        const z = z0 + (z1 - z0) * i / nz, w = bW(z) + grow, top = bTop(z) + grow, bot = BY - grow, yc = (top + bot) / 2, hh = (top - bot) / 2;
+        for (let j = 0; j <= na; j++) {
+          const a = a0 + (a1 - a0) * j / na, c = Math.cos(a), sn = Math.sin(a), e = sn < 0 ? 0.35 : 0.8;   // flat underneath, rounder above
+          pos.push(w * Math.sign(c) * Math.abs(c) ** e, yc + hh * Math.sign(sn) * Math.abs(sn) ** (sn < 0 ? 0.25 : 0.9), z); uv.push(a * 0.09 / 0.5, z / 0.5);
+        }
+      }
+      for (let i = 0; i < nz; i++) for (let j = 0; j < na; j++) { const A = i * (na + 1) + j, B = A + na + 1; idx.push(A, B, A + 1, A + 1, B, B + 1); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      g.setIndex(idx); g.computeVertexNormals(); return g;
+    }
+    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
+    const bootShell = M({ color: 0xeceae3, roughness: 0.4, metalness: 0 });
+    const soleMat = (() => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64; const g = cv.getContext('2d');   // grooves across the sole
+      g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#000'; for (let y = 0; y < 64; y += 16) g.fillRect(0, y, 64, 6);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 4); return M({ color: 0x2a2b2e, roughness: 0.85, bumpMap: t, bumpScale: 0.6 }); })();
+    const soleGeo = (() => { const sh = new THREE.Shape(), n = 60, pts = [];
+      for (let i = 0; i <= n; i++) { const z = BZ0 + (BZ1 - BZ0) * i / n; pts.push([bW(z) + 0.006, z]); }
+      sh.moveTo(0, BZ0 + 0.004); pts.forEach(([x, z]) => sh.lineTo(x, z)); sh.lineTo(0, BZ1 - 0.006); pts.slice().reverse().forEach(([x, z]) => sh.lineTo(-x, z));
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.027, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2 });
+      g.rotateX(Math.PI / 2); g.translate(0, -0.081, 0); return smoothNormals(g, 40); })();
     // Each leg is one skinned half of the pants, from under the waist ring to inside the boot cuff. At the top its cross
     // section is half of the briefs (a D: the briefs' ellipse cut at the middle), lower down it becomes the round thigh;
     // the middle seam stays with the torso, so the two halves always meet. Bends: hip, knee (bellows, a pad in front),
@@ -711,12 +734,15 @@
       pocket(hp, s * (legR(s, HY - 0.26, s * Math.PI / 2).base + 0.008), -0.26, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
       pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1, 0, 0.095);              // and a smaller one on each shin
       // the boot: the ankle pivot sits inside it, 0.127 above the sole
-      an.add(mesh(lumpy(lathe([[0, -0.02], [0.094, -0.02], [0.1, 0.03], [0.092, 0.08]], 48), 0.004), fabric2, 0, 0.13, 0));   // a cloth cuff over the boot top, open above
+      an.add(mesh(lathe([[0.104, 0.095], [0.106, 0.13], [0.104, 0.18], [0.1, 0.215]], 48), fabric));   // the fabric shaft round the ankle, open above (side seams)
       an.add(at(band(0.104, 0.03, 0.011), 0, 0.14, 0));
-      an.add(mesh(bootGeo, shell, 0, 0.13, 0));
-      an.add(mesh(rbox(0.175, 0.04, 0.34, 0.016), dark, 0, -0.09, -0.078));                      // sole
-      for (let k = 0; k < 6; k++) an.add(mesh(new THREE.BoxGeometry(0.17, 0.01, 0.018), grey, 0, -0.112, 0.06 - k * 0.055));   // tread
-      an.add(mesh(new THREE.BoxGeometry(0.185, 0.024, 0.07), grey, 0, 0.02, 0.02));               // strap
+      an.add(mesh(bootLoft(), bootCloth));                                                        // the fabric upper
+      an.add(mesh(bootLoft(-0.19, BZ1, 0, 2 * Math.PI, 0.0018, 30), bootShell));                  // the toe cap
+      an.add(mesh(soleGeo, soleMat));                                                             // the sole
+      // a strap round the ankle, buckled on the outside
+      { const pts = []; for (let k = 0; k <= 40; k++) { const a = 2 * Math.PI * k / 40; pts.push(new THREE.Vector3(0.109 * Math.sin(a), 0.112, 0.109 * Math.cos(a))); }
+        an.add(webbing(pts, 0.028, 0.003, new THREE.Vector3(0, 0.112, 0), strap, 80));
+        an.add(mesh(rbox(0.007, 0.034, 0.03, 0.002), machined, s * 0.113, 0.112, 0).rotateY(Math.PI / 2 * 0)); }
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
     proxy(body, 0.48, 0.4, 0.34, -0.07);   // the briefs
