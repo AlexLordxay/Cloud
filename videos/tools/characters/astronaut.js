@@ -40,7 +40,7 @@
     // Cloth texture, drawn once on a canvas: a fine weave, faint blotches of wear, and seams with stitches running along
     // the limbs (on lathe-made parts u goes round the limb and v along it, so a seam is a vertical line on the canvas).
     // The same picture, greyed, is the bump map: the weave and the seams catch the light.
-    function clothTexture(seams) {
+    function clothTexture(seams, quilt = 0) {
       const N = 1024, cv = document.createElement('canvas'); cv.width = cv.height = N;
       const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data;
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
@@ -57,6 +57,14 @@
         g.fillStyle = 'rgba(95,90,82,0.35)';
         for (let y = 0; y < N; y += 14) { g.fillRect(x - 9, y, 2, 7); g.fillRect(x + 8, y + 5, 2, 7); }   // stitches
       }
+      if (quilt) {   // quilting: puffed diamonds with stitched lines between them
+        for (let cy = 0; cy < N; cy += quilt) for (let cx = 0; cx < N; cx += quilt) {
+          const gr = g.createRadialGradient(cx + quilt / 2, cy + quilt / 2, 0, cx + quilt / 2, cy + quilt / 2, quilt * 0.7);
+          gr.addColorStop(0, 'rgba(255,255,255,0.08)'); gr.addColorStop(1, 'rgba(0,0,0,0.07)'); g.fillStyle = gr; g.fillRect(cx, cy, quilt, quilt); }
+        g.strokeStyle = 'rgba(120,114,104,0.22)'; g.lineWidth = 2.5; g.setLineDash([8, 7]);
+        for (let k = -N; k < 2 * N; k += quilt) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + N, N); g.stroke(); g.beginPath(); g.moveTo(k, N); g.lineTo(k + N, 0); g.stroke(); }
+        g.setLineDash([]);
+      }
       const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.encoding = THREE.sRGBEncoding;
       const bc = document.createElement('canvas'); bc.width = bc.height = N; const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(cv, 0, 0);
       const b = new THREE.CanvasTexture(bc); b.wrapS = b.wrapT = THREE.RepeatWrapping; b.anisotropy = 8;
@@ -68,6 +76,8 @@
     const fabric2 = M({ color: 0xdedad0, roughness: 0.95, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.07 });      // a shade darker: bellows, gaskets
     const torsoCloth = M({ color: 0xf2eee6, roughness: 0.93, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.035 });   // the cloth over the hard torso: the same as the sleeves
     const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.04 });        // the cloth cover over the backpack
+    const [quiltMap, quiltBump] = clothTexture([], 170);
+    const quilted = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: quiltMap, bumpMap: quiltBump, bumpScale: 0.08 });   // its quilted thermal cover
     const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 });          // hard parts
     const helmetMat = M({ color: 0xeeece6, roughness: 0.35, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.2 }, THREE.MeshPhysicalMaterial);   // the helmet: a lacquered shell
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
@@ -123,6 +133,13 @@
         t.normalize(); out[3 * i] = t.x; out[3 * i + 1] = t.y; out[3 * i + 2] = t.z;
       }
       geo.setAttribute('normal', new THREE.BufferAttribute(out, 3)); return geo;
+    }
+    // texture coordinates projected along each face's main axis, scale metres per repeat (no stretching on box sides)
+    function boxUV(g, scale = 0.5) {
+      const p = g.attributes.position, n = g.attributes.normal, uv = new Float32Array(p.count * 2);
+      for (let i = 0; i < p.count; i++) { const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i)), az = Math.abs(n.getZ(i)), x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+        const [u, v] = az >= ax && az >= ay ? [x, y] : ax >= ay ? [z, y] : [x, z]; uv[2 * i] = u / scale + 0.37; uv[2 * i + 1] = v / scale + 0.61; }
+      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); return g;
     }
     // a box with rounded edges (an extruded rounded rectangle, bevelled), centred
     function rbox(w, h, d, r) {
@@ -311,21 +328,42 @@
       const hook = at(new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0042, 8, 20, Math.PI * 1.6), metal), X, -0.085, Z); hook.rotation.y = 0; body.add(hook);
       const tab = mesh(rbox(0.03, 0.04, 0.03, 0.006), strap, 0.248, -0.1, Z); tab.rotation.y = Math.PI / 2; body.add(tab); }   // a cloth loop sewn on the suit
 
-    /* life-support backpack (+z side) */
-    const pack = joint(body, 0, 0.37, 0.25);
+    /* life-support backpack (+z side), the SAFER jetpack under it */
+    const pack = joint(body, 0, 0.37, 0.265);
     const bend = (g, k) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - k * p.getX(i) * p.getX(i) - 0.3 * k * p.getY(i) * p.getY(i)); g.computeVertexNormals(); return g; };
-    pack.add(mesh(lumpy(bend(rbox(0.46, 0.56, 0.18, 0.06), 0.35), 0.004, 9), cover));
-    pack.add(mesh(rbox(0.42, 0.11, 0.16, 0.04), shell, 0, 0.3, -0.005));                // top cover, a little set apart
-    pack.add(mesh(new THREE.BoxGeometry(0.43, 0.01, 0.165), grey, 0, 0.245, 0));       // the seam under it
-    pack.add(mesh(lumpy(bend(rbox(0.34, 0.28, 0.03, 0.03), 0.35), 0.003, 12), cover, 0, 0.0, 0.09));   // a padded flap on the back
-    for (const s of [-1, 1]) pack.add(mesh(new THREE.BoxGeometry(0.028, 0.48, 0.01), grey, s * 0.14, -0.01, 0.106));   // straps over it
-        pack.add(mesh(rbox(0.08, 0.05, 0.02, 0.008), grey, 0, -0.2, 0.1));
+    pack.add(mesh(boxUV(lumpy(bend(rbox(0.5, 0.58, 0.2, 0.065), 0.32), 0.003, 9), 0.6), quilted));             // the body under its quilted thermal cover
+    pack.add(mesh(rbox(0.46, 0.1, 0.18, 0.04), shell, 0, 0.3, -0.004));                            // the lid, flush on top
+    pack.add(mesh(rbox(0.47, 0.008, 0.186, 0.004), dark, 0, 0.248, -0.004));                       // its seam
+    pack.add(mesh(bend(rbox(0.506, 0.006, 0.206, 0.003), 0.32), dark, 0, -0.09, 0));               // the split between the two units
+    pack.add(mesh(boxUV(lumpy(bend(rbox(0.34, 0.28, 0.03, 0.03), 0.32), 0.003, 12)), cover, 0, 0.0, 0.1));   // a padded flap on the back
+    for (const s of [-1, 1]) pack.add(mesh(bend(new THREE.BoxGeometry(0.028, 0.48, 0.01, 1, 24, 1), 0.32), grey, s * 0.14, -0.01, 0.117));   // straps over it, lying on it
+    pack.add(mesh(rbox(0.08, 0.05, 0.02, 0.008), grey, 0, -0.2, 0.11));
+    { const lt = (() => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 64; const g = cv.getContext('2d');   // a stencilled name
+        g.fillStyle = 'rgba(25,26,30,0.88)'; g.font = 'bold 46px "DejaVu Sans", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('НЕБОЗВІД-01', 256, 34);
+        const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; })();
+      pack.add(mesh(new THREE.PlaneGeometry(0.22, 0.0275), M({ map: lt, transparent: true, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 }), 0, 0.195, 0.1)); }
     for (const s of [-1, 1]) {
       const h = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.011, 10, 24, Math.PI), grey);   // handles on the top edges
       h.position.set(s * 0.15, 0.36, 0.0); h.scale.setScalar(0.85); pack.add(h);
-      pack.add(mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.035, 16), metal, s * 0.16, -0.3, 0.0));    // valves underneath
-      pack.add(mesh(new THREE.BoxGeometry(0.016, 0.4, 0.15), grey, s * 0.234, 0.0, 0.0));                  // side rails
+      pack.add(mesh(new THREE.BoxGeometry(0.016, 0.4, 0.15), grey, s * 0.254, 0.0, 0.0));               // side rails
     }
+    // the radio antenna on the top right (it sways a little after the body moves: see pose)
+    const antenna = joint(pack, 0.19, 0.35, 0.03);
+    antenna.add(mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.016, 16), grey, 0, 0.008, 0), mesh(new THREE.CylinderGeometry(0.0022, 0.0026, 0.17, 8), metal, 0, 0.1, 0), mesh(new THREE.SphereGeometry(0.0055, 10, 8), dark, 0, 0.187, 0));
+    // SAFER, the small rescue jetpack under the backpack: a box, two towers up the pack's sides, clusters of thruster nozzles
+    const safer = joint(body, 0, 0.0, 0.265);
+    safer.add(mesh(rbox(0.46, 0.11, 0.17, 0.03), shell), mesh(rbox(0.465, 0.008, 0.175, 0.004), grey, 0, 0.02, 0));
+    const nozzle = (parent, x, y, z, dir) => { const n = mesh(new THREE.CylinderGeometry(0.0045, 0.0095, 0.014, 14, 1, true), dark, x, y, z);
+      n.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize().negate()); parent.add(n);
+      parent.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.0095, 0.0015, 6, 14), metal), x - dir.x * 0.007, y - dir.y * 0.007, z - dir.z * 0.007)); };
+    for (const s of [-1, 1]) {
+      safer.add(mesh(rbox(0.05, 0.3, 0.12, 0.015), shell, s * 0.276, 0.135, 0));
+      for (const y of [-0.01, 0.28]) {
+        nozzle(safer, s * 0.302, y, 0.03, new THREE.Vector3(s, 0, 0)); nozzle(safer, s * 0.276, y, 0.062, new THREE.Vector3(0, 0, 1));
+        nozzle(safer, s * 0.276, y + (y < 0 ? -0.006 : 0.006), -0.035, new THREE.Vector3(0, y < 0 ? -1 : 1, 0));
+      }
+    }
+    safer.add(mesh(rbox(0.06, 0.03, 0.02, 0.006), M({ color: 0xf2c200, roughness: 0.6 }), 0.17, -0.045, 0.06));   // the yellow release handle
 
     /* neck ring, helmet with side lamps and the gold visor */
     const head = bone(body, 0, 0.625, -0.01); J.head = head;
@@ -698,7 +736,7 @@
     { const tx = 0.11, tz = -cb * Math.sqrt(1 - (tx / ca) ** 2), ts = Math.atan(cb * tx / (ca * ca * Math.sqrt(1 - (tx / ca) ** 2)));
       const tag = joint(body, tx, 0.5, tz - 0.004); tag.rotation.set(-0.08, Math.PI - ts, 0, 'YXZ');   // a name tag on the right of the chest
       tag.add(mesh(rbox(0.1, 0.032, 0.006, 0.004), grey)); tag.add(mesh(new THREE.PlaneGeometry(0.084, 0.012), white, 0, 0, 0.0035)); }
-    const back = mesh(patch(0.085, 0.35), emblemMat, 0, 0.03, 0.127); pack.add(back);                                                // on the backpack flap
+    const back = mesh(patch(0.085, 0.32), emblemMat, 0, 0.03, 0.137); pack.add(back);                                                // on the backpack flap
 
     // bind the sleeves to the skeleton at rest (every bone made, nothing turned yet)
     group.updateMatrixWorld(true);
