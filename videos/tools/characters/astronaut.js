@@ -407,19 +407,22 @@
       const si = [], sw = [];
       for (let i = 0; i < p.count; i++) {
         const X = sp(p.getX(i)), Y = sp(p.getY(i)), Z = sp(p.getZ(i)), top = 0.012, t = (1 - Y) / 2;   // t: 0 at the wrist, 1 at the knuckles
-        const x = X * (0.05 + 0.008 * t), yk = -0.1 + 4 * x * x, y = top + (yk - (Z < 0 ? 0.014 * -Z : 0) - top) * t;
-        let z = Z * (Z < 0 ? 0.022 : 0.027) * (1 - 0.25 * Math.max(0, t - 0.8) / 0.2);
+        // the palm reaches past the knuckle line over the fingers' roots (further on the palm side: the webs), thinning to
+        // its rim, so each finger grows out of it instead of sitting on its edge
+        const x = X * (0.05 + 0.004 * t), yk = -0.1 + 4 * x * x, y = top + (yk - 0.013 - (Z < 0 ? 0.008 * -Z : 0) - top) * t;
+        let z = Z * (Z < 0 ? 0.022 * (1 - 0.3 * sstep(0.6, 1, t)) : 0.027 - 0.012 * sstep(0.2, 1, t));   // the back slopes down to the knuckles
         if (Z < 0) {
           z -= 0.015 * G2(x - s * 0.028, y + 0.036, 0.022, 0.032) * -Z;    // thenar pad (the ball of the thumb)
           z -= 0.009 * G2(x + s * 0.032, y + 0.06, 0.015, 0.034) * -Z;    // hypothenar pad
-          z -= 0.004 * G2(x, y + 0.092, 0.05, 0.008) * -Z;               // the pad row under the fingers
+          z -= 0.004 * G2(x, y - yk + 0.004, 0.05, 0.008) * -Z;               // the pad row under the fingers
           z += 0.006 * G2(x, y + 0.062, 0.02, 0.022) * -Z;               // a shallow hollow in the middle
         } else for (const f of F) z += 0.0035 * G2(x - f.x, y - f.y - 0.004, 0.008, 0.012) * Z;   // knuckles on the back
         if (y > -0.03) { const b = 0.85 * Math.sqrt(Math.max(0, 0.044 ** 2 - x * x - y * y)); if (Math.abs(z) < b) z = Math.sign(Z || 1) * b; }   // the wrist bulb
         p.setXYZ(i, x, y, z);
-        // weights: the knuckle zone half to the nearest two fingers, the thenar to the thumb, the rest to the wrist
-        const zone = sstep(0.015, 0, y - yk), near = F.map((f, k) => [Math.abs(x - f.x), k]).sort((a, b) => a[0] - b[0]);
-        const w1 = 0.5 * zone * Math.exp(-((near[0][0] / 0.014) ** 2)), w2 = 0.5 * zone * Math.exp(-((near[1][0] / 0.014) ** 2));
+        // weights: from the knuckle line on, the palm goes with the nearest two fingers (wholly past it: the part over a
+        // finger's root bends with the finger, the web between two is shared), the thenar with the thumb, the rest the wrist
+        const a = y - yk, zone = 0.35 * sstep(0.02, 0, a) + 0.65 * sstep(0.002, -0.011, a), near = F.map((f, k) => [Math.abs(x - f.x), k]).sort((a, b) => a[0] - b[0]);
+        const w1 = zone * Math.exp(-((near[0][0] / 0.015) ** 2)), w2 = zone * Math.exp(-((near[1][0] / 0.015) ** 2));
         const wt = 0.6 * G2(x - s * 0.027, y + 0.038, 0.02, 0.03) * (Z < 0 ? 1 : 0.5);
         si.push(bones.indexOf(wr), bones.indexOf(F[near[0][1]].b1), bones.indexOf(F[near[1][1]].b1), bones.indexOf(t1));
         const tot = Math.max(1, w1 + w2 + wt); sw.push(Math.max(0, 1 - w1 - w2 - wt), w1 / tot, w2 / tot, wt / tot);
