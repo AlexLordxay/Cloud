@@ -21,6 +21,7 @@
     const rim = { color: { value: new THREE.Color(0, 0, 0) }, power: { value: 3.0 } };
     const M = (o) => {
       const m = new THREE.MeshStandardMaterial(o);
+      m.color.convertSRGBToLinear(); m.emissive.convertSRGBToLinear();   // the hex colours are sRGB: lit in linear space they keep their real shade
       m.onBeforeCompile = sh => {
         Object.assign(sh.uniforms, { rimColor: rim.color, rimPower: rim.power });
         sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 rimColor; uniform float rimPower;').replace('#include <dithering_fragment>',
@@ -53,7 +54,7 @@
         const x = u * N;
         g.fillStyle = 'rgba(120,115,105,0.55)'; g.fillRect(x - 2, 0, 4, N);                         // the seam groove
         g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x + 2, 0, 2, N);                         // its raised edge
-        g.fillStyle = 'rgba(95,90,82,0.7)';
+        g.fillStyle = 'rgba(95,90,82,0.35)';
         for (let y = 0; y < N; y += 14) { g.fillRect(x - 9, y, 2, 7); g.fillRect(x + 8, y + 5, 2, 7); }   // stitches
       }
       const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.encoding = THREE.sRGBEncoding;
@@ -73,7 +74,7 @@
     const dark = M({ color: 0x26282c, roughness: 0.75, metalness: 0.1 });
     // the visor: gold film under a clear glossy coat (physical material), so it mirrors the light like real glass
     const visor = new THREE.MeshPhysicalMaterial({ color: 0xd9a043, metalness: 1.0, roughness: 0.06, clearcoat: 1.0, clearcoatRoughness: 0.02, envMapIntensity: 1.4 });
-    visor.userData.base = visor.color.clone(); mats.push(visor);
+    visor.color.convertSRGBToLinear(); visor.userData.base = visor.color.clone(); mats.push(visor);
     const gasket = M({ color: 0x2c2e33, roughness: 0.7, metalness: 0.1 });
     const lens = M({ color: 0x111316, roughness: 0.1, metalness: 0.6 });
     const blue = M({ color: 0x0057b7, roughness: 0.85 }), yellow = M({ color: 0xffd500, roughness: 0.85 }), white = M({ color: 0xf4f2ec, roughness: 0.85 });
@@ -95,6 +96,33 @@
     const lathe = (prof, seg = 48) => new THREE.LatheGeometry(prof.map(([r, y]) => new THREE.Vector2(Math.max(r, 1e-4), y)), seg);
     const ringX = (R, r, mat) => { const m = new THREE.Mesh(new THREE.TorusGeometry(R, r, 14, 48), mat); m.rotation.y = Math.PI / 2; return m; };   // axis along x
     const ringY = (R, r, mat) => { const m = new THREE.Mesh(new THREE.TorusGeometry(R, r, 14, 48), mat); m.rotation.x = Math.PI / 2; return m; };   // axis along y
+    // a machined metal bearing band (axis along y): chamfered rims and a groove round its middle
+    const machined = M({ color: 0xc3c7cc, roughness: 0.4, metalness: 0.7 });
+    const band = (R, h, d, mat = machined) => { const c = 0.3 * d;
+      return new THREE.Mesh(lathe([[R - d, -h / 2], [R - 0.3 * d, -h / 2], [R, -h / 2 + c], [R, -0.15 * h], [R - 0.25 * d, -0.1 * h], [R - 0.25 * d, 0.1 * h], [R, 0.15 * h], [R, h / 2 - c], [R - 0.3 * d, h / 2], [R - d, h / 2]], 64), mat); };
+    // small latches round a band: at angles angs on an ellipse (R·sx, R·sz), facing out
+    const latches = (parent, R, y, angs, sx = 1, sz = 1) => angs.forEach(a => {
+      const x = Math.sin(a) * R * sx, z = Math.cos(a) * R * sz, l = mesh(rbox(0.03, 0.02, 0.015, 0.004), grey, x, y, z);
+      l.rotation.y = Math.atan2(x / (sx * sx), z / (sz * sz)); parent.add(l); });
+    // Normals smoothed across faces that meet at less than creaseDeg (area-weighted), sharp across real edges: a bevel
+    // reads as one rounded surface, not as bands
+    function smoothNormals(geo, creaseDeg = 50) {
+      if (geo.index) geo = geo.toNonIndexed();
+      const p = geo.attributes.position, nF = p.count / 3, fn = [], map = new Map(), cos = Math.cos(creaseDeg * Math.PI / 180), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+      const key = i => Math.round(p.getX(i) * 1e5) + ',' + Math.round(p.getY(i) * 1e5) + ',' + Math.round(p.getZ(i) * 1e5);
+      for (let f = 0; f < nF; f++) {
+        a.fromBufferAttribute(p, 3 * f); b.fromBufferAttribute(p, 3 * f + 1); c.fromBufferAttribute(p, 3 * f + 2);
+        const n = new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a)); fn.push([n, n.clone().normalize()]);
+        for (let k = 0; k < 3; k++) { const kk = key(3 * f + k); if (!map.has(kk)) map.set(kk, []); map.get(kk).push(f); }
+      }
+      const out = new Float32Array(p.count * 3), t = new THREE.Vector3();
+      for (let i = 0; i < p.count; i++) {
+        const f0 = Math.floor(i / 3); t.set(0, 0, 0);
+        for (const f of map.get(key(i))) if (fn[f][1].dot(fn[f0][1]) > cos) t.add(fn[f][0]);
+        t.normalize(); out[3 * i] = t.x; out[3 * i + 1] = t.y; out[3 * i + 2] = t.z;
+      }
+      geo.setAttribute('normal', new THREE.BufferAttribute(out, 3)); return geo;
+    }
     // a box with rounded edges (an extruded rounded rectangle, bevelled), centred
     function rbox(w, h, d, r) {
       const s = new THREE.Shape(), x = -w / 2 + r, y = -h / 2 + r, W = w - 2 * r, H = h - 2 * r;
@@ -103,7 +131,7 @@
       s.lineTo(x, y + H + r); s.quadraticCurveTo(x - r, y + H + r, x - r, y + H); s.lineTo(x - r, y); s.quadraticCurveTo(x - r, y - r, x, y - r);
       const bv = Math.min(r, d / 2) * 0.9;
       const g = new THREE.ExtrudeGeometry(s, { depth: Math.max(1e-3, d - 2 * bv), bevelEnabled: true, bevelThickness: bv, bevelSize: bv * 0.9, bevelSegments: 5, curveSegments: 10 });
-      g.translate(0, 0, -Math.max(1e-3, d - 2 * bv) / 2); g.computeVertexNormals(); return g;
+      g.translate(0, 0, -Math.max(1e-3, d - 2 * bv) / 2); return smoothNormals(g);
     }
     let seed = 0;
     function lumpy(geo, amp, f = 14, weight = null) {
@@ -193,7 +221,8 @@
     hut.scale.set(1.26, 1, 0.9); body.add(hut);
     // (the lower torso, the briefs, is the top of the two skinned pants halves: see the legs)
     // the waist: a soft band of the suit's own cloth over the bearing (no bare metal), the torso narrowing into it
-    const waist = at(ringY(0.175, 0.015, grey), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
+    const waist = at(band(0.18, 0.03, 0.01), 0, 0.06, 0); waist.scale.set(1.26, 1, 0.9); body.add(waist);
+    latches(body, 0.182, 0.06, [0.5, -0.5, Math.PI - 0.6, Math.PI + 0.6], 1.26, 0.9);
     // chest control box with two hoses to the backpack
     const dcmMat = M({ color: 0x41464e, roughness: 0.45, metalness: 0.35 });                      // dark anthracite, so it reads as a device
     const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), dcmMat, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
@@ -208,10 +237,33 @@
       g.fillStyle = '#7dffb4'; for (let k = 0; k < 5; k++) g.fillRect(200, 104 - k * 13, 40, 9);
       const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t;
     })();
-    const scrMat = M({ color: 0x000000, emissive: 0xffffff, emissiveMap: screenTex, emissiveIntensity: 1.1, roughness: 0.15, metalness: 0 });
+    const scrMat = M({ color: 0x000000, emissive: 0xffffff, emissiveMap: screenTex, emissiveIntensity: 0.55, roughness: 0.15, metalness: 0 });
     dcm.add(mesh(rbox(0.1, 0.052, 0.004, 0.006), lens, 0.065, 0.012, -0.056));                          // the screen's dark frame
     const scr = mesh(new THREE.PlaneGeometry(0.09, 0.045), scrMat, 0.065, 0.012, -0.0585); scr.rotation.y = Math.PI; dcm.add(scr);
-    for (const [x, y] of [[-0.11, 0.015], [-0.065, 0.015], [-0.02, 0.015]]) { const k = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), metal, x, 0.33 + y, -0.31); k.rotation.x = Math.PI / 2 + 0.2; body.add(k); }
+    // its controls, on the face (dcm-local, the face at z -0.055): a knurled oxygen knob, two toggle switches behind
+    // guards, a red purge knob, two status lights over the screen and a little printed label strip
+    { const F = -0.055, face = (m, x, y, z = 0) => { m.position.set(x, y, F + z); dcm.add(m); return m; };
+      const knurl = (() => { const g = new THREE.CylinderGeometry(0.016, 0.016, 0.016, 96, 1), p = g.attributes.position;
+        for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), r = Math.hypot(x, z); if (r > 1e-4) { const k = (r + 0.0012 * Math.max(0, Math.cos(24 * a))) / r; p.setX(i, x * k); p.setZ(i, z * k); } }
+        g.computeVertexNormals(); return g; })();
+      face(new THREE.Mesh(knurl, metal), -0.105, 0.016, -0.008).rotation.x = Math.PI / 2;
+      face(new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.012, 0.004, 32), dark), -0.105, 0.016, -0.018).rotation.x = Math.PI / 2;   // its cap
+      for (const x of [-0.064, -0.034]) {
+        face(new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.007, 0.006, 20), machined), x, 0.018, -0.003).rotation.x = Math.PI / 2;
+        const lever = new THREE.Group(); face(lever, x, 0.018, -0.006); lever.rotation.x = -0.45;
+        lever.add(mesh(new THREE.CylinderGeometry(0.0018, 0.0022, 0.018, 10), metal, 0, 0.009, 0), mesh(new THREE.SphereGeometry(0.0032, 12, 8), metal, 0, 0.018, 0));
+        for (const g of [-1, 1]) face(mesh(rbox(0.003, 0.026, 0.014, 0.0012), dark), x + g * 0.011, 0.016, -0.007);   // the guards
+      }
+      face(new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.012, 0.012, 28), connRed), -0.085, -0.026, -0.006).rotation.x = Math.PI / 2;   // purge
+      face(new THREE.Mesh(new THREE.TorusGeometry(0.013, 0.0022, 8, 28), machined), -0.085, -0.026, -0.001);
+      face(new THREE.Mesh(new THREE.SphereGeometry(0.0035, 10, 8), M({ color: 0x40ff80, emissive: 0x30ff70, emissiveIntensity: 1.4 })), 0.04, 0.046, -0.001);
+      face(new THREE.Mesh(new THREE.SphereGeometry(0.0035, 10, 8), M({ color: 0xffb030, emissive: 0xffa020, emissiveIntensity: 1.2 })), 0.055, 0.046, -0.001);
+      const label = (txt, x, y) => { const cv = document.createElement('canvas'); cv.width = 96; cv.height = 32; const g = cv.getContext('2d');
+        g.fillStyle = '#d8dde4'; g.font = 'bold 22px "DejaVu Sans", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, 48, 17);
+        const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8;
+        face(new THREE.Mesh(new THREE.PlaneGeometry(0.03, 0.01), M({ map: t, transparent: true, roughness: 0.6 })), x, y, -0.0006).rotation.y = Math.PI; };
+      label('O\u2082', -0.105, -0.006); label('H\u2082O', -0.064, -0.001); label('FAN', -0.034, -0.001); label('PURGE', -0.085, -0.045);
+    }
     // Connector boxes sewn onto the torso, a striped hose from the control box into each. A box sits on a cloth patch
     // that lies on the surface (the torso at height y is an ellipse A × B); its nipple points up, the hose comes down onto it.
     function port(x, y, A, B, path) {
@@ -219,8 +271,10 @@
       const mount = joint(body, x, y, zs); mount.rotation.y = Math.PI - ang;                          // local +z = out of the suit
       mount.add(mesh(lumpy(rbox(0.07, 0.07, 0.01, 0.012), 0.0015, 20), cover, 0, 0, 0.002));          // the sewn-on patch
       mount.add(mesh(rbox(0.05, 0.05, 0.028, 0.008), grey, 0, 0, 0.018));                             // the connector box
-      mount.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.016, 18), metal), 0, 0.03, 0.018));
-      const top = new THREE.Vector3(0, 0.04, 0.018).applyMatrix4(new THREE.Matrix4().compose(mount.position, mount.quaternion, new THREE.Vector3(1, 1, 1)));
+      mount.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.018, 28), machined), 0, 0.032, 0.018));   // a quick-disconnect fitting
+      mount.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.0205, 0.0035, 8, 28), x < 0 ? connBlue : connRed), 0, 0.034, 0.018).rotateX(Math.PI / 2));   // its coloured collar
+      mount.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.02, 0.008, 28), metal), 0, 0.045, 0.018));
+      const top = new THREE.Vector3(0, 0.048, 0.018).applyMatrix4(new THREE.Matrix4().compose(mount.position, mount.quaternion, new THREE.Vector3(1, 1, 1)));
       body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([...path(top), top]), 40, 0.014, 10, false), hoseMat));
     }
     for (const sd of [-1, 1]) {
@@ -229,10 +283,24 @@
       // two down into the belly, just above the belt
       port(sd * 0.15, 0.11, 0.219, 0.157, t => [new THREE.Vector3(sd * 0.08, 0.29, -0.28), new THREE.Vector3(sd * 0.11, 0.22, -0.24), new THREE.Vector3(t.x * 0.97, t.y + 0.05, t.z - 0.025)]);
     }
-    // the backpack's harness: beige straps over the shoulders down to the control box
+    // Flat webbing along a curve lying on the body: its width across the curve and along the surface (the surface's
+    // outward direction taken from a centre point), its thickness out of the surface
+    function webbing(pts, W = 0.032, th = 0.003, centre = new THREE.Vector3(0, 0.35, 0), mat = strap, n = 60) {
+      const c = new THREE.CatmullRomCurve3(pts), pos = [], idx = [];
+      for (let i = 0; i <= n; i++) {
+        const p = c.getPoint(i / n), T = c.getTangent(i / n), o = p.clone().sub(centre).normalize(), w = new THREE.Vector3().crossVectors(T, o).normalize();
+        o.crossVectors(w, T).normalize();
+        for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const q = p.clone().addScaledVector(w, a * W / 2).addScaledVector(o, b * th / 2); pos.push(q.x, q.y, q.z); }
+      }
+      for (let i = 0; i < n; i++) for (let k = 0; k < 4; k++) { const a = 4 * i + k, b = 4 * i + (k + 1) % 4; idx.push(a, b, a + 4, b, b + 4, a + 4); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+      return new THREE.Mesh(g, mat);
+    }
+    // the backpack's harness: beige webbing over the shoulders down to the control box, buckled at both ends
     for (const sd of [-1, 1]) {
-      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.13, 0.5, 0.22), new THREE.Vector3(sd * 0.155, 0.6, 0.1), new THREE.Vector3(sd * 0.16, 0.6, -0.08), new THREE.Vector3(sd * 0.145, 0.5, -0.2), new THREE.Vector3(sd * 0.13, 0.4, -0.235)]);
-      const st = new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.012, 8, false), strap); st.scale.set(1, 1, 1); body.add(st);
+      body.add(webbing([new THREE.Vector3(sd * 0.13, 0.5, 0.215), new THREE.Vector3(sd * 0.155, 0.605, 0.1), new THREE.Vector3(sd * 0.16, 0.605, -0.08), new THREE.Vector3(sd * 0.148, 0.5, -0.205), new THREE.Vector3(sd * 0.135, 0.42, -0.232)]));
+      const bk = mesh(rbox(0.04, 0.03, 0.007, 0.005), machined, sd * 0.133, 0.405, -0.238); bk.rotation.x = 0.35; body.add(bk);   // the buckle at the box
+      bk.add(mesh(new THREE.BoxGeometry(0.03, 0.006, 0.004), dark, 0, 0.002, -0.004));
     }
     // a coiled safety tether on the right of the belt: it hangs from a D-ring on the belt, its hook clipped to a loop below
     { const X = 0.266, Z = -0.005;   // on the belt's side (the belt is 0.22 out there): the ring sits on it, the coil hangs just outside the suit
@@ -260,8 +328,8 @@
 
     /* neck ring, helmet with side lamps and the gold visor */
     const head = bone(body, 0, 0.625, -0.01); J.head = head;
-    body.add(at(ringY(0.148, 0.026, metal), 0, 0.625, -0.01));   // the neck ring stays on the suit: only the helmet turns
-    body.add(at(ringY(0.16, 0.012, grey), 0, 0.595, -0.01));
+    body.add(at(band(0.175, 0.045, 0.014), 0, 0.615, -0.01));   // the neck ring stays on the suit: only the helmet turns
+    { const nk = joint(body, 0, 0.615, -0.01); latches(nk, 0.177, 0, [Math.PI / 4, -Math.PI / 4, 3 * Math.PI / 4, -3 * Math.PI / 4]); }
     // the helmet shell with the window cut out of it (triangles whose centre falls inside the window are dropped)
     const P0 = Math.PI * 1.13, PL = Math.PI * 0.74, T0 = Math.PI * 0.2, TL = Math.PI * 0.46;
     const shellGeo = (() => {
@@ -324,10 +392,11 @@
     }
 
     // a cloth pocket with a flap and a press stud, lying on a limb's outside (local +z of the joint faces out)
-    function pocket(parent, x, y, z, rotY, w, h, tilt = 0) {
+    const bendTo = (g, R) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - p.getX(i) ** 2 / (2 * R)); return smoothNormals(g); };   // wrap round a limb of radius R
+    function pocket(parent, x, y, z, rotY, w, h, tilt = 0, R = 0.11) {
       const pk = joint(parent, x, y, z); pk.rotation.set(tilt, rotY, 0);
-      pk.add(mesh(lumpy(rbox(w, h, 0.022, 0.012), 0.002, 20), fabric2));
-      pk.add(mesh(rbox(w + 0.004, h * 0.32, 0.026, 0.01), cover, 0, h * 0.4, 0.004));
+      pk.add(mesh(bendTo(lumpy(rbox(w, h, 0.022, 0.012), 0.002, 20), R), fabric2));
+      pk.add(mesh(bendTo(rbox(w + 0.006, h * 0.34, 0.026, 0.01), R), cover, 0, h * 0.4, 0.006));   // the flap overhangs a little
       pk.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 12), metal, 0, h * 0.37, 0.02).rotateX(Math.PI / 2));
       return pk;
     }
@@ -498,8 +567,11 @@
       proxy(sh, 0.2, 0.42, 0.2, -0.21); proxy(el, 0.16, 0.32, 0.16, -0.16);
       if (s < 0) {   // the flag on the outside of the left upper arm, bent round the sleeve
         const r = armR(s, 0.47 - 0.265, 1.5 * Math.PI).base + 0.005, f = joint(sh, -(r + 0.002), -0.265, 0); f.rotation.y = -Math.PI / 2;
-        f.add(mesh(wrapPlane(0.112, 0.08, r + 0.001), white, 0, 0, -0.001));
-        f.add(mesh(wrapPlane(0.1, 0.034, r + 0.002), blue, 0, 0.017, 0), mesh(wrapPlane(0.1, 0.034, r + 0.002), yellow, 0, -0.017, 0));
+        const tex = (() => { const cv = document.createElement('canvas'); cv.width = 220; cv.height = 150; const g = cv.getContext('2d');
+          g.fillStyle = '#e9e6de'; g.fillRect(0, 0, 220, 150); g.fillStyle = '#0057b7'; g.fillRect(8, 8, 204, 67); g.fillStyle = '#ffd500'; g.fillRect(8, 75, 204, 67);
+          g.strokeStyle = 'rgba(80,76,70,0.8)'; g.lineWidth = 2; g.setLineDash([6, 5]); g.strokeRect(4, 4, 212, 142);   // the stitched edge
+          const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; })();
+        f.add(mesh(wrapPlane(0.11, 0.075, r + 0.001), M({ map: tex, roughness: 0.85 }), 0, 0, 0));
       }
       if (s < 0) {   // the cuff checklist on the left forearm: a little book of cards on a strap
         const ck = joint(el, 0, -0.19, -(armR(s, EY - 0.19, Math.PI).base + 0.012)); ck.rotation.y = Math.PI;
@@ -507,7 +579,7 @@
         for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
       }
       // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
-      el.add(at(ringY(0.064, 0.0105, metal), 0, -0.295, 0));                                   // a slim wrist ring, the sleeve's own width
+      el.add(at(band(0.069, 0.024, 0.009), 0, -0.293, 0));                                   // a slim wrist ring, the sleeve's own width
       el.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -0.306, 0));
       // the gauntlet: a flared cuff, open below, with a rolled lip; the hand turns under it
       el.add(mesh(lathe([[0.052, -0.349], [0.056, -0.345], [0.066, -0.334], [0.072, -0.318], [0.068, -0.303], [0.058, -0.29]], 48), glove));
@@ -546,7 +618,7 @@
     bootShape.quadraticCurveTo(-0.085, 0.13, -0.075, 0.2); bootShape.lineTo(0.07, 0.2);
     bootShape.quadraticCurveTo(0.095, 0.1, 0.085, 0.03); bootShape.quadraticCurveTo(0.082, 0.0, 0.07, 0.0);
     const bootGeo = new THREE.ExtrudeGeometry(bootShape, { depth: 0.1, bevelEnabled: true, bevelThickness: 0.028, bevelSize: 0.024, bevelSegments: 6, curveSegments: 14 });
-    bootGeo.translate(0, -0.2, -0.05); bootGeo.rotateY(-Math.PI / 2); bootGeo.scale(1.12, 1.05, 1.05); bootGeo.computeVertexNormals();
+    bootGeo.translate(0, -0.2, -0.05); bootGeo.rotateY(-Math.PI / 2); bootGeo.scale(1.12, 1.05, 1.05);
     // Each leg is one skinned half of the pants, from under the waist ring to inside the boot cuff. At the top its cross
     // section is half of the briefs (a D: the briefs' ellipse cut at the middle), lower down it becomes the round thigh;
     // the middle seam stays with the torso, so the two halves always meet. Bends: hip, knee (bellows, a pad in front),
@@ -594,10 +666,10 @@
       leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz)));
       proxy(hp, 0.25, 0.48, 0.25, -0.24); proxy(kn, 0.21, 0.5, 0.21, -0.27);
       pocket(hp, s * (legR(s, HY - 0.26, s * Math.PI / 2).base + 0.008), -0.26, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
-      pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1);              // and a smaller one on each shin
+      pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1, 0, 0.095);              // and a smaller one on each shin
       // the boot: the ankle pivot sits inside it, 0.127 above the sole
       an.add(mesh(lumpy(lathe([[0, -0.02], [0.094, -0.02], [0.1, 0.03], [0.092, 0.08]], 48), 0.004), fabric2, 0, 0.13, 0));   // a cloth cuff over the boot top, open above
-      an.add(at(ringY(0.096, 0.015, metal), 0, 0.14, 0));
+      an.add(at(band(0.104, 0.03, 0.011), 0, 0.14, 0));
       an.add(mesh(bootGeo, shell, 0, 0.13, 0));
       an.add(mesh(rbox(0.175, 0.04, 0.34, 0.016), dark, 0, -0.09, -0.078));                      // sole
       for (let k = 0; k < 6; k++) an.add(mesh(new THREE.BoxGeometry(0.17, 0.01, 0.018), grey, 0, -0.112, 0.06 - k * 0.055));   // tread
