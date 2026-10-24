@@ -307,10 +307,10 @@
     }
     // Flat webbing along a curve lying on the body: its width across the curve and along the surface (the surface's
     // outward direction taken from a centre point), its thickness out of the surface
-    function webbing(pts, W = 0.032, th = 0.003, centre = new THREE.Vector3(0, 0.35, 0), mat = strap, n = 60) {
+    function webbing(pts, W = 0.032, th = 0.003, centre = new THREE.Vector3(0, 0.35, 0), mat = strap, n = 60, nrm = null) {   // nrm(p): the surface's normal, if known
       const c = new THREE.CatmullRomCurve3(pts), pos = [], idx = [];
       for (let i = 0; i <= n; i++) {
-        const p = c.getPoint(i / n), T = c.getTangent(i / n), o = p.clone().sub(centre).normalize(), w = new THREE.Vector3().crossVectors(T, o).normalize();
+        const p = c.getPoint(i / n), T = c.getTangent(i / n), o = nrm ? nrm(p) : p.clone().sub(centre).normalize(), w = new THREE.Vector3().crossVectors(T, o).normalize();
         o.crossVectors(w, T).normalize();
         for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const q = p.clone().addScaledVector(w, a * W / 2).addScaledVector(o, b * th / 2); pos.push(q.x, q.y, q.z); }
       }
@@ -509,6 +509,43 @@
       g.setIndex(gl.concat(rb)); g.clearGroups(); g.addGroup(0, gl.length, 0); g.addGroup(gl.length, rb.length, 1);
       bs[2].add(tip);
     }
+    // Surface nets: a mesh of the surface where the distance field sd is zero, on a grid of step h over the box from
+    // (x0, y0, z0) of size (sx, sy, sz); each vertex is then settled onto the surface, its normal the field's gradient
+    function surfaceNets(sd, x0, y0, z0, sx, sy, sz, h) {
+      const nx = Math.ceil(sx / h) + 1, ny = Math.ceil(sy / h) + 1, nz = Math.ceil(sz / h) + 1;
+      const f = new Float32Array(nx * ny * nz), id = (i, j, k) => i + nx * (j + ny * k);
+      for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) f[id(i, j, k)] = sd(x0 + i * h, y0 + j * h, z0 + k * h);
+      const vix = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1), cid = (i, j, k) => i + (nx - 1) * (j + (ny - 1) * k), P = [];
+      const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]], C = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+      for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+        const v = C.map(([a, b, c]) => f[id(i + a, j + b, k + c)]); let neg = 0; for (const q of v) if (q < 0) neg++;
+        if (neg === 0 || neg === 8) continue;
+        let ax = 0, ay = 0, az = 0, n = 0;
+        for (const [a, b] of E) if ((v[a] < 0) !== (v[b] < 0)) { const t = v[a] / (v[a] - v[b]); ax += C[a][0] + (C[b][0] - C[a][0]) * t; ay += C[a][1] + (C[b][1] - C[a][1]) * t; az += C[a][2] + (C[b][2] - C[a][2]) * t; n++; }
+        vix[cid(i, j, k)] = P.length / 3; P.push(x0 + (i + ax / n) * h, y0 + (j + ay / n) * h, z0 + (k + az / n) * h);
+      }
+      const grad = (x, y, z, e = 0.0003) => [sd(x + e, y, z) - sd(x - e, y, z), sd(x, y + e, z) - sd(x, y - e, z), sd(x, y, z + e) - sd(x, y, z - e)];
+      const nV = P.length / 3, N = new Float32Array(P.length);
+      for (let q = 0; q < nV; q++) {   // settle each vertex on the surface, then take the field's gradient as its normal
+        let x = P[3 * q], y = P[3 * q + 1], z = P[3 * q + 2];
+        for (let it = 0; it < 2; it++) { const d = sd(x, y, z), g = grad(x, y, z), l2 = (g[0] ** 2 + g[1] ** 2 + g[2] ** 2) / (0.0006 ** 2) || 1; x -= d * g[0] / 0.0006 / l2; y -= d * g[1] / 0.0006 / l2; z -= d * g[2] / 0.0006 / l2; }
+        P[3 * q] = x; P[3 * q + 1] = y; P[3 * q + 2] = z;
+        const g = grad(x, y, z), l = Math.hypot(...g) || 1; N[3 * q] = g[0] / l; N[3 * q + 1] = g[1] / l; N[3 * q + 2] = g[2] / l;
+      }
+      const idx = [], quad = (a, b, c, d) => {
+        if (a < 0 || b < 0 || c < 0 || d < 0) return;
+        const ax = P[3 * a], ay = P[3 * a + 1], az = P[3 * a + 2], ux = P[3 * b] - ax, uy = P[3 * b + 1] - ay, uz = P[3 * b + 2] - az, wx = P[3 * c] - ax, wy = P[3 * c + 1] - ay, wz = P[3 * c + 2] - az;
+        const flip = (uy * wz - uz * wy) * N[3 * a] + (uz * wx - ux * wz) * N[3 * a + 1] + (ux * wy - uy * wx) * N[3 * a + 2] < 0;   // face outward
+        if (flip) idx.push(a, c, b, a, d, c); else idx.push(a, b, c, a, c, d);
+      };
+      for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
+        const s0 = f[id(i, j, k)] < 0;
+        if (s0 !== (f[id(i + 1, j, k)] < 0)) quad(vix[cid(i, j - 1, k - 1)], vix[cid(i, j, k - 1)], vix[cid(i, j, k)], vix[cid(i, j - 1, k)]);
+        if (s0 !== (f[id(i, j + 1, k)] < 0)) quad(vix[cid(i - 1, j, k - 1)], vix[cid(i, j, k - 1)], vix[cid(i, j, k)], vix[cid(i - 1, j, k)]);
+        if (s0 !== (f[id(i, j, k + 1)] < 0)) quad(vix[cid(i - 1, j - 1, k)], vix[cid(i, j - 1, k)], vix[cid(i, j, k)], vix[cid(i - 1, j, k)]);
+      }
+      return { P, N, idx };
+    }
     // The palm and the roots of the fingers and the thumb as ONE surface, so a finger grows out of the hand instead of
     // sitting on it: a distance field (the palm slab, smoothly welded to a short capsule at the root of each finger and
     // to the thumb's metacarpal, with fillets where they meet) turned into a mesh by surface nets, at rest. Past the
@@ -536,39 +573,7 @@
         return smin(d, Math.hypot(x, y, z / 0.85) - 0.044, 0.01);                   // the wrist rounds into a bulb (hidden in the cuff)
       };
       const sd = (x, y, z) => { let d = palmD(x, y, z); for (const c of caps) d = smin(d, capD(c, x, y, z)[0], 0.009); return d; };
-      // surface nets on a 1.6 mm grid
-      const h = 0.0016, x0 = -0.085, y0 = -0.165, z0 = -0.065, nx = Math.ceil(0.17 / h) + 1, ny = Math.ceil(0.235 / h) + 1, nz = Math.ceil(0.115 / h) + 1;
-      const f = new Float32Array(nx * ny * nz), id = (i, j, k) => i + nx * (j + ny * k);
-      for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) f[id(i, j, k)] = sd(x0 + i * h, y0 + j * h, z0 + k * h);
-      const vix = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1), cid = (i, j, k) => i + (nx - 1) * (j + (ny - 1) * k), P = [];
-      const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]], C = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
-      for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
-        const v = C.map(([a, b, c]) => f[id(i + a, j + b, k + c)]); let neg = 0; for (const q of v) if (q < 0) neg++;
-        if (neg === 0 || neg === 8) continue;
-        let sx = 0, sy = 0, sz = 0, n = 0;
-        for (const [a, b] of E) if ((v[a] < 0) !== (v[b] < 0)) { const t = v[a] / (v[a] - v[b]); sx += C[a][0] + (C[b][0] - C[a][0]) * t; sy += C[a][1] + (C[b][1] - C[a][1]) * t; sz += C[a][2] + (C[b][2] - C[a][2]) * t; n++; }
-        vix[cid(i, j, k)] = P.length / 3; P.push(x0 + (i + sx / n) * h, y0 + (j + sy / n) * h, z0 + (k + sz / n) * h);
-      }
-      const grad = (x, y, z, e = 0.0003) => [sd(x + e, y, z) - sd(x - e, y, z), sd(x, y + e, z) - sd(x, y - e, z), sd(x, y, z + e) - sd(x, y, z - e)];
-      const nV = P.length / 3, N = new Float32Array(P.length);
-      for (let q = 0; q < nV; q++) {   // settle each vertex on the surface, then take the field's gradient as its normal
-        let x = P[3 * q], y = P[3 * q + 1], z = P[3 * q + 2];
-        for (let it = 0; it < 2; it++) { const d = sd(x, y, z), g = grad(x, y, z), l2 = (g[0] ** 2 + g[1] ** 2 + g[2] ** 2) / (0.0006 ** 2) || 1; x -= d * g[0] / 0.0006 / l2; y -= d * g[1] / 0.0006 / l2; z -= d * g[2] / 0.0006 / l2; }
-        P[3 * q] = x; P[3 * q + 1] = y; P[3 * q + 2] = z;
-        const g = grad(x, y, z), l = Math.hypot(...g) || 1; N[3 * q] = g[0] / l; N[3 * q + 1] = g[1] / l; N[3 * q + 2] = g[2] / l;
-      }
-      const idx = [], quad = (a, b, c, d) => {
-        if (a < 0 || b < 0 || c < 0 || d < 0) return;
-        const ax = P[3 * a], ay = P[3 * a + 1], az = P[3 * a + 2], ux = P[3 * b] - ax, uy = P[3 * b + 1] - ay, uz = P[3 * b + 2] - az, wx = P[3 * c] - ax, wy = P[3 * c + 1] - ay, wz = P[3 * c + 2] - az;
-        const flip = (uy * wz - uz * wy) * N[3 * a] + (uz * wx - ux * wz) * N[3 * a + 1] + (ux * wy - uy * wx) * N[3 * a + 2] < 0;   // face outward
-        if (flip) idx.push(a, c, b, a, d, c); else idx.push(a, b, c, a, c, d);
-      };
-      for (let k = 1; k < nz - 1; k++) for (let j = 1; j < ny - 1; j++) for (let i = 1; i < nx - 1; i++) {
-        const s0 = f[id(i, j, k)] < 0;
-        if (s0 !== (f[id(i + 1, j, k)] < 0)) quad(vix[cid(i, j - 1, k - 1)], vix[cid(i, j, k - 1)], vix[cid(i, j, k)], vix[cid(i, j - 1, k)]);
-        if (s0 !== (f[id(i, j + 1, k)] < 0)) quad(vix[cid(i - 1, j, k - 1)], vix[cid(i, j, k - 1)], vix[cid(i, j, k)], vix[cid(i - 1, j, k)]);
-        if (s0 !== (f[id(i, j, k + 1)] < 0)) quad(vix[cid(i - 1, j - 1, k)], vix[cid(i, j - 1, k)], vix[cid(i, j, k)], vix[cid(i - 1, j, k)]);
-      }
+      const { P, N, idx } = surfaceNets(sd, -0.085, -0.165, -0.065, 0.17, 0.235, 0.115, 0.0016), nV = P.length / 3;
       // weights: each part's share by how near it is (soft), a finger's root going with the finger past its knuckle,
       // the palm's rim past the knuckle line with the nearest fingers, the ball of the thumb with the thumb
       const si = [], sw = [], uv = [], bw = bones.indexOf(wr);
@@ -682,37 +687,52 @@
     }
 
     /* legs */
-    // The boot (in the ankle's frame, toe to -z): a loft of cross-sections from heel to toe. A section is a rounded
-    // shape, flat underneath, its half-width bW(z) narrower at the heel and widest at the ball, its top bTop(z) high at
-    // the ankle and sloping over the instep to a rounded toe. The fabric upper, a lacquered toe cap and heel counter
-    // (the same surface over part of the boot, a hair out), a dark rubber sole with grooves, and a strap over the instep.
-    const BZ0 = 0.115, BZ1 = -0.27, BY = -0.085;   // heel end, toe tip, the bottom of the upper
-    const bW = z => { let w = 0.068 + 0.02 * sstep(0.06, -0.14, z); if (z < BZ1 + 0.065) w *= Math.sqrt(Math.max(0, 1 - ((z - (BZ1 + 0.065)) / 0.065) ** 2));
-      if (z > BZ0 - 0.045) w *= Math.sqrt(Math.max(0, 1 - ((z - (BZ0 - 0.045)) / 0.045) ** 2)); return w; };
-    const bTop = z => { let t = 0.15 + (0.058 - 0.15) * sstep(-0.075, -0.18, z) - 0.012 * sstep(-0.18, -0.24, z); if (z < BZ1 + 0.05) t = BY + (t - BY) * Math.sqrt(Math.max(0.05, 1 - ((z - (BZ1 + 0.05)) / 0.05) ** 2)); return t; };
-    function bootLoft(z0 = BZ0, z1 = BZ1, a0 = 0, a1 = 2 * Math.PI, grow = 0, nz = 70, na = 48) {
-      const pos = [], uv = [], idx = [];
-      for (let i = 0; i <= nz; i++) {
-        const z = z0 + (z1 - z0) * i / nz, w = bW(z) + grow, top = bTop(z) + grow, bot = BY - grow, yc = (top + bot) / 2, hh = (top - bot) / 2;
-        for (let j = 0; j <= na; j++) {
-          const a = a0 + (a1 - a0) * j / na, c = Math.cos(a), sn = Math.sin(a), e = sn < 0 ? 0.35 : 0.8;   // flat underneath, rounder above
-          pos.push(w * Math.sign(c) * Math.abs(c) ** e, yc + hh * Math.sign(sn) * Math.abs(sn) ** (sn < 0 ? 0.25 : 0.9), z); uv.push(a * 0.09 / 0.5, z / 0.5);
-        }
-      }
-      for (let i = 0; i < nz; i++) for (let j = 0; j < na; j++) { const A = i * (na + 1) + j, B = A + na + 1; idx.push(A, B, A + 1, A + 1, B, B + 1); }
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-      g.setIndex(idx); g.computeVertexNormals(); return g;
-    }
-    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
+    // The boot (in the ankle's frame, toe to -z), built like the glove: a distance field of rounded parts welded
+    // smoothly together (a padded column round the ankle with a rolled collar, the foot, a round toe box, a round
+    // heel), flat underneath, the toe curving up a little (toe spring), the cloth a little uneven. Surface nets turn it
+    // into one mesh. A lacquered toe cap and heel counter are parts of the same surface (their own material), the sole
+    // is a dark rubber slab cut to the boot's own footprint, and two straps (instep, ankle) lie exactly on it.
+    const BY = -0.084;                                                                  // the bottom of the upper
+    const spring = z => z < -0.15 ? 1.1 * (z + 0.15) ** 2 : 0;                          // the toe lifts toward its tip
+    const sEll = (x, y, z, cx, cy, cz, rx, ry, rz) => { const X = (x - cx) / rx, Y = (y - cy) / ry, Z = (z - cz) / rz, k0 = Math.hypot(X, Y, Z), k1 = Math.hypot(X / rx, Y / ry, Z / rz); return k0 * (k0 - 1) / k1; };
+    const sMin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+    const sMax = (a, b, k) => -sMin(-a, -b, k);
+    const bootSD = (x, y0, z) => {
+      const y = y0 - spring(z);
+      const q = (Math.hypot(x / 0.098, (z - 0.005) / 0.104) - 1) * 0.098, qy = Math.max(-0.05 - y, y - 0.125), rr = 0.02;   // the ankle column, its top edge rolled
+      const col = Math.hypot(Math.max(q + rr, 0), Math.max(qy + rr, 0)) + Math.min(Math.max(q + rr, qy + rr), 0) - rr;
+      let d = sMin(sEll(x, y, z, 0, -0.04, -0.075, 0.08, 0.052, 0.17), sEll(x, y, z, 0, -0.047, -0.2, 0.086, 0.045, 0.082), 0.03);   // foot, toe box
+      d = sMin(d, sEll(x, y, z, 0, -0.03, 0.058, 0.074, 0.06, 0.062), 0.03);           // heel
+      d = sMin(d, col, 0.055);                                                          // the instep: the column welded to the foot
+      d = sMax(d, -(y - BY), 0.012);                                                    // flat underneath
+      return d + 0.0012 * (vnoise(x * 55, y * 55, z * 55) - 0.5) * 2;                   // the cloth, a little uneven
+    };
     const bootShell = M({ color: 0xeceae3, roughness: 0.4, metalness: 0 });
-    const soleMat = (() => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64; const g = cv.getContext('2d');   // grooves across the sole
-      g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#000'; for (let y = 0; y < 64; y += 16) g.fillRect(0, y, 64, 6);
-      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 4); return M({ color: 0x2a2b2e, roughness: 0.85, bumpMap: t, bumpScale: 0.6 }); })();
-    const soleGeo = (() => { const sh = new THREE.Shape(), n = 60, pts = [];
-      for (let i = 0; i <= n; i++) { const z = BZ0 + (BZ1 - BZ0) * i / n; pts.push([bW(z) + 0.006, z]); }
-      sh.moveTo(0, BZ0 + 0.004); pts.forEach(([x, z]) => sh.lineTo(x, z)); sh.lineTo(0, BZ1 - 0.006); pts.slice().reverse().forEach(([x, z]) => sh.lineTo(-x, z));
-      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.027, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2 });
-      g.rotateX(Math.PI / 2); g.translate(0, -0.081, 0); return smoothNormals(g, 40); })();
+    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
+    const bootGeo = (() => {
+      const { P, N, idx } = surfaceNets(bootSD, -0.12, -0.1, -0.31, 0.24, 0.25, 0.46, 0.0025), cloth = [], cap = [];
+      for (let i = 0; i < idx.length; i += 3) {   // the toe cap (a slanted edge, higher at the front) and the heel counter: lacquered
+        let y = 0, z = 0; for (let k = 0; k < 3; k++) { y += P[3 * idx[i + k] + 1] / 3; z += P[3 * idx[i + k] + 2] / 3; }
+        const yb = y - spring(z) - BY; (z < -0.175 - 0.35 * yb || z > 0.075 + 0.5 * yb ? cap : cloth).push(idx[i], idx[i + 1], idx[i + 2]);
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+      g.setIndex(cloth.concat(cap)); g.addGroup(0, cloth.length, 0); g.addGroup(cloth.length, cap.length, 1); return boxUV(g, 0.5);
+    })();
+    // a ray from c along dir to the boot's surface (for the straps and the sole's outline)
+    const bootN = p => { const e = 0.0006; return new THREE.Vector3(bootSD(p.x + e, p.y, p.z) - bootSD(p.x - e, p.y, p.z), bootSD(p.x, p.y + e, p.z) - bootSD(p.x, p.y - e, p.z), bootSD(p.x, p.y, p.z + e) - bootSD(p.x, p.y, p.z - e)).normalize(); };
+    const bootHit = (c, dir, max = 0.25) => { const p = c.clone(); for (let t = 0; t < max; t += 0.0005) { p.copy(c).addScaledVector(dir, t); if (bootSD(p.x, p.y, p.z) > 0) return p; } return p; };
+    const soleMat = (() => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64; const g = cv.getContext('2d');   // lugs across the sole
+      g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#000'; for (let y = 0; y < 64; y += 16) g.fillRect(0, y, 64, 7);
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5); return M({ color: 0x2a2b2e, roughness: 0.85, bumpMap: t, bumpScale: 0.8 }); })();
+    const soleGeo = (() => {   // the footprint traced a few mm above the bottom, plus a welt; then bent up with the toe
+      const zs = [], hw = [], yS = BY + 0.006;
+      let zH = 0, zT = 0; for (let z = 0; z < 0.2; z += 0.001) if (bootSD(0, yS, z) < 0) zH = z; for (let z = 0; z > -0.35; z -= 0.001) if (bootSD(0, yS + spring(z), z) < 0) zT = z;
+      for (let i = 1; i < 60; i++) { const z = zH + (zT - zH) * i / 60; zs.push(z); hw.push(bootHit(new THREE.Vector3(0, yS + spring(z), z), new THREE.Vector3(1, 0, 0)).x); }
+      const sh = new THREE.Shape(), W = 0.007; sh.moveTo(0, zH + W); zs.forEach((z, i) => sh.lineTo(hw[i] + W, z)); sh.lineTo(0, zT - W); zs.slice().reverse().forEach((z, i) => sh.lineTo(-hw[hw.length - 1 - i] - W, z));
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.026, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2, curveSegments: 4 });
+      g.rotateX(Math.PI / 2); g.translate(0, BY + 0.003, 0);
+      const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) + spring(p.getZ(i)));
+      return smoothNormals(g, 40); })();
     // Each leg is one skinned half of the pants, from under the waist ring to inside the boot cuff. At the top its cross
     // section is half of the briefs (a D: the briefs' ellipse cut at the middle), lower down it becomes the round thigh;
     // the middle seam stays with the torso, so the two halves always meet. Bends: hip, knee (bellows, a pad in front),
@@ -766,15 +786,18 @@
       pocket(hp, s * (legR(s, HY - 0.26, s * Math.PI / 2).base + 0.008), -0.26, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
       pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1, 0, 0.095);              // and a smaller one on each shin
       // the boot: the ankle pivot sits inside it, 0.127 above the sole
-      an.add(mesh(lathe([[0.104, 0.095], [0.106, 0.13], [0.104, 0.18], [0.1, 0.215]], 48), fabric));   // the fabric shaft round the ankle, open above (side seams)
-      an.add(at(band(0.104, 0.03, 0.011), 0, 0.14, 0));
-      an.add(mesh(bootLoft(), bootCloth));                                                        // the fabric upper
-      an.add(mesh(bootLoft(-0.19, BZ1, 0, 2 * Math.PI, 0.0018, 30), bootShell));                  // the toe cap
-      an.add(mesh(soleGeo, soleMat));                                                             // the sole
-      // a strap round the ankle, buckled on the outside
-      { const pts = []; for (let k = 0; k <= 40; k++) { const a = 2 * Math.PI * k / 40; pts.push(new THREE.Vector3(0.109 * Math.sin(a), 0.112, 0.109 * Math.cos(a))); }
-        an.add(webbing(pts, 0.028, 0.003, new THREE.Vector3(0, 0.112, 0), strap, 80));
-        an.add(mesh(rbox(0.007, 0.034, 0.03, 0.002), machined, s * 0.113, 0.112, 0).rotateY(Math.PI / 2 * 0)); }
+      an.add(at(band(0.104, 0.03, 0.011), 0, 0.14, 0));                                           // the ankle bearing on the boot's collar
+      an.add(mesh(bootGeo, [bootCloth, bootShell]));                                              // the boot
+      an.add(mesh(soleGeo, soleMat));                                                             // its sole
+      // two straps lying on the boot, buckled on the outside: over the instep and round the ankle
+      { const c = new THREE.Vector3(0, -0.06, -0.095), pts = [];
+        for (let k = 0; k <= 24; k++) { const a = Math.PI * k / 24, h = bootHit(c, new THREE.Vector3(Math.cos(a), Math.sin(a), 0)); pts.push(h.addScaledVector(bootN(h), 0.0035)); }
+        an.add(webbing(pts, 0.026, 0.003, c, strap, 48, bootN));
+        const e = pts[s < 0 ? 24 : 0]; an.add(mesh(rbox(0.007, 0.03, 0.03, 0.002), machined, e.x + s * 0.003, e.y + 0.012, e.z)); }
+      { const c = new THREE.Vector3(0, 0.07, 0.005), pts = [];
+        for (let k = 0; k <= 48; k++) { const a = 2 * Math.PI * k / 48, d = new THREE.Vector3(Math.sin(a), 0, Math.cos(a)), h = bootHit(c, d); pts.push(h.addScaledVector(bootN(h), 0.0035)); }
+        an.add(webbing(pts, 0.024, 0.003, c, strap, 96, bootN));
+        const e = bootHit(c, new THREE.Vector3(s, 0, 0)); an.add(mesh(rbox(0.007, 0.03, 0.028, 0.002), machined, e.x + s * 0.005, 0.07, e.z)); }
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
     proxy(body, 0.48, 0.4, 0.34, -0.07);   // the briefs
