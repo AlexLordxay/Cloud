@@ -212,23 +212,22 @@
     dcm.add(mesh(rbox(0.1, 0.052, 0.004, 0.006), lens, 0.065, 0.012, -0.056));                          // the screen's dark frame
     const scr = mesh(new THREE.PlaneGeometry(0.09, 0.045), scrMat, 0.065, 0.012, -0.0585); scr.rotation.y = Math.PI; dcm.add(scr);
     for (const [x, y] of [[-0.11, 0.015], [-0.065, 0.015], [-0.02, 0.015]]) { const k = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.02, 14), metal, x, 0.33 + y, -0.31); k.rotation.x = Math.PI / 2 + 0.2; body.add(k); }
-    for (const s of [-1, 1]) {
-      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(s * 0.14, 0.31, -0.28), new THREE.Vector3(s * 0.27, 0.29, -0.22), new THREE.Vector3(s * 0.325, 0.3, -0.04), new THREE.Vector3(s * 0.3, 0.31, 0.12), new THREE.Vector3(s * 0.25, 0.32, 0.2)]);
-      body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 60, 0.019, 12, false), hoseMat));
-    }
-
-    // two more striped hoses from the control box down into connector boxes sewn onto the torso just above the belt:
-    // each box sits on a cloth patch that lies on the surface (the torso there is an ellipse 0.219 × 0.157)
-    for (const sd of [-1, 1]) {
-      const x = sd * 0.15, A = 0.219, B = 0.157, q = Math.sqrt(1 - (x / A) ** 2), zs = -B * q, ang = Math.atan(B * x / (A * A * q));
-      const mount = joint(body, x, 0.11, zs); mount.rotation.y = Math.PI - ang;                       // local +z = out of the suit
+    // Connector boxes sewn onto the torso, a striped hose from the control box into each. A box sits on a cloth patch
+    // that lies on the surface (the torso at height y is an ellipse A × B); its nipple points up, the hose comes down onto it.
+    function port(x, y, A, B, path) {
+      const q = Math.sqrt(1 - (x / A) ** 2), zs = -B * q, ang = Math.atan(B * x / (A * A * q));
+      const mount = joint(body, x, y, zs); mount.rotation.y = Math.PI - ang;                          // local +z = out of the suit
       mount.add(mesh(lumpy(rbox(0.07, 0.07, 0.01, 0.012), 0.0015, 20), cover, 0, 0, 0.002));          // the sewn-on patch
       mount.add(mesh(rbox(0.05, 0.05, 0.028, 0.008), grey, 0, 0, 0.018));                             // the connector box
-      const nip = at(new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.016, 18), metal), 0, 0.03, 0.018); mount.add(nip);
-      mount.updateMatrixWorld(true);
+      mount.add(at(new THREE.Mesh(new THREE.CylinderGeometry(0.017, 0.017, 0.016, 18), metal), 0, 0.03, 0.018));
       const top = new THREE.Vector3(0, 0.04, 0.018).applyMatrix4(new THREE.Matrix4().compose(mount.position, mount.quaternion, new THREE.Vector3(1, 1, 1)));
-      const c = new THREE.CatmullRomCurve3([new THREE.Vector3(sd * 0.08, 0.29, -0.28), new THREE.Vector3(sd * 0.11, 0.22, -0.24), new THREE.Vector3(top.x * 0.97, top.y + 0.05, top.z - 0.025), top]);
-      body.add(new THREE.Mesh(new THREE.TubeGeometry(c, 40, 0.014, 10, false), hoseMat));
+      body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([...path(top), top]), 40, 0.014, 10, false), hoseMat));
+    }
+    for (const sd of [-1, 1]) {
+      // two from the box's sides up into the upper chest, in front of the shoulders (clear of the arms)
+      port(sd * 0.215, 0.42, 0.2948, 0.2106, t => [new THREE.Vector3(sd * 0.13, 0.32, -0.285), new THREE.Vector3(sd * 0.175, 0.37, -0.275), new THREE.Vector3(t.x * 0.97, t.y + 0.045, t.z - 0.03)]);
+      // two down into the belly, just above the belt
+      port(sd * 0.15, 0.11, 0.219, 0.157, t => [new THREE.Vector3(sd * 0.08, 0.29, -0.28), new THREE.Vector3(sd * 0.11, 0.22, -0.24), new THREE.Vector3(t.x * 0.97, t.y + 0.05, t.z - 0.025)]);
     }
     // the backpack's harness: beige straps over the shoulders down to the control box
     for (const sd of [-1, 1]) {
