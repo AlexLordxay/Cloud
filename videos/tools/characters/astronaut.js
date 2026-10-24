@@ -199,7 +199,7 @@
         if (last) v += Math.hypot(last[0] - rw.y, last[1] - mr); last = [rw.y, mr];
         ring.forEach(([ph, r], j) => {
           pos.push(rw.cx + r * Math.sin(ph), rw.y, rw.cz + r * Math.cos(ph)); uv.push(j / seg, v / 0.45); phs.push(ph);
-          const c = rw.col ? rw.col(ph) : 1; col.push(c, c, c);
+          const c = rw.col ? rw.col(ph) : 1; if (Array.isArray(c)) col.push(...c); else col.push(c, c, c);
           const w = rw.w(ph, r).filter(e => e[1] > 1e-5), tot = w.reduce((a, e) => a + e[1], 0);
           for (let k = 0; k < 4; k++) { si.push(w[k] ? bones.indexOf(w[k][0]) : 0); sw.push(w[k] ? w[k][1] / tot : 0); }
         });
@@ -621,6 +621,27 @@
         ck.add(mesh(rbox(0.085, 0.062, 0.018, 0.006), grey));
         for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
       }
+      // a strap round the forearm at elbow-local y (the sleeve's own radius there), for the watch and the mirror
+      const armStrap = (y, W = 0.018) => { const pts = []; for (let k = 0; k <= 40; k++) { const a = 2 * Math.PI * k / 40; const r = armR(s, EY + y, a).r + 0.002; pts.push(new THREE.Vector3(r * Math.sin(a), y, r * Math.cos(a))); }
+        el.add(webbing(pts, W, 0.003, new THREE.Vector3(0, y, 0), dark, 80)); };
+      if (s < 0) {   // a chronograph strapped over the left cuff, on the back of the wrist (as astronauts wear them)
+        const y = -0.262, r = armR(s, EY + y, 0).base + 0.006; armStrap(y);
+        const wt = joint(el, 0, y, r + 0.004); wt.rotation.x = Math.PI / 2;
+        wt.add(mesh(new THREE.CylinderGeometry(0.017, 0.018, 0.009, 36), metal), mesh(new THREE.TorusGeometry(0.0165, 0.0025, 8, 36), dark, 0, 0.0048, 0).rotateX(Math.PI / 2));
+        const dial = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
+          g.fillStyle = '#121418'; g.beginPath(); g.arc(64, 64, 64, 0, 7); g.fill(); g.strokeStyle = '#e8ecf0'; g.lineWidth = 4;
+          for (let k = 0; k < 12; k++) { const a = k / 12 * Math.PI * 2; g.beginPath(); g.moveTo(64 + Math.sin(a) * 50, 64 - Math.cos(a) * 50); g.lineTo(64 + Math.sin(a) * 58, 64 - Math.cos(a) * 58); g.stroke(); }
+          for (const [x, y] of [[44, 64], [84, 64], [64, 88]]) { g.lineWidth = 2; g.beginPath(); g.arc(x, y, 11, 0, 7); g.stroke(); }   // the sub-dials
+          g.lineWidth = 5; g.beginPath(); g.moveTo(64, 64); g.lineTo(64, 22); g.stroke(); g.lineWidth = 4; g.beginPath(); g.moveTo(64, 64); g.lineTo(92, 74); g.stroke();
+          const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; })();
+        wt.add(mesh(new THREE.CircleGeometry(0.0145, 36), M({ map: dial, roughness: 0.25 }), 0, 0.0047, 0).rotateX(-Math.PI / 2));
+        wt.add(mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.005, 10), metal, 0.019, 0, 0).rotateZ(Math.PI / 2));   // the crown
+      } else {   // the wrist mirror on the right forearm: to see the controls on the chest box
+        const y = -0.215, r = armR(s, EY + y, Math.PI / 2).base; armStrap(y, 0.022);
+        const mr = joint(el, r + 0.008, y, 0); mr.rotation.set(0, Math.PI / 2, 0.25);
+        mr.add(mesh(rbox(0.062, 0.046, 0.006, 0.006), grey), mesh(new THREE.PlaneGeometry(0.054, 0.038), M({ color: 0xdfe6ee, metalness: 1, roughness: 0.04 }), 0, 0, 0.0032));
+        mr.add(mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.05, 10), metal, 0, 0, -0.006).rotateZ(Math.PI / 2));   // its hinge
+      }
       // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
       el.add(at(band(0.069, 0.024, 0.009), 0, -0.293, 0));                                   // a slim wrist ring, the sleeve's own width
       el.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -0.306, 0));
@@ -714,8 +735,12 @@
       const hpH1 = helper(hp, 1 / 3), hpH2 = helper(hp, 2 / 3);
       const knH1 = helper(kn, 1 / 3, src => { if (leg) leg.morphTargetInfluences[0] = sstep(0, 2.2, -src.rotation.x); }), knH2 = helper(kn, 2 / 3);
       const anH = helper(an, 0.5);
-      const rows = span([0.07, -0.1, 0.008], [-0.1, -0.3, 0.0025], [-0.3, KY + KB, 0.008], [KY + KB, KY - KB, 0.0025], [KY - KB, AY + 0.24, 0.008], [AY + 0.24, AY + 0.14, 0.004], [AY + 0.14, AY + 0.09, 0.008]).map(y => ({
-        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => bendCol(y - KY, KB, legR(s, y, ph).pm),
+      // the commander's red stripe round the thigh, woven into the cloth's colour (a sharp edge: a pair of rows at each edge)
+      const ST = [HY - 0.169, HY - 0.201], RED = [0.5, 0.032, 0.024];
+      const ys = span([0.07, -0.1, 0.008], [-0.1, -0.3, 0.0025], [-0.3, KY + KB, 0.008], [KY + KB, KY - KB, 0.0025], [KY - KB, AY + 0.24, 0.008], [AY + 0.24, AY + 0.14, 0.004], [AY + 0.14, AY + 0.09, 0.008])
+        .filter(y => ST.every(e => Math.abs(y - e) > 0.002)).concat(ST.flatMap(e => [e + 0.0004, e - 0.0004])).sort((p, q) => q - p);
+      const rows = ys.map(y => ({
+        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => y < ST[0] && y > ST[1] ? RED : bendCol(y - KY, KB, legR(s, y, ph).pm),
         w: (ph, r) => {
           if (y > -0.1) return [[body, 1]];
           if (y > -0.3) {   // the hip: the middle seam is pinned to the torso until the leg is round
@@ -746,6 +771,23 @@
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
     proxy(body, 0.48, 0.4, 0.34, -0.07);   // the briefs
+    // a point on the briefs at height y and angle a round the waist (0 = +x, pi/2 = front), facing out: a mount for gear
+    const beltMount = (a, y) => { const rb0 = rb(y), A = 1.26 * rb0, B = 0.9 * rb0, x = A * Math.cos(a), z = -B * Math.sin(a), m = joint(body, x, y, z);
+      m.rotation.y = Math.atan2(x / (A * A), z / (B * B)); return m; };   // local +z = out of the suit
+    { // a retractable tether reel on the left front of the belt, its line running down to a hook clipped to a loop
+      const m = beltMount(Math.PI * 0.68, -0.008);
+      m.add(mesh(rbox(0.05, 0.062, 0.028, 0.01), grey, 0, 0, 0.016), mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.006, 32), machined, 0, 0.006, 0.032).rotateX(Math.PI / 2));
+      m.add(mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.004, 12), dark, 0, 0.006, 0.036).rotateX(Math.PI / 2));
+      m.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([new THREE.Vector3(0.012, -0.03, 0.02), new THREE.Vector3(0.016, -0.06, 0.026), new THREE.Vector3(0.01, -0.085, 0.024)]), 20, 0.0018, 6), dark));
+      m.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.011, 0.0028, 8, 20, Math.PI * 1.6), metal), 0.01, -0.095, 0.022));
+      m.add(mesh(rbox(0.024, 0.03, 0.012, 0.004), strap, 0.01, -0.1, 0.012));   // the loop it clips to
+    }
+    { // a tool holster hanging from the belt on the left side: a socket wrench in it, on a short tether
+      const m = beltMount(Math.PI * 1.08, -0.03);
+      m.add(mesh(rbox(0.034, 0.09, 0.028, 0.008), dark, 0, -0.03, 0.016), mesh(rbox(0.04, 0.012, 0.03, 0.004), strap, 0, 0.012, 0.016));
+      m.add(mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.06, 14), machined, 0, 0.03, 0.016), mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.055, 16), dark, 0, 0.062, 0.016).rotateZ(Math.PI / 2));
+      m.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.008, 0.0018, 6, 16), metal), 0.024, 0.062, 0.016));
+    }
 
     /* the Nebozvid emblem: a round patch with the site's wordmark (characters/emblem.js, made by emblem.py) */
     const emblemImg = new Image(), emblemTex = new THREE.Texture(emblemImg);
@@ -762,7 +804,8 @@
     { const tx = 0.11, tz = -cb * Math.sqrt(1 - (tx / ca) ** 2), ts = Math.atan(cb * tx / (ca * ca * Math.sqrt(1 - (tx / ca) ** 2)));
       const tag = joint(body, tx, 0.5, tz - 0.004); tag.rotation.set(-0.08, Math.PI - ts, 0, 'YXZ');   // a name tag on the right of the chest
       tag.add(mesh(rbox(0.1, 0.032, 0.006, 0.004), grey)); tag.add(mesh(new THREE.PlaneGeometry(0.084, 0.012), white, 0, 0, 0.0035)); }
-    const back = mesh(patch(0.085, 0.32), emblemMat, 0, 0.03, 0.137); pack.add(back);                                                // on the backpack flap
+    const back = mesh(patch(0.085, 0.32), emblemMat, 0, 0.03, 0.137); pack.add(back);
+    { const r = armR(1, 0.47 - 0.265, Math.PI / 2).base + 0.006, ap = mesh(patch(0.038, 1 / (2 * r)), emblemMat, r, -0.265, 0); ap.rotation.y = Math.PI / 2; J.shoulderR.add(ap); }   // and on the right sleeve                                                // on the backpack flap
 
     // bind the sleeves to the skeleton at rest (every bone made, nothing turned yet)
     group.updateMatrixWorld(true);
