@@ -1,6 +1,6 @@
 # Lays the picture of "Знайомся: Венера" onto one timeline (720 × 1280, work/venus_meet/frames/): the 3D flights over
 # the real relief (terrain.js → work/venus_meet/shot_<name>/), the site's Venus (rec.js → work/venus_meet/site/), and
-# two drawn pieces — Venus beside the Earth (true sizes) and the Evening Star over a Ukrainian horizon at dusk — with
+# a drawn piece (Venus beside the Earth, true sizes) and a NASA photo of Venus in the dusk sky — with
 # 0.4 s crossfades at the cuts. Captions, logo and the end card come after (compose.py). Run by frames.sh.
 import json, math, os, sys
 import numpy as np
@@ -76,42 +76,27 @@ def sizes(u):
         d.text((cx * W, y + s.height + 78), km, font=F_NUM, fill=(255, 214, 120, 235), anchor='mm')
     return im.convert('RGB')
 
+PHOTO = 'NHQ202605180003.jpg'                  # NASA/Bill Ingalls, 18.05.2026: the Moon and Venus over Washington at dusk
+VENUS_AT = (0.309, 0.223)                      # where Venus is in the photo (fractions of its width and height)
+
 def evening(u):
-    """Dusk over a Ukrainian horizon (fields, a poplar row, a church's dome): the Evening Star bright and low in the west,
-    a young Moon above it; the stars come out as the sky darkens."""
-    if 'evening' not in _cache:
-        y = np.linspace(0, 1, H)[:, None, None]
-        top, mid, low = np.array([10, 16, 44]), np.array([46, 58, 112]), np.array([236, 150, 86])
-        sky = np.where(y < 0.62, top + (mid - top) * (y / 0.62), mid + (low - mid) * (np.clip(y - 0.62, 0, None) / 0.38) ** 1.4)
-        sky = Image.fromarray((sky * np.ones((1, W, 1))).clip(0, 255).astype(np.uint8), 'RGB').convert('RGBA')
-        land = Image.new('RGBA', (W, H)); d = ImageDraw.Draw(land); g = H * 0.86
-        pts = [(x, g + 10 * math.sin(x / 90) + 6 * math.sin(x / 31)) for x in range(0, W + 10, 10)]
-        d.polygon(pts + [(W, H), (0, H)], fill=(8, 10, 16, 255))
-        for i, x in enumerate(range(380, 700, 26)):              # a row of poplars
-            h = 120 + 18 * math.sin(i * 1.7)
-            d.ellipse((x - 11, g - h, x + 11, g + 6), fill=(8, 10, 16, 255))
-        cx = 150; d.rectangle((cx - 26, g - 70, cx + 26, g + 4), fill=(8, 10, 16, 255))   # a small church
-        d.ellipse((cx - 22, g - 102, cx + 22, g - 58), fill=(8, 10, 16, 255))
-        d.rectangle((cx - 2, g - 132, cx + 2, g - 100), fill=(8, 10, 16, 255)); d.rectangle((cx - 10, g - 122, cx + 10, g - 118), fill=(8, 10, 16, 255))
-        _cache['evening'] = (sky, land, stars(11, 300, 0.7))
-    sky, land, st = _cache['evening']
-    im = sky.copy()
-    a = min(1.0, 0.25 + u * 0.9)
-    st2 = st.copy(); st2.putalpha(st2.getchannel('A').point(lambda v: int(v * a))); im.alpha_composite(st2)
-    # Venus: a brilliant point with a soft glow and short spikes
-    gl = Image.new('RGBA', (W, H)); d = ImageDraw.Draw(gl); vx, vy = 300, int(H * 0.66)
-    d.ellipse((vx - 34, vy - 34, vx + 34, vy + 34), fill=(255, 250, 230, 150))
-    gl = gl.filter(ImageFilter.GaussianBlur(14)); im.alpha_composite(gl)
-    d = ImageDraw.Draw(im)
-    d.line((vx - 22, vy, vx + 22, vy), fill=(255, 255, 245, 140), width=2); d.line((vx, vy - 22, vx, vy + 22), fill=(255, 255, 245, 140), width=2)
-    d.ellipse((vx - 8, vy - 8, vx + 8, vy + 8), fill=(255, 255, 250, 255))
-    # a thin young Moon higher up
-    mx, my, r = 470, int(H * 0.36), 34
-    moon = Image.new('RGBA', (W, H)); md = ImageDraw.Draw(moon)
-    md.ellipse((mx - r, my - r, mx + r, my + r), fill=(250, 240, 210, 255)); md.ellipse((mx - r + 12, my - r - 4, mx + r + 12, my + r - 4), fill=(0, 0, 0, 0))
-    mglow = moon.filter(ImageFilter.GaussianBlur(10)); im.alpha_composite(mglow); im.alpha_composite(moon)
-    im.alpha_composite(land)
-    return im.convert('RGB')
+    """The Evening Star in a real dusk sky (NASA photo, a slow push-in), Venus named with a pointer."""
+    if 'photo' not in _cache: _cache['photo'] = Image.open(os.path.join(WORK, 'photos', PHOTO)).convert('RGB')
+    im = _cache['photo']; z = 1.0 + 0.07 * u
+    ih = im.height / z; iw = ih * W / H
+    cx, cy = 0.5 * im.width, im.height * (0.5 - 0.06 * u)
+    x0 = min(max(0, cx - iw / 2), im.width - iw); y0 = min(max(0, cy - ih / 2), im.height - ih)
+    out = im.resize((W, H), Image.LANCZOS, box=(x0, y0, x0 + iw, y0 + ih)).convert('RGBA')
+    vx = (VENUS_AT[0] * im.width - x0) / iw * W; vy = (VENUS_AT[1] * im.height - y0) / ih * H
+    a = min(1.0, max(0.0, (u - 0.08) / 0.12))
+    if a > 0:
+        lay = Image.new('RGBA', (W, H)); d = ImageDraw.Draw(lay)
+        d.ellipse((vx - 16, vy - 16, vx + 16, vy + 16), outline=(255, 214, 120, int(230 * a)), width=2)
+        d.line((vx - 12, vy + 12, vx - 60, vy + 60), fill=(255, 214, 120, int(230 * a)), width=2)
+        d.text((vx - 64 + 1, vy + 64 + 2), 'Венера', font=F_LAB, fill=(0, 0, 0, int(170 * a)), anchor='rt')
+        d.text((vx - 64, vy + 64), 'Венера', font=F_LAB, fill=(255, 255, 255, int(255 * a)), anchor='rt')
+        out.alpha_composite(lay)
+    return out.convert('RGB')
 
 DRAW = {'sizes': sizes, 'evening': evening}
 
