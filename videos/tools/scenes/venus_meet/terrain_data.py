@@ -100,7 +100,7 @@ def build(site):
 
     lo, hi = np.percentile(s, 2), np.percentile(s, 98)
     k = np.clip((s - lo) / max(hi - lo, 1), 0, 1)[..., None]
-    dark, mid, light = (np.array(c, np.float32) for c in ((58, 34, 20), (170, 98, 44), (226, 178, 112)))
+    dark, mid, light = (np.array(c, np.float32) for c in ((46, 26, 14), (150, 82, 36), (224, 170, 100)))
     col = np.where(k < 0.5, dark + (mid - dark) * (k / 0.5), mid + (light - mid) * ((k - 0.5) / 0.5))
     Image.fromarray(col.clip(0, 255).astype(np.uint8)).save(os.path.join(out, 'colour.jpg'), quality=92)
     json.dump({'lat': lat0, 'lon': lon0, 'half': half, 'n': NH, 'dx': dx, 'dy': dy, 'hmin': float(h.min()),

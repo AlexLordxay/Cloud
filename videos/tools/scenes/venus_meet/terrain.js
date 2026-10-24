@@ -25,7 +25,10 @@ const SKY = \`
     float e = clamp(d.y, -0.2, 1.0);
     // the overcast: hot yellow haze at the horizon, a heavier orange-brown cloud deck overhead, a soft brighter patch
     // where the hidden Sun is (no disc); at dusk everything sinks to a dull red-brown
-    vec3 day = mix(haze * 1.05, vec3(0.62, 0.40, 0.18), smoothstep(0.0, 0.6, e));
+    // the cloud deck overhead: darker, with slow streaks of the super-rotating clouds
+    float st = 0.5 + 0.25 * sin(d.x * 9.0 / max(e, 0.08) + sin(d.z * 5.0 / max(e, 0.08)) * 1.7) + 0.15 * sin(d.z * 23.0 / max(e, 0.08));
+    vec3 deck = mix(vec3(0.40, 0.24, 0.10), vec3(0.58, 0.36, 0.15), st);
+    vec3 day = mix(haze * 1.05, deck, smoothstep(0.0, 0.45, e));
     float a = acos(clamp(dot(d, sun), -1.0, 1.0));
     day += vec3(0.35, 0.26, 0.12) * exp(-a / 0.5) * smoothstep(-0.05, 0.3, e) * g;
     vec3 dk = day * vec3(0.38, 0.26, 0.18);
@@ -71,8 +74,8 @@ async function setup() {
         float sh = smoothstep(-0.05 + SHB, 0.25 + SHB, dot(n, sun));
         // under the clouds the light is mostly diffuse: a strong sky term from above, a weak direct one for the relief
         float sky = 0.55 + 0.45 * n.y;
-        vec3 amb = vec3(1.0, 0.78, 0.48) * mix(0.62, 0.22, dusk) * sky;
-        vec3 lit = c * (vec3(1.0, 0.86, 0.62) * mix(1.25, 0.45, dusk) * d * sh + amb);
+        vec3 amb = vec3(1.0, 0.78, 0.48) * mix(0.36, 0.16, dusk) * sky;
+        vec3 lit = c * (vec3(1.0, 0.86, 0.62) * mix(1.9, 0.6, dusk) * d * sh + amb);
         float dist = length(vW - cameraPosition);
         float f = 1.0 - exp(-dist * fogK);
         vec2 e2 = min(vUv, 1.0 - vUv);
