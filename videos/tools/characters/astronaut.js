@@ -710,7 +710,7 @@
     const bootShell = M({ color: 0xeceae3, roughness: 0.4, metalness: 0 });
     const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
     const bootGeo = (() => {
-      const { P, N, idx } = surfaceNets(bootSD, -0.12, -0.1, -0.31, 0.24, 0.25, 0.46, 0.0025), cloth = [], cap = [];
+      const { P, N, idx } = surfaceNets(bootSD, -0.12, -0.1, -0.31, 0.24, 0.25, 0.46, 0.0032), cloth = [], cap = [];
       for (let i = 0; i < idx.length; i += 3) {   // the toe cap (a slanted edge, higher at the front) and the heel counter: lacquered
         let y = 0, z = 0; for (let k = 0; k < 3; k++) { y += P[3 * idx[i + k] + 1] / 3; z += P[3 * idx[i + k] + 2] / 3; }
         const yb = y - spring(z) - BY; (z < -0.175 - 0.35 * yb || z > 0.075 + 0.5 * yb ? cap : cloth).push(idx[i], idx[i + 1], idx[i + 2]);
