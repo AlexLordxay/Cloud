@@ -182,6 +182,10 @@
     const fold = (x, y, z, calm) => (1 - 0.6 * calm) * (0.0055 * ((vnoise(x * 14 + 3.1, y * 30, z * 14) - 0.5) * 1.4 + (vnoise(x * 36, y * 70 + 5.3, z * 36) - 0.5) * 0.6)
       - 0.0045 * Math.abs(Math.sin(y * 31 + 4 * x + 3 * z)) ** 6);
     const bandEnv = (d, B) => Math.abs(d) < B ? Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
+    // compression rings: the cloth bunched in soft rings just beyond a bend's bellows (|d| from B to B + 0.12), deepest on
+    // the inside of the bend (cin = cos of the angle from the inner side)
+    const rings = (x, y, z, d, B, cin) => { const a = Math.abs(d); if (a <= B * 0.8 || a > B + 0.12) return 0;
+      return 0.004 * Math.sin(2 * Math.PI * y / 0.05 + 2.5 * vnoise(x * 9, y * 9, z * 9)) * sstep(B * 0.8, B + 0.02, a) * (1 - sstep(B + 0.05, B + 0.12, a)) * (0.5 + 0.5 * cin); };
     // the sleeves' cloth: the seamed fabric, shaded per vertex (darker in the bellows' valleys and on the pads)
     const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05, vertexColors: true });
     // the row heights of a tube: spans [from, to, step] laid end to end
@@ -320,12 +324,14 @@
       const bk = mesh(rbox(0.04, 0.03, 0.007, 0.005), machined, sd * 0.133, 0.405, -0.238); bk.rotation.x = 0.35; body.add(bk);   // the buckle at the box
       bk.add(mesh(new THREE.BoxGeometry(0.03, 0.006, 0.004), dark, 0, 0.002, -0.004));
     }
+    let coil;
     // a coiled safety tether on the right of the belt: it hangs from a D-ring on the belt, its hook clipped to a loop below
     { const X = 0.266, Z = -0.005;   // on the belt's side (the belt is 0.22 out there): the ring sits on it, the coil hangs just outside the suit
       const dr = at(new THREE.Mesh(new THREE.TorusGeometry(0.022, 0.0048, 8, 20), metal), 0.24, 0.05, Z); body.add(dr);
-      const pts = []; for (let k = 0; k <= 160; k++) { const a = k / 160 * Math.PI * 2 * 5; pts.push(new THREE.Vector3(X + Math.cos(a) * 0.022, 0.03 - k / 160 * 0.1, Z + Math.sin(a) * 0.022)); }
-      body.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 480, 0.0052, 6, false), dark));
-      const hook = at(new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0042, 8, 20, Math.PI * 1.6), metal), X, -0.085, Z); hook.rotation.y = 0; body.add(hook);
+      coil = joint(body, 0.24, 0.05, Z);   // the coil and its hook hang from the ring and swing a little (see pose)
+      const pts = []; for (let k = 0; k <= 160; k++) { const a = k / 160 * Math.PI * 2 * 5; pts.push(new THREE.Vector3(X - 0.24 + Math.cos(a) * 0.022, -0.02 - k / 160 * 0.1, Math.sin(a) * 0.022)); }
+      coil.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 480, 0.0052, 6, false), dark));
+      coil.add(at(new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.0042, 8, 20, Math.PI * 1.6), metal), X - 0.24, -0.135, 0));
       const tab = mesh(rbox(0.03, 0.04, 0.03, 0.006), strap, 0.248, -0.1, Z); tab.rotation.y = Math.PI / 2; body.add(tab); }   // a cloth loop sewn on the suit
 
     /* life-support backpack (+z side), the SAFER jetpack under it */
@@ -456,7 +462,8 @@
       const d = y - EY, prof = upperR(y) + (foreR(y) - upperR(y)) * sstep(EB, -EB, d);
       const pm = Math.abs(d) < EB ? sstep(0.3, 0.75, Math.cos(ph)) * Math.exp(-((d / 0.06) ** 2)) : 0;   // the elbow pad, +z
       const base = prof * (1 + 0.1 * ridgeS(d, EB) * (1 - pm)) + ER * 0.2 * pm;
-      return { r: base + fold(s * 0.25 + base * Math.sin(ph), y, base * Math.cos(ph), bandEnv(d, EB)), base, pm };
+      const X = s * 0.25 + base * Math.sin(ph), Z = base * Math.cos(ph);
+      return { r: base + fold(X, y, Z, bandEnv(d, EB)) + rings(X, y, Z, d, EB, -Math.cos(ph)), base, pm };
     };
     // the shade of the cloth in a bend: darker in the bellows' valleys, the pad a little darker too
     const bendCol = (d, B, pm) => { if (Math.abs(d) >= B) return 1; const env = Math.sin(Math.PI * (d + B) / (2 * B)), sh = (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2;
@@ -529,8 +536,8 @@
         return smin(d, Math.hypot(x, y, z / 0.85) - 0.044, 0.01);                   // the wrist rounds into a bulb (hidden in the cuff)
       };
       const sd = (x, y, z) => { let d = palmD(x, y, z); for (const c of caps) d = smin(d, capD(c, x, y, z)[0], 0.009); return d; };
-      // surface nets on a 1.25 mm grid
-      const h = 0.00125, x0 = -0.085, y0 = -0.165, z0 = -0.065, nx = Math.ceil(0.17 / h) + 1, ny = Math.ceil(0.235 / h) + 1, nz = Math.ceil(0.115 / h) + 1;
+      // surface nets on a 1.6 mm grid
+      const h = 0.0016, x0 = -0.085, y0 = -0.165, z0 = -0.065, nx = Math.ceil(0.17 / h) + 1, ny = Math.ceil(0.235 / h) + 1, nz = Math.ceil(0.115 / h) + 1;
       const f = new Float32Array(nx * ny * nz), id = (i, j, k) => i + nx * (j + ny * k);
       for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) f[id(i, j, k)] = sd(x0 + i * h, y0 + j * h, z0 + k * h);
       const vix = new Int32Array((nx - 1) * (ny - 1) * (nz - 1)).fill(-1), cid = (i, j, k) => i + (nx - 1) * (j + (ny - 1) * k), P = [];
@@ -602,7 +609,7 @@
       // always inside a round shoulder cap of the suit, and it leaves the cap through a soft bearing ring.
       const rows = span([0.47, EY + EB, 0.007], [EY + EB, EY - EB, 0.0025], [EY - EB, -0.25, 0.008]).map(y => {
         const w = y > EY + EB ? [[sh, 1]] : y > EY - EB ? spread([sh, elH1, elH2, el], cubic((EY + EB - y) / (2 * EB))) : [[el, 1]];
-        return { y, cx: s * 0.25, cz: 0, r: ph => armR(s, y, ph).r, w: () => w, col: ph => bendCol(y - EY, EB, armR(s, y, ph).pm) };
+        return { y, cx: s * 0.25, cz: 0, r: ph => armR(s, y, ph).r, w: () => w, col: ph => bendCol(y - EY, EB, armR(s, y, ph).pm) * (1 - 0.1 * sstep(-0.23, -0.25, y)) };   // shadowed going into the wrist ring
       });
       const cap = mesh(new THREE.SphereGeometry(0.112, 56, 40), torsoCloth, s * 0.25, 0.47, 0); body.add(cap);
       sh.add(at(ringY(0.097, 0.011, fabric2), 0, -0.058, 0));
@@ -726,7 +733,7 @@
       if (s * dx < -1e-6) r = Math.min(r, (0.105 - 0.004 * m) / -(s * dx));   // the thighs press together, never through
       const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.08) ** 2)) : 0;   // the knee pad, -z
       const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.3 * pm;
-      return { r: base + fold(cx + base * dx, y, cz + base * dz, Math.max(bandEnv(d, KB), 1 - sstep(-0.05, -0.2, y))), base, pm, m };
+      return { r: base + fold(cx + base * dx, y, cz + base * dz, Math.max(bandEnv(d, KB), 1 - sstep(-0.05, -0.2, y))) + rings(cx + base * dx, y, cz + base * dz, d, KB, Math.cos(ph)) * m, base, pm, m };
     };
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
@@ -740,7 +747,7 @@
       const ys = span([0.07, -0.1, 0.008], [-0.1, -0.3, 0.0025], [-0.3, KY + KB, 0.008], [KY + KB, KY - KB, 0.0025], [KY - KB, AY + 0.24, 0.008], [AY + 0.24, AY + 0.14, 0.004], [AY + 0.14, AY + 0.09, 0.008])
         .filter(y => ST.every(e => Math.abs(y - e) > 0.002)).concat(ST.flatMap(e => [e + 0.0004, e - 0.0004])).sort((p, q) => q - p);
       const rows = ys.map(y => ({
-        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => y < ST[0] && y > ST[1] ? RED : bendCol(y - KY, KB, legR(s, y, ph).pm),
+        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => y < ST[0] && y > ST[1] ? RED : bendCol(y - KY, KB, legR(s, y, ph).pm) * (1 - 0.08 * legR(s, y, ph).pm) * (1 - 0.1 * sstep(0.03, 0.06, y)) * (1 - 0.1 * sstep(AY + 0.13, AY + 0.1, y)),   // soiled knee pads; shadowed under the waist ring and into the boot
         w: (ph, r) => {
           if (y > -0.1) return [[body, 1]];
           if (y > -0.3) {   // the hip: the middle seam is pinned to the torso until the leg is round
@@ -813,21 +820,112 @@
     skinned.forEach(m => m.bind(skeleton));
     shadowed(group);
 
-    // The free-fall rest pose (arms afloat, knees bent), the two sides a little different, each joint drifting slowly.
-    const w = (t, p, ph) => Math.sin(t * 2 * Math.PI / p + ph);
-    function pose(t) {
+    // The free-fall idle: arms afloat forward and out, hips and knees bent, toes pointed. It breathes (a 4.6 s cycle,
+    // the in-breath a little quicker), the arms and legs drift on slower cycles of their own, the head glances somewhere
+    // new about every 5 s (steadied against the body's sway), the fingers stir; the antenna and the tether coil lag a
+    // little behind the body's turns and the red camera light blinks. A pure function of t: every joint it touches,
+    // fingers included, is set anew on every call; it never moves the group or the body's position.
+    // opts: { glance, fingers, breath, secondary } (all on by default).
+    const hash = i => { const v = Math.sin(i * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+    const breath = (t, d = 0) => { const p = 2 * Math.PI * (t - d) / 4.6; return Math.sin(p + 0.22 * Math.sin(p)); };
+    const clampR = (x, a, b) => Math.min(b, Math.max(a, x));
+    function pose(t, opts = {}) {
+      const o = Object.assign({ glance: true, fingers: true, breath: true, secondary: true }, opts);
+      const B = (d = 0) => o.breath ? breath(t, d) : 0, P2 = 2 * Math.PI;
+      const bxAt = tt => 0.05 + (o.breath ? 0.012 * breath(tt) : 0) + 0.025 * Math.sin(P2 * tt / 10.3), bzAt = tt => 0.03 * Math.sin(P2 * tt / 12.9 + 1.3);
+      const bx = bxAt(t), by = 0.035 * Math.sin(P2 * t / 15.1 + 2.2), bz = bzAt(t);
+      J.body.rotation.set(bx, by, bz);
+      const drift = s => { const A = s < 0 ? 1 : -1, off = s < 0 ? 0 : 2.4;
+        return { A, off, arm: d => Math.sin(P2 * (t - d) / (7.9 + 0.6 * A) + off), leg: d => Math.sin(P2 * (t - d) / (11.7 + 0.8 * A) + off + 1) }; };
       for (const s of [-1, 1]) {
-        const L = s < 0 ? 'L' : 'R', ph = s < 0 ? 0 : 1.9, a = s < 0 ? 1 : -1;
-        J['shoulder' + L].rotation.set(0.35 + 0.08 * a + 0.09 * w(t, 5.3, ph), 0.1 * s, s * (0.8 + 0.12 * a + 0.1 * w(t, 6.1, ph + 1)));
-        J['elbow' + L].rotation.set(0.75 + 0.12 * w(t, 4.4, ph + 2), 0, 0);
-        J['wrist' + L].rotation.set(0.2 + 0.12 * w(t, 3.7, ph), 0.3 * s, s * 0.15);
-        J['hip' + L].rotation.set(0.32 + 0.14 * a + 0.06 * w(t, 6.7, ph + 0.5), 0, s * (0.1 + 0.03 * w(t, 7.3, ph)));
-        J['knee' + L].rotation.set(-0.75 - 0.3 * a + 0.1 * w(t, 5.9, ph + 2.6), 0, 0);
-        J['ankle' + L].rotation.set(0.3 + 0.05 * w(t, 4.9, ph), 0, 0);
+        const L = s < 0 ? 'L' : 'R', { A, arm, leg } = drift(s);
+        J['shoulder' + L].rotation.set(0.42 + 0.05 * A + 0.06 * arm(0) + 0.015 * B(), 0.12 * s, s * (0.74 + 0.06 * A + 0.05 * arm(0.6) + 0.025 * B(0.2)));
+        J['elbow' + L].rotation.set(1.05 + 0.12 * A + 0.1 * arm(0.5), 0, 0);
+        J['wrist' + L].rotation.set(0.22 + 0.09 * arm(1.0), s * 0.55, s * (0.12 + 0.05 * arm(1.3)));
+        J['hip' + L].rotation.set(0.62 + 0.08 * A + 0.05 * leg(0) - 0.5 * (bx - 0.05), 0, s * (0.12 + 0.03 * leg(0.8)));
+        J['knee' + L].rotation.set(-0.95 - 0.18 * A - 0.08 * leg(0.7), 0, 0);
+        J['ankle' + L].rotation.set(-0.22 + 0.06 * leg(1.4), 0, s * 0.04);
       }
-      J.head.rotation.set(-0.1 + 0.04 * w(t, 8.1, 0.3), 0.05 * w(t, 9.7, 1), 0);
-      J.body.rotation.set(0.1 + 0.03 * w(t, 7.7, 0), 0, 0.03 * w(t, 11.3, 2));
+      // the head: from one glance to the next over 1.1 s, a little roll while it turns
+      const slot = 5.2, n = Math.floor(t / slot), u = sstep(0, 1.1, t - n * slot);
+      const g = i => [0.9 * (hash(i) - 0.5) * (hash(i + 9) > 0.35 ? 1 : 0.2), -0.12 + 0.22 * (hash(i + 3) - 0.5)];
+      const g0 = o.glance ? g(n - 1) : [0, -0.1], g1 = o.glance ? g(n) : [0, -0.1], yaw = g0[0] + (g1[0] - g0[0]) * u, pitch = g0[1] + (g1[1] - g0[1]) * u;
+      J.head.rotation.set(clampR(pitch - 0.5 * (bx - 0.05) + 0.015 * B(0.35), -0.35, 0.3), clampR(yaw - 0.4 * by, -0.75, 0.75), -0.6 * bz + 0.03 * (g1[0] - g0[0]) * Math.sin(Math.PI * u));
       hand('both', 'relaxed');   // every finger bone reset: a gesture never lingers into a scene that only calls pose(t)
+      if (o.fingers) for (const s of [-1, 1]) {
+        const H = HANDS[s < 0 ? 'L' : 'R'], { off, arm } = drift(s);
+        H.fingers.forEach((f, i) => { const d = 0.06 * Math.sin(P2 * t / 6.3 - 0.5 * i + off) + 0.03 * arm(1.5);
+          f[0].rotation.x += d; f[1].rotation.x += d; f[2].rotation.x += 0.6 * d; H.roots[i].rotation.z = s * H.fans[i] * (1 + 0.1 * arm(1.8)); });
+      }
+      if (o.secondary) {
+        antenna.rotation.set(-2.5 * (bxAt(t) - bxAt(t - 0.25)), 0, 2.5 * (bzAt(t) - bzAt(t - 0.25)));
+        coil.rotation.set(0, 0, -3 * (bzAt(t) - bzAt(t - 0.4)) + 0.04 * Math.sin(P2 * t / 3.1));
+        redLed.emissiveIntensity = ((t % 2) + 2) % 2 < 0.12 ? 2.4 : 0.4;
+      } else { antenna.rotation.set(0, 0, 0); coil.rotation.set(0, 0, 0); redLed.emissiveIntensity = 2; }
+    }
+
+    // Gestures: layers applied after pose(t) (and after a scene's own joint settings), each blended in by k (0..1, or
+    // {s, e, w, f}: one weight each for shoulder, elbow, wrist, fingers). Vectors may be given as arrays.
+    const V3 = v => v && v.isVector3 ? v.clone() : new THREE.Vector3(...v);
+    const kOf = (k, part) => typeof k === 'number' ? k : (k[part] ?? 1);
+    const lerpE = (r, x, y, z, k) => { r.x += (x - r.x) * k; r.y += (y - r.y) * k; r.z += (z - r.z) * k; };
+    // the shoulder's turn that points the arm along dir (body space), its elbow bending toward fold
+    function armQ(dir, fold) {
+      const d = dir.clone().normalize(), y = d.clone().negate(), z = fold.clone().addScaledVector(d, -fold.dot(d)).normalize().negate(), x = new THREE.Vector3().crossVectors(y, z);
+      return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    }
+    // a.wave(t, k, side, hz): the arm up and out, the open hand swinging side to side
+    function wave(t, k = 1, side = 'R', hz = 1.3) {
+      const s = side === 'L' ? -1 : 1, wt = 2 * Math.PI * hz * t, ks = kOf(k, 's');
+      J['shoulder' + side].quaternion.slerp(armQ(new THREE.Vector3(s, 0.35, -0.25), new THREE.Vector3(0, 1, 0)), ks);
+      const e = J['elbow' + side].rotation; lerpE(e, 1.45 + 0.28 * Math.sin(wt), 0, 0, kOf(k, 'e')); e.x = Math.max(0, e.x);
+      lerpE(J['wrist' + side].rotation, 0, s * 1.5, 0.22 * s * Math.sin(wt - 0.9), kOf(k, 'w'));
+      hand(side, 'wave', kOf(k, 'f'));
+      J.body.rotation.z -= s * 0.012 * Math.sin(wt) * ks; J.head.rotation.z += s * 0.08 * ks;
+    }
+    // a.pointDir(dir, k, side): point the index finger along dir (body space); a.point(target, k, side 'auto'): at a point in the world
+    function pointDir(dir, k = 1, side = 'R') {
+      const d = V3(dir).normalize(); d.y += 0.06; d.normalize();
+      J['shoulder' + side].quaternion.slerp(armQ(d, new THREE.Vector3(0, -1, 0).addScaledVector(d, 0.3)), kOf(k, 's'));
+      const e = J['elbow' + side].rotation; lerpE(e, 0.12, 0, 0, kOf(k, 'e')); e.x = Math.max(0, e.x);
+      lerpE(J['wrist' + side].rotation, 0.05, 0, 0, kOf(k, 'w')); hand(side, 'point', kOf(k, 'f'));
+    }
+    function point(target, k = 1, side = 'auto') {
+      group.updateMatrixWorld(true); const p = J.body.worldToLocal(V3(target));
+      if (side === 'auto') side = p.x < 0 ? 'L' : 'R';
+      pointDir(p.sub(J['shoulder' + side].position), k, side);
+    }
+    // a.thumbsUp(k, side)
+    function thumbsUp(k = 1, side = 'R') {
+      const s = side === 'L' ? -1 : 1;
+      lerpE(J['shoulder' + side].rotation, 0.75, 0, s * 0.28, kOf(k, 's'));
+      const e = J['elbow' + side].rotation; lerpE(e, 1.35, 0, 0, kOf(k, 'e')); e.x = Math.max(0, e.x);
+      lerpE(J['wrist' + side].rotation, 0.1, s * Math.PI / 2, 0, kOf(k, 'w')); hand(side, 'thumbsUp', kOf(k, 'f'));
+    }
+    // a.lookAt(target, k): the helmet turns to a point in the world (within its reach; the body turns for the rest)
+    function lookAt(target, k = 1) {
+      group.updateMatrixWorld(true);
+      const P = J.body.worldToLocal(V3(target)).sub(J.head.position).sub(new THREE.Vector3(0, 0.16, 0));
+      const yaw = Math.atan2(-P.x, -P.z), pitch = Math.atan2(P.y, Math.hypot(P.x, P.z)), cy = clampR(yaw, -0.75, 0.75), cp = clampR(pitch, -0.35, 0.3);
+      J.head.rotation.x += (cp - J.head.rotation.x) * k; J.head.rotation.y += (cy - J.head.rotation.y) * k; J.body.rotation.y += 0.3 * (yaw - cy) * k;
+    }
+    // a.gesture(name, k, opts): 'wave' {t, side, hz}, 'point' {target | dir, side}, 'thumbsUp' {side}, 'look' {target},
+    // or any hand shape {side}
+    function gesture(name, k = 1, opts = {}) {
+      if (name === 'wave') return wave(opts.t || 0, k, opts.side || 'R', opts.hz);
+      if (name === 'point') return opts.target ? point(opts.target, k, opts.side || 'auto') : pointDir(opts.dir || [0, 0, -1], k, opts.side || 'R');
+      if (name === 'thumbsUp') return thumbsUp(k, opts.side || 'R');
+      if (name === 'look') return lookAt(opts.target, kOf(k, 's'));
+      return hand(opts.side || 'R', name, kOf(k, 'f'));
+    }
+    // a.gestureAt(t, name, {start, end, fade, ...}): the gesture eased in at start and out at end; the shoulder leads
+    // (with a slight overshoot), the elbow, wrist and fingers follow a beat later
+    function gestureAt(t, name, opts = {}) {
+      const { start = 0, end = Infinity, fade = 0.6 } = opts;
+      const up = tt => sstep(0, 1, (tt - start) / fade), down = tt => 1 - sstep(0, 1, (tt - end) / fade);
+      const back = x => x >= 1 ? 1 : x <= 0 ? 0 : 1 + 1.75 * (x - 1) ** 3 + 0.75 * (x - 1) ** 2;
+      const k = { s: back(up(t)) * down(t), e: up(t - 0.08) * down(t - 0.08), w: up(t - 0.16) * down(t - 0.16), f: up(t - 0.22) * down(t - 0.22) };
+      if (Math.max(k.s, k.e, k.w, k.f) > 0) gesture(name, k, { ...opts, t });
     }
 
     // Hand shapes: per finger (index to little) [MCP, PIP, DIP] flexion (+x curls toward the palm), the spread (times
@@ -883,6 +981,7 @@
     }
     return {
       group, joints: J, materials: mats, pose, rim, light, aim, lights, ready, hand, handCurl, hands: HANDS, shapes: SHAPES, visor: VIS,
+      wave, point, pointDir, thumbsUp, lookAt, gesture, gestureAt,
       setTint(r, g, b) { const c = new THREE.Color(r, g, b); for (const m of mats) m.color.copy(m.userData.base).multiply(c); },
       // opaque until it fades: a transparent material lets the parts behind show through
       setOpacity(x) { glowK = x; for (const g of glows) g.material.opacity = 0.85 * x; const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
