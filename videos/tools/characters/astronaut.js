@@ -745,7 +745,7 @@
     const briefP = [[0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12]];
     const rb = y => { y = Math.max(y, -0.2); for (let i = 1; i < briefP.length; i++) if (y <= briefP[i][1]) { const [r0, y0] = briefP[i - 1], [r1, y1] = briefP[i]; return r0 + (r1 - r0) * (y - y0) / (y1 - y0); } return briefP[briefP.length - 1][0]; };
     const HY = -0.13, KY = -0.61, KB = 0.11, KR = 0.1, AY = -1.17;   // a short thigh: the suit sits low and sturdy
-    const thighR = y => { const u = clamp01((HY - y) / 0.48); return (0.128 - 0.02 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
+    const thighR = y => { const u = clamp01((HY - y) / 0.48); return (0.12 - 0.016 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
     const shinR = (y, ph) => { const u = clamp01((KY - y) / 0.5); return (0.105 - 0.02 * u) * (1 + 0.1 * Math.sin(Math.PI * u)) * (1 + 0.06 * Math.max(0, Math.cos(ph))); };
     const legR = (s, y, ph) => {
       const dx = Math.sin(ph), dz = Math.cos(ph), cx = s * 0.105, cz = -0.035;
@@ -755,7 +755,10 @@
       if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
       const m = sstep(-0.14, -0.36, y), d = y - KY;
       let r = E + ((thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2))) - E) * m;   // a full knee
-      if (s * dx < -1e-6) r = Math.min(r, (0.105 - 0.004 * m) / -(s * dx));   // the thighs press together, never through
+      // the crotch: the two halves meet at the middle down to about -0.17, then a gap opens between the thighs and widens
+      // downward (the inner side rounded off softly, not cut flat)
+      if (s * dx < -1e-6) { const g = 0.004 * m + 0.03 * sstep(-0.16, -0.34, y), c = (0.105 - g) / -(s * dx), k = 0.03 * m, h = Math.max(k - Math.abs(r - c), 0) / (k || 1);
+        r = Math.min(r, c) - h * h * k * 0.25; }
       const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.08) ** 2)) : 0;   // the knee pad, -z
       const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.3 * pm;
       return { r: base + fold(cx + base * dx, y, cz + base * dz, Math.max(bandEnv(d, KB), 1 - sstep(-0.05, -0.2, y))) + rings(cx + base * dx, y, cz + base * dz, d, KB, Math.cos(ph)) * m, base, pm, m };
