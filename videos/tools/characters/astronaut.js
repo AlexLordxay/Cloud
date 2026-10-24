@@ -364,11 +364,11 @@
     const TEX = 0.5;
     // a lathe along -y between ball centres y0 and y1 (radii r0, r1), from angle a0 at the top ball to a1 at the bottom
     // one (0 = pole, pi/2 = the equator); open where an angle stops short of the pole
-    function phalanx(r0, r1, y0, y1, a0 = 0, a1 = 0, mat = glove, nl = 6) {
+    function phalanx(r0, r1, y0, y1, a0 = 0, a1 = 0, mat = glove, nl = 10, puff = 0.09) {
       const pts = [];
       if (a0 < Math.PI / 2) for (let i = 0; i <= 8; i++) { const a = a0 + (Math.PI / 2 - a0) * i / 8; pts.push([r0 * Math.sin(a), y0 + r0 * Math.cos(a)]); }
       else pts.push([r0, y0]);
-      for (let i = 1; i < nl; i++) { const u = i / nl; pts.push([r0 + (r1 - r0) * u, y0 + (y1 - y0) * u]); }
+      for (let i = 1; i < nl; i++) { const u = i / nl; pts.push([(r0 + (r1 - r0) * u) * (1 + puff * Math.sin(Math.PI * u)), y0 + (y1 - y0) * u]); }   // puffed between the joints
       if (a1 < Math.PI / 2) for (let i = 0; i <= 8; i++) { const a = Math.PI / 2 - (Math.PI / 2 - a1) * i / 8; pts.push([r1 * Math.sin(a), y1 - r1 * Math.cos(a)]); }
       else pts.push([r1, y1]);
       const g = lathe(pts.reverse(), 24), uv = g.attributes.uv, len = Math.abs(y0 - y1) + r0 + r1, circ = Math.PI * (r0 + r1);
@@ -380,9 +380,9 @@
       bs[0].add(phalanx(R[0], R[1], 0, -L[0]));
       bs[1].add(phalanx(R[1], R[2], 0, -L[1], 0, Math.PI / 2));
       const yt = -(L[2] - R[3]);
-      bs[1].add(phalanx(R[2], R[2], -L[1], -L[1], 0, 0));   // the ball at the last joint, carried by the middle phalanx
+      bs[1].add(phalanx(R[2], R[2], -L[1], -L[1], 0, 0, glove, 2, 0));   // the ball at the last joint, carried by the middle phalanx
       // the last phalanx: the rubber is a thimble, cut at a slant, reaching up the pad (-z) and over just the tip behind
-      const tip = phalanx(R[2], R[3], 0, yt, 0, 0, [glove, rubber], 18), g = tip.geometry, p = g.attributes.position, ix = g.index.array, gl = [], rb = [];
+      const tip = phalanx(R[2], R[3], 0, yt, 0, 0, [glove, rubber], 18, 0.05), g = tip.geometry, p = g.attributes.position, ix = g.index.array, gl = [], rb = [];
       for (let i = 0; i < ix.length; i += 3) {
         let y = 0, z = 0; for (let k = 0; k < 3; k++) { y += p.getY(ix[i + k]) / 3; z += p.getZ(ix[i + k]) / 3; }
         (y - yt < 0.004 - 0.75 * z ? rb : gl).push(ix[i], ix[i + 1], ix[i + 2]);
@@ -407,13 +407,13 @@
       const si = [], sw = [];
       for (let i = 0; i < p.count; i++) {
         const X = sp(p.getX(i)), Y = sp(p.getY(i)), Z = sp(p.getZ(i)), top = 0.012, t = (1 - Y) / 2;   // t: 0 at the wrist, 1 at the knuckles
-        const x = X * (0.046 + 0.007 * t), yk = -0.1 + 4 * x * x, y = top + (yk - (Z < 0 ? 0.014 * -Z : 0) - top) * t;
-        let z = Z * (Z < 0 ? 0.018 : 0.024) * (1 - 0.25 * Math.max(0, t - 0.8) / 0.2);
+        const x = X * (0.05 + 0.008 * t), yk = -0.1 + 4 * x * x, y = top + (yk - (Z < 0 ? 0.014 * -Z : 0) - top) * t;
+        let z = Z * (Z < 0 ? 0.022 : 0.027) * (1 - 0.25 * Math.max(0, t - 0.8) / 0.2);
         if (Z < 0) {
-          z -= 0.011 * G2(x - s * 0.027, y + 0.038, 0.02, 0.03) * -Z;    // thenar pad (the ball of the thumb)
-          z -= 0.006 * G2(x + s * 0.03, y + 0.06, 0.014, 0.032) * -Z;    // hypothenar pad
+          z -= 0.015 * G2(x - s * 0.028, y + 0.036, 0.022, 0.032) * -Z;    // thenar pad (the ball of the thumb)
+          z -= 0.009 * G2(x + s * 0.032, y + 0.06, 0.015, 0.034) * -Z;    // hypothenar pad
           z -= 0.004 * G2(x, y + 0.092, 0.05, 0.008) * -Z;               // the pad row under the fingers
-          z += 0.004 * G2(x, y + 0.062, 0.02, 0.022) * -Z;               // a shallow hollow in the middle
+          z += 0.006 * G2(x, y + 0.062, 0.02, 0.022) * -Z;               // a shallow hollow in the middle
         } else for (const f of F) z += 0.0035 * G2(x - f.x, y - f.y - 0.004, 0.008, 0.012) * Z;   // knuckles on the back
         if (y > -0.03) { const b = 0.85 * Math.sqrt(Math.max(0, 0.044 ** 2 - x * x - y * y)); if (Math.abs(z) < b) z = Math.sign(Z || 1) * b; }   // the wrist bulb
         p.setXYZ(i, x, y, z);
@@ -430,10 +430,10 @@
     }
     // name, MCP x (times s), MCP y, fan (times s), phalanx lengths (the last with the tip), radii [MCP, PIP, DIP, tip]
     const FING = [
-      ['index', 0.0335, -0.098, 0.07, [0.044, 0.026, 0.023], [0.0129, 0.0117, 0.0108, 0.0101]],
-      ['middle', 0.011, -0.1045, 0.015, [0.048, 0.029, 0.024], [0.0133, 0.0122, 0.0112, 0.0104]],
-      ['ring', -0.0125, -0.1015, -0.04, [0.045, 0.028, 0.023], [0.0127, 0.0116, 0.0107, 0.01]],
-      ['little', -0.034, -0.0925, -0.1, [0.035, 0.021, 0.02], [0.0113, 0.0104, 0.0096, 0.009]],
+      ['index', 0.0375, -0.098, 0.07, [0.044, 0.026, 0.024], [0.0148, 0.0134, 0.0124, 0.0116]],
+      ['middle', 0.0123, -0.1045, 0.015, [0.048, 0.029, 0.025], [0.0153, 0.014, 0.0129, 0.012]],
+      ['ring', -0.014, -0.1015, -0.04, [0.045, 0.028, 0.024], [0.0146, 0.0133, 0.0123, 0.0115]],
+      ['little', -0.038, -0.0925, -0.1, [0.035, 0.022, 0.021], [0.013, 0.012, 0.011, 0.0104]],
     ];
     const HANDS = {};
     for (const s of [-1, 1]) {
@@ -469,19 +469,19 @@
       el.add(at(ringY(0.052, 0.0035, glove), 0, -0.349, 0));
       // the glove (see fingerGeo, palmGeo): the wrist bone is the palm's base, every finger and the thumb have three bones
       const F = FING.map(([name, mx, my, fan, Lf, Rf]) => {
-        const root = joint(wr, s * mx, my + 0.004, -0.003); root.rotation.z = s * fan;      // its spread
+        const root = joint(wr, s * mx, my + 0.004, -0.002); root.rotation.z = s * fan;      // its spread
         const b1 = bone(root, 0, 0, 0), b2 = bone(b1, 0, -Lf[0], 0), b3 = bone(b2, 0, -Lf[1], 0);
         finger([b1, b2, b3], Lf, Rf);
         return { name, root, fan, b: [b1, b2, b3], b1, x: s * mx, y: my };
       });
       // the thumb: from inside the thenar pad, pointing down, out and forward, turned on its own axis so its pad faces
       // the fingers (opposition); bones: metacarpal (CMC), proximal (MCP), distal (IP)
-      const troot = joint(wr, s * 0.026, -0.02, -0.006);
+      const troot = joint(wr, s * 0.028, -0.022, -0.008);
       const d = new THREE.Vector3(s * 0.5, -0.78, -0.38).normalize(), padDir = new THREE.Vector3(-s * 0.8, -0.1, -0.55).normalize();
       const yA = d.clone().negate(), zA = padDir.clone().negate().addScaledVector(yA, padDir.dot(yA)).normalize(), xA = new THREE.Vector3().crossVectors(yA, zA);
       troot.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xA, yA, zA));
-      const TL = [0.042, 0.032, 0.03], t1 = bone(troot, 0, 0, 0), t2 = bone(t1, 0, -TL[0], 0), t3 = bone(t2, 0, -TL[1], 0);
-      finger([t1, t2, t3], TL, [0.0165, 0.0128, 0.0118, 0.0108]);
+      const TL = [0.042, 0.034, 0.032], t1 = bone(troot, 0, 0, 0), t2 = bone(t1, 0, -TL[0], 0), t3 = bone(t2, 0, -TL[1], 0);
+      finger([t1, t2, t3], TL, [0.022, 0.0158, 0.014, 0.0124]);   // thick at the base: it grows out of the ball of the thumb
       { const m = new THREE.SkinnedMesh(palmGeo(s, F, wr, t1), glove); m.frustumCulled = false; wr.add(m); skinned.push(m); }
       // +abduction turns the thumb about its root's z: it must move away from the index finger on both hands
       const away = troot.position.clone().addScaledVector(d, 0.1).sub(new THREE.Vector3(s * 0.0335, -0.13, 0));
@@ -604,14 +604,14 @@
     // the rest fan), the thumb [CMC flex, CMC abduction (+ away from the index), MCP, IP].
     const fist4 = [[1.35, 1.55, 0.7], [1.4, 1.6, 0.7], [1.4, 1.6, 0.7], [1.35, 1.55, 0.7]], open4 = [0, 1, 2, 3].map(() => [0.02, 0.03, 0.02]);
     const SHAPES = {
-      relaxed: { f: [[0.3, 0.45, 0.25], [0.4, 0.55, 0.3], [0.5, 0.65, 0.35], [0.6, 0.75, 0.4]], spread: 1, th: [0.15, 0, 0.15, 0.2] },
-      open: { f: open4, spread: 1.6, th: [-0.25, 0.45, 0, 0.05] },
+      relaxed: { f: [[0.35, 0.5, 0.28], [0.45, 0.6, 0.32], [0.55, 0.7, 0.36], [0.68, 0.8, 0.42]], spread: 1, th: [0.2, 0.05, 0.2, 0.25] },
+      open: { f: [[0.06, 0.12, 0.08], [0.05, 0.1, 0.07], [0.09, 0.14, 0.09], [0.15, 0.2, 0.12]], spread: 1.45, th: [-0.1, 0.4, 0.15, 0.22] },   // never ruler-straight
       fist: { f: fist4, spread: 0.2, th: [0.5, -0.1, 0.45, 0.45] },
       point: { f: [[0.05, 0.05, 0.03], ...fist4.slice(1)], spread: 0.5, th: [0.5, -0.1, 0.45, 0.45] },
       thumbsUp: { f: fist4, spread: 0.2, th: [-0.35, 0.35, -0.1, 0] },
-      wave: { f: [[0.05, 0.06, 0.03], [0.06, 0.08, 0.04], [0.08, 0.1, 0.05], [0.12, 0.14, 0.07]], spread: 1.8, th: [-0.2, 0.5, 0, 0.05] },
+      wave: { f: [[0.04, 0.08, 0.05], [0.03, 0.07, 0.05], [0.06, 0.1, 0.07], [0.1, 0.15, 0.09]], spread: 1.7, th: [-0.05, 0.45, 0.12, 0.18] },
       grip: { f: [0, 1, 2, 3].map(() => [0.9, 1.1, 0.6]), spread: 0.4, th: [0.45, 0, 0.35, 0.3] },
-      ok: { f: [[0.75, 0.9, 0.5], ...open4.slice(1)], spread: 1, th: [0.55, -0.05, 0.35, 0.35] },
+      ok: { f: [[0.95, 1.05, 0.65], [0.1, 0.15, 0.1], [0.18, 0.22, 0.12], [0.3, 0.32, 0.18]], spread: 1.1, th: [0.2, 0.2, 0.3, 0.4] },   // the thumb found by search: its tip meets the index tip
     };
     // a.hand(side 'L' | 'R' | 'both', shape name | {f, spread, th} | curl number, k): turns the fingers from where they
     // are toward the shape by k (so it layers after pose(t) and can blend between shapes over time)
