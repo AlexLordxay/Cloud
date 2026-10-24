@@ -16,8 +16,8 @@ module.exports = {
   ] },
   // pressure and the acid clouds: slow, the camera tilted up to the heavy deck
   deck: { site: 'maat', dur: 12.3, ex: 5, fog: 1 / 700, sun: [0.2, 0.85, 0.3], keys: [
-    { t: 0, pos: [170, 6.5, 300], look: [40, 30, 60] },
-    { t: 12.3, pos: [130, 6.5, 250], look: [10, 32, 30] },
+    { t: 0, pos: [170, 6.5, 300], look: [40, 17, 60] },
+    { t: 12.3, pos: [130, 6.5, 250], look: [10, 18, 30] },
   ] },
   // Maat Mons from the south-west, drawing in
   maat: { site: 'maat', dur: 10.4, ex: 5, fog: 1 / 1100, sun: [-0.65, 0.42, 0.35], ease: true, keys: [

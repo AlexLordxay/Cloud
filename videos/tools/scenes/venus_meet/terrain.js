@@ -26,13 +26,15 @@ const SKY = \`
     // the overcast: hot yellow haze at the horizon, a heavier orange-brown cloud deck overhead, a soft brighter patch
     // where the hidden Sun is (no disc); at dusk everything sinks to a dull red-brown
     // the cloud deck overhead: darker, with slow streaks of the super-rotating clouds
-    float st = 0.5 + 0.25 * sin(d.x * 9.0 / max(e, 0.08) + sin(d.z * 5.0 / max(e, 0.08)) * 1.7) + 0.15 * sin(d.z * 23.0 / max(e, 0.08));
+    float st = 0.5 + 0.14 * sin(d.x * 9.0 / max(e, 0.08) + sin(d.z * 5.0 / max(e, 0.08)) * 1.7) + 0.07 * sin(d.z * 23.0 / max(e, 0.08));
     vec3 deck = mix(vec3(0.40, 0.24, 0.10), vec3(0.58, 0.36, 0.15), st);
     vec3 day = mix(haze * 1.05, deck, smoothstep(0.0, 0.45, e));
     float a = acos(clamp(dot(d, sun), -1.0, 1.0));
     day += vec3(0.35, 0.26, 0.12) * exp(-a / 0.5) * smoothstep(-0.05, 0.3, e) * g;
     vec3 dk = day * vec3(0.38, 0.26, 0.18);
-    return mix(day, dk, dusk);
+    // at dawn and dusk the hidden Sun still lights a warm patch of haze low over the horizon
+    vec3 glow = vec3(0.95, 0.55, 0.22) * exp(-a / 0.32) * (1.0 - smoothstep(0.0, 0.35, e)) * dusk * 0.9 * g;
+    return mix(day, dk, dusk) + glow;
   }\`;
 const EX = ${shot.ex || 2.5};                          // vertical exaggeration (stated in the notes)
 async function setup() {
