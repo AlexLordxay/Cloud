@@ -708,14 +708,18 @@
       return d + 0.0012 * (vnoise(x * 55, y * 55, z * 55) - 0.5) * 2;                   // the cloth, a little uneven
     };
     const bootShell = M({ color: 0xeceae3, roughness: 0.4, metalness: 0 });
-    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
+    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.05, vertexColors: true });
     const bootGeo = (() => {
       const { P, N, idx } = surfaceNets(bootSD, -0.12, -0.1, -0.31, 0.24, 0.25, 0.46, 0.0032), cloth = [], cap = [];
-      for (let i = 0; i < idx.length; i += 3) {   // the toe cap (a slanted edge, higher at the front) and the heel counter: lacquered
+      for (let i = 0; i < idx.length; i += 3) {   // the toe cap (a slanted edge, higher at the front, above the rubber): lacquered
         let y = 0, z = 0; for (let k = 0; k < 3; k++) { y += P[3 * idx[i + k] + 1] / 3; z += P[3 * idx[i + k] + 2] / 3; }
-        const yb = y - spring(z) - BY; (z < -0.175 - 0.35 * yb || z > 0.075 + 0.5 * yb ? cap : cloth).push(idx[i], idx[i + 1], idx[i + 2]);
+        const yb = y - spring(z) - BY; (z < -0.175 - 0.35 * yb && yb > 0.016 ? cap : cloth).push(idx[i], idx[i + 1], idx[i + 2]);
       }
+      // the sole's rubber wraps up the boot's lower edge (a cupsole): the cloth turns dark rubber below 1.5 cm, a soft edge
+      const col = new Float32Array(P.length), R = [0.023, 0.024, 0.027];
+      for (let q = 0; q < P.length / 3; q++) { const yb = P[3 * q + 1] - spring(P[3 * q + 2]) - BY, k = sstep(0.0175, 0.0135, yb); for (let c = 0; c < 3; c++) col[3 * q + c] = 1 + (R[c] - 1) * k; }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+      g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       g.setIndex(cloth.concat(cap)); g.addGroup(0, cloth.length, 0); g.addGroup(cloth.length, cap.length, 1); return boxUV(g, 0.5);
     })();
     // a ray from c along dir to the boot's surface (for the straps and the sole's outline)
@@ -728,9 +732,9 @@
       const zs = [], hw = [], Ys = []; for (let y = BY + 0.004; y < BY + 0.07; y += 0.005) Ys.push(y);
       let zH = 0, zT = 0; for (const y of Ys) { for (let z = 0; z < 0.2; z += 0.001) if (bootSD(0, y, z) < 0) zH = Math.max(zH, z); for (let z = 0; z > -0.35; z -= 0.001) if (bootSD(0, y + spring(z), z) < 0) zT = Math.min(zT, z); }
       for (let i = 1; i < 60; i++) { const z = zH + (zT - zH) * i / 60; zs.push(z); hw.push(Math.max(...Ys.map(y => bootHit(new THREE.Vector3(0, y + spring(z), z), new THREE.Vector3(1, 0, 0)).x))); }
-      const sh = new THREE.Shape(), W = 0.006; sh.moveTo(0, zH + W); zs.forEach((z, i) => sh.lineTo(hw[i] + W, z)); sh.lineTo(0, zT - W); zs.slice().reverse().forEach((z, i) => sh.lineTo(-hw[hw.length - 1 - i] - W, z));
-      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.026, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2, curveSegments: 4 });
-      g.rotateX(Math.PI / 2); g.translate(0, BY + 0.003, 0);
+      const sh = new THREE.Shape(), W = 0.004; sh.moveTo(0, zH + W); zs.forEach((z, i) => sh.lineTo(hw[i] + W, z)); sh.lineTo(0, zT - W); zs.slice().reverse().forEach((z, i) => sh.lineTo(-hw[hw.length - 1 - i] - W, z));
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.007, bevelSize: 0.005, bevelSegments: 4, curveSegments: 4 });
+      g.rotateX(Math.PI / 2); g.translate(0, BY + 0.008, 0);
       const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, p.getY(i) + spring(p.getZ(i)));
       return smoothNormals(g, 40); })();
     // Each leg is one skinned half of the pants, from under the waist ring to inside the boot cuff. At the top its cross
