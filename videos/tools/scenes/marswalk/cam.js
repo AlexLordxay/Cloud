@@ -228,10 +228,10 @@
       return g;
     }
     // the fine mesh round the path
-    const X0 = -16, X1 = 16, Z0 = -26, Z1 = 18, STEP = 0.1, NX = Math.round((X1 - X0) / STEP) + 1, NZ = Math.round((Z1 - Z0) / STEP) + 1;
+    const X0 = -16, X1 = 16, Z0 = -26, Z1 = 18, DX = 0.1, NX = Math.round((X1 - X0) / DX) + 1, NZ = Math.round((Z1 - Z0) / DX) + 1;
     const nearGeo = (() => {
       const pos = new Float32Array(NX * NZ * 3), idx = new Uint32Array((NX - 1) * (NZ - 1) * 6);
-      for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const x = X0 + i * STEP, z = Z0 + j * STEP; pos.set([x, G(x, z), z], (j * NX + i) * 3); }
+      for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const x = X0 + i * DX, z = Z0 + j * DX; pos.set([x, G(x, z), z], (j * NX + i) * 3); }
       let m = 0; for (let j = 0; j < NZ - 1; j++) for (let i = 0; i < NX - 1; i++) { const q = j * NX + i; idx.set([q, q + NX, q + 1, q + 1, q + NX, q + NX + 1], m); m += 6; }
       return terrainGeo(pos, idx, 60);
     })();
