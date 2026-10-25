@@ -186,12 +186,12 @@
       vec3 skyCol(vec3 d) {
         float e = d.y;
         vec3 c = mix(vec3(0.22, 0.165, 0.135), vec3(0.045, 0.045, 0.06), smoothstep(-0.02, 0.4, e));
-        vec3 dh = normalize(vec3(d.x, d.y * 1.5, d.z));
+        vec3 dh = normalize(vec3(d.x, d.y * 2.0, d.z));
         float a = acos(clamp(dot(dh, sunD), -1.0, 1.0));
         float toward = max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(sunD.x, 0.0, sunD.z))), 0.0);
-        c += vec3(0.13, 0.24, 0.46) * exp(-a / 0.4) * 0.9 + vec3(0.2, 0.38, 0.72) * exp(-a / 0.16) * 1.1 + vec3(0.6, 0.8, 1.0) * exp(-a / 0.045) * 1.3;
+        c += vec3(0.09, 0.15, 0.28) * exp(-a / 0.3) * 0.7 + vec3(0.2, 0.36, 0.66) * exp(-a / 0.11) * 0.95 + vec3(0.6, 0.8, 1.0) * exp(-a / 0.035) * 1.2;
         c += vec3(0.2, 0.15, 0.13) * exp(-max(e, 0.0) / 0.04) * (0.25 + 0.45 * toward);   // the dusty band along the horizon
-        return pow(c, vec3(2.2)) * 1.8;
+        return pow(c, vec3(2.2)) * 1.5;
       }`;
     const sky = new T.Mesh(new T.SphereGeometry(8000, 64, 32), new T.ShaderMaterial({
       side: T.BackSide, depthWrite: false, uniforms: { sunD: { value: sun }, phoD: { value: phobos } },
@@ -331,12 +331,12 @@
       g.computeVertexNormals(); return g;
     });
     const rng = (() => { let s = 12345; return () => { s = Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((s >>> 0) % 1e6) / 1e6; }; })();
-    const NROCK = 1100, perShape = Math.ceil(NROCK / 3);
+    const NROCK = 750, perShape = Math.ceil(NROCK / 3);
     const rockMeshes = shapes.map(g => { const m = new T.InstancedMesh(g, rockMat, perShape); m.castShadow = m.receiveShadow = true; m.count = 0; scene.add(m); return m; });
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), V = new T.Vector3(), SC = new T.Vector3(), Cc = new T.Color();
     for (let k = 0; k < NROCK * 3 && rockMeshes.some(m => m.count < perShape); k++) {
       const x = -15 + 30 * rng(), z = -25 + 42 * rng(), u = rng();
-      let s = Math.min(1.3, 0.035 / Math.pow(1 - 0.985 * u, 0.55));
+      let s = Math.min(1.3, 0.05 / Math.pow(1 - 0.985 * u, 0.5));
       if (Math.abs(x) < 0.9 + s && z > -6 && z < 17) continue;       // keep the path clear
       if (pathMask(x, z) < 0.5 && s > 0.12) s *= 0.4;
       const m = rockMeshes[k % 3]; if (m.count >= perShape) continue;
@@ -344,19 +344,19 @@
       SC.set(s * (0.8 + 0.4 * rng()), s, s * (0.8 + 0.4 * rng()));
       V.set(x, G(x, z) + s * 0.1, z); M4.compose(V, Q, SC); m.setMatrixAt(m.count, M4);
       const l = lit(x, G(x, z) + s * 0.5, z, 60), v = 0.75 + 0.4 * rng();
-      Cc.setRGB(0.36 * v, 0.24 * v, 0.17 * v).convertSRGBToLinear().multiplyScalar(0.55 + 0.45 * l); m.setColorAt(m.count, Cc);
+      Cc.setRGB(0.5 * v, 0.33 * v, 0.23 * v).convertSRGBToLinear().multiplyScalar(0.7 + 0.3 * l); m.setColorAt(m.count, Cc);
       m.count++;
     }
     rockMeshes.forEach(m => { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
 
     // the light: the low Sun (its shadow map covers the walk and the rocks round it: the Sun is so low that this
     // box reaches far along the ground), a dim brown sky and ground, a cool rim on the figure
-    const key = new T.DirectionalLight(0xfff4ea, 3.6);
+    const key = new T.DirectionalLight(0xfff1e2, 2.6);
     key.position.copy(sun).multiplyScalar(80).add(new T.Vector3(0, 0, -5)); key.target.position.set(0, 0, -5);
     key.castShadow = true; key.shadow.mapSize.set(4096, 4096); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 3;
     Object.assign(key.shadow.camera, { left: -16, right: 16, top: 7, bottom: -7, near: 15, far: 170 });
     scene.add(key, key.target);
-    scene.add(new T.HemisphereLight(0x6a7088, 0x4a2c1e, 0.32));
+    scene.add(new T.HemisphereLight(0x6a7088, 0x4a2c1e, 0.38));
     a.rim.color.value.setRGB(0.45, 0.65, 1.0);
     scene.environment = window.__astronautEnv(T, r.renderer, { warm: sun });
 
@@ -369,11 +369,11 @@
   // low by the boots (a step into the dust), alongside, ahead-left looking back, round behind on the crest for the
   // flag, then up and back over the valley into the blue dusk.
   const CAM = [
-    [0.0, [0.55, -1.12, 1.3], [0.0, -1.0, -0.9]],
-    [2.6, [1.1, -0.65, 1.9], [0.0, -0.5, -0.6]],
+    [0.0, [0.7, -1.1, 1.9], [0.05, -0.85, -1.2]],
+    [2.6, [1.2, -0.7, 2.4], [0.0, -0.45, -0.8]],
     [4.6, [4.8, 0.15, 1.2], [0, -0.2, -0.8]],
     [7.2, [3.8, 0.5, -3.0], [0, -0.15, 0]],
-    [9.8, [-2.8, 1.2, -4.2], [0, -0.25, 0.3]],
+    [9.8, [-2.6, 0.5, -4.4], [0, 0.0, 0.3]],
     [12.0, [-1.2, 0.6, 4.8], [0, -0.1, -2.0]],
     [13.4, [2.0, 0.2, 2.8], [0.0, -0.1, -0.8]],
     [15.8, [2.3, 0.4, 3.6], [-0.1, -0.1, -1.2]],
