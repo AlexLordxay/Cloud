@@ -112,7 +112,7 @@
   const L1 = Math.hypot(0.48, 0.02), L2 = Math.hypot(0.56, 0.02), O1 = Math.atan2(0.02, 0.48), O2 = Math.atan2(0.02, 0.56);
   function legIK(a, side, A, bx) {
     const J = a.joints, hp = J['hip' + side].getWorldPosition(new a.T.Vector3());
-    let dy = A[1] - hp.y, dz = A[2] - hp.z, D = Math.hypot(dy, dz); const Dm = L1 + L2 - 0.004;
+    let dy = A[1] - hp.y, dz = A[2] - hp.z, D = Math.hypot(dy, dz); const Dm = L1 + L2 - 0.0015;
     if (D > Dm) { dy *= Dm / D; dz *= Dm / D; D = Dm; }
     const phi = Math.atan2(-dz, -dy), al = Math.acos(clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
     const th1 = phi + al, ky = hp.y - L1 * Math.cos(th1), kz = hp.z - L1 * Math.sin(th1);
@@ -127,7 +127,7 @@
   // while it can; when the hip has moved on beyond the leg's reach it rolls (behind the hip over the toe: the heel
   // comes off; ahead of it onto the heel: the heel strike), the toe or heel pinned where it touches; and it rolls a
   // little more where the ankle would bend too far. The same in the swing, so takeoff and landing join smoothly.
-  const TOE = [-ANKLE_UP, -0.16], HEEL = [-ANKLE_UP, 0.09], AX_UP = 0.35, AX_DN = -0.3, DMAX = L1 + L2 - 0.01;
+  const TOE = [-ANKLE_UP, -0.16], HEEL = [-ANKLE_UP, 0.09], AX_UP = 0.35, AX_DN = -0.3, DMAX = L1 + L2 - 0.0035;   // the standing leg nearly straight (~9° at the knee: near full stretch a few mm make a big bend)
   const rot = (p, y, z) => [y * Math.cos(p) - z * Math.sin(p), y * Math.sin(p) + z * Math.cos(p)];
   function rolled(F, p) {
     const d = p - F[3]; if (Math.abs(d) < 1e-6) return F;
@@ -190,7 +190,8 @@
     const dzs = ph < 0.5 ? (0.5 - ph) * Li : (ph - 0.5) * Ln;
     let gs = 0; for (let k = -2; k <= 2; k++) gs += G(0, hz + 0.2 * k) / 5;
     const pk0 = plant(t);
-    const y = gs + ANKLE_UP + 0.13 + Math.sqrt(DMAX * DMAX - dzs * dzs) - 0.02 - pk0.crouch;
+    const rise = Math.max(0, (G(0, hz - 0.4) - G(0, hz + 0.4)) / 0.8);   // uphill the foot ahead stands higher: reach it straight
+    const y = gs + rise * dzs + ANKLE_UP + 0.13 + Math.sqrt(DMAX * DMAX - dzs * dzs) - pk0.crouch;
     const lead = (fr[2] - fl[2]) / -STEP;                    // + when the right foot is ahead
     const sway = 0.025 * Math.sin(Math.PI * clamp((t + 0.3) / PER, 0, 99)) * stride;
     a.group.position.set(sway, y, z);
@@ -202,8 +203,11 @@
     placeFoot(a, 'L', fl, bx); placeFoot(a, 'R', fr, bx);
     // the left arm swings against the legs; the right one carries the flag (and plants it, see PLANT)
     const sw = lead, pk = plant(t);
-    J.shoulderL.rotation.set(0.08 + 0.32 * sw * stride + pk.shL, -0.05, -0.27);
-    J.elbowL.rotation.set(0.55 + 0.25 * Math.max(0, sw) * stride + 0.3 * pk.shL, 0, 0);
+    // the left arm hangs at the side, the elbow a little bent, the palm towards the thigh (at rest the palm faces
+    // forward: the wrist turns it in)
+    J.shoulderL.rotation.set(0.04 + 0.3 * sw * stride + pk.shL, -0.05, -0.17);
+    J.elbowL.rotation.set(0.25 + 0.2 * Math.max(0, sw) * stride + 0.3 * pk.shL, 0, 0);
+    J.wristL.rotation.set(0.05, -1.4, -0.04);
     J.shoulderR.rotation.set(pk.shX - 0.06 * sw * stride, 0.05, pk.shZ);
     J.elbowR.rotation.set(pk.el, 0, 0);
     J.wristR.rotation.set(0, Math.PI / 2, 0);
