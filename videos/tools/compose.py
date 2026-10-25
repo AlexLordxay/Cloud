@@ -35,6 +35,9 @@ f_tick = font('Unbounded.ttf', 96, 600)
 f_name = font('Unbounded.ttf', 64, 600)
 f_small = font('Commissioner.ttf', 26, 500)
 
+f_btn = font('Commissioner.ttf', 40, 700)
+f_tease = font('Unbounded.ttf', 50, 600)
+
 _hooks = {}
 def hook_font(sc):
     # HOOK_SIZE in captions.py: a bigger opening title
@@ -104,6 +107,56 @@ def draw_logo(img, size, cy, alpha, t):
     img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(10)))
     img.alpha_composite(lay, (x, y))
 
+# ---- the subscribe button: a red pill with a bell; a tap (a ripple), it turns grey 'Ви підписані' and the bell rings ----
+def bell_layer(px, col):
+    # a bell icon, drawn 4x and scaled down: a knob, a dome flaring to a rim, the clapper below
+    S = 4 * px; im = Image.new('RGBA', (S, S), (0, 0, 0, 0)); d = ImageDraw.Draw(im); c = col + (255,)
+    d.ellipse((S * 0.44, S * 0.06, S * 0.56, S * 0.18), fill=c)
+    pts = [(S * 0.5 + S * 0.3 * math.sin(a) * (0.55 + 0.45 * (1 - math.cos(a)) / 2), S * 0.15 + S * 0.62 * (1 - math.cos(a)) / 2) for a in [k / 20 * math.pi for k in range(21)]]
+    body = [(S * 0.5, S * 0.15)] + [(x, y) for x, y in pts] + [(S * 0.86, S * 0.77), (S * 0.14, S * 0.77)] + [(S - x, y) for x, y in reversed(pts)]
+    d.polygon(body, fill=c)
+    d.rounded_rectangle((S * 0.1, S * 0.72, S * 0.9, S * 0.8), radius=S * 0.04, fill=c)
+    d.ellipse((S * 0.41, S * 0.8, S * 0.59, S * 0.96), fill=c)
+    return im.resize((px, px), Image.LANCZOS)
+
+_BELLS = {}
+def draw_subscribe(img, cx, cy, tl, dur, align='left', scale=1.0):
+    # tl: seconds since the button appeared; it stays dur seconds. align 'left': cx is its left edge, it slides in.
+    a_in, a_out = ease(tl / 0.35), 1 - ease((tl - (dur - 0.4)) / 0.4)
+    al = max(0.0, min(a_in, a_out))
+    if al <= 0: return
+    tap = 0.75
+    done = tl >= tap
+    press = 1 - 0.07 * max(0.0, 1 - abs(tl - tap) / 0.12)
+    sc = scale * press
+    text = 'Ви підписані' if done else 'Підписатися'
+    fill = (62, 66, 76) if done else (229, 31, 31)
+    f = f_btn if scale == 1 else font('Commissioner.ttf', int(40 * scale), 700)
+    d0 = ImageDraw.Draw(img)
+    tw = d0.textlength(text, font=f)
+    bh = int(84 * sc); bw = int(tw + 150 * sc); ix = int(56 * sc)
+    lay = Image.new('RGBA', (bw + 40, bh + 40), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
+    d.rounded_rectangle((20, 20, 20 + bw, 20 + bh), radius=bh // 2, fill=fill + (int(235 * al),))
+    key = (ix, done)
+    if key not in _BELLS: _BELLS[key] = bell_layer(ix, (255, 255, 255))
+    bell = _BELLS[key]
+    ang = 24 * math.sin(2 * math.pi * 5 * (tl - tap - 0.05)) * math.exp(-3 * (tl - tap - 0.05)) if tl > tap + 0.05 else 0
+    b = bell.rotate(ang, resample=Image.BICUBIC, center=(ix / 2, ix * 0.12))
+    if al < 1: b.putalpha(b.getchannel('A').point(lambda v: int(v * al)))
+    lay.alpha_composite(b, (20 + int(26 * sc), 20 + (bh - ix) // 2))
+    d.text((20 + int(26 * sc) + ix + int(18 * sc), 20 + bh / 2), text, font=f, fill=(255, 255, 255, int(255 * al)), anchor='lm')
+    x = int(cx - 40 * (1 - a_in)) if align == 'left' else int(cx - (bw + 40) / 2)
+    y = int(cy - (bh + 40) / 2)
+    sh = Image.new('RGBA', img.size, (0, 0, 0, 0)); shl = Image.new('RGBA', lay.size, (0, 0, 0, 0)); shl.putalpha(lay.getchannel('A').point(lambda v: int(v * 0.6)))
+    sh.paste(shl, (x, y + 4)); img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(12)))
+    img.alpha_composite(lay, (x, y))
+    if tap - 0.05 < tl < tap + 0.45:   # the tap: a ripple from the middle of the button
+        u = (tl - tap + 0.05) / 0.5; r = 18 + 70 * u * sc
+        rp = Image.new('RGBA', img.size, (0, 0, 0, 0)); ex, ey = x + 20 + bw * 0.62, y + 20 + bh / 2
+        ImageDraw.Draw(rp).ellipse((ex - r, ey - r, ex + r, ey + r), outline=(255, 255, 255, int(200 * (1 - u) * al)), width=max(2, int(5 * sc)))
+        ImageDraw.Draw(rp).ellipse((ex - 14 * sc, ey - 14 * sc, ex + 14 * sc, ey + 14 * sc), fill=(255, 255, 255, int(150 * max(0.0, 1 - u * 2) * al)))
+        img.alpha_composite(rp)
+
 def frame(sc, i, src):
     t = i / FPS
     im = Image.open(src).convert('RGB').resize((W, H), Image.LANCZOS)
@@ -172,6 +225,10 @@ def frame(sc, i, src):
         if al <= 0: continue
         if kind == 'hook': draw_block(img, text, hook_font(sc), 520, al, spacing=18)
         else: draw_block(img, text, f_cap, kind if isinstance(kind, (int, float)) else 1400, al)   # a number: own height (rows)
+    # SUBSCRIBE_AT in captions.py: a small subscribe button mid-video (top left, clear of the Shorts buttons), 2.4 s
+    sub = getattr(sc, 'SUBSCRIBE_AT', None)
+    if sub is not None and sub <= t < sub + 2.4:
+        draw_subscribe(img, 60, getattr(sc, 'SUBSCRIBE_Y', 290), t - sub, 2.4)
     for a, b, text in getattr(sc, 'CREDITS', []):
         # small print at the bottom (whose picture, artist's view)
         al = ease(fade(t, a, b, 0.5))
@@ -182,6 +239,11 @@ def frame(sc, i, src):
         draw_logo(img, 120, 920, e(0.9), t)
         draw_block(img, 'посилання в профілі', f_end2, 1050, e(0.9), fill=SUN)
         draw_block(img, 'автор: lord-xay', f_end3, 1130, e(1.5), fill=(200, 208, 224))
+        # NEXT_TEASE in captions.py: what comes next, and the subscribe button (it gets tapped) under it
+        tease = getattr(sc, 'NEXT_TEASE', None)
+        if tease:
+            draw_block(img, tease, f_tease, 1280, e(1.1), fill=(255, 255, 255))
+            if t > sc.END_CARD + 1.3: draw_subscribe(img, W / 2, 1400, t - sc.END_CARD - 1.3, 99, align='center', scale=1.15)
     return img.convert('RGB')
 
 def _job(args):
