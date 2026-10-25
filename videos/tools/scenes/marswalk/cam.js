@@ -64,112 +64,29 @@
   }
   const H0 = H(0, 0);
   const G = (x, z) => H(x, z) - H0;   // the ground, with the start of the path at y = 0
-  const slopeZ = (x, z) => Math.atan((G(x, z - 0.15) - G(x, z + 0.15)) / 0.3);   // + where it rises ahead (-z)
 
   // ---------------- the walk ----------------
-  // footprints: [time it lands, z of the ankle, side]; steps of 0.8 every 0.76 s, then shorter ones to a stop on the crest
-  const STEP = 0.8, PER = 0.76;
-  const PRINTS = (() => {
-    const lens = [...Array(14).fill(STEP), 0.55, 0.32, 0.15], durs = [...Array(14).fill(PER), 0.72, 0.66, 0.6];
-    const total = lens.reduce((a, b) => a + b, 0), z0 = RIDGE + 0.15 + total;
-    const P = [[-0.3 - PER, z0 + STEP, 'R'], [-0.3, z0, 'L']];
-    lens.forEach((L, i) => { const [t, z, s] = P[P.length - 1]; P.push([t + durs[i], z - L, s === 'L' ? 'R' : 'L']); });
-    return P;
-  })();
-  const FOOT_X = 0.135, ANKLE_UP = 0.101;   // the sole's underside is 0.103 below the ankle pivot (sunk 2 mm)
-  // where a foot would be at t if it stayed flat: [x, y, z, slope] of the ankle pivot (+ toe up); placeFoot rolls it
-  function foot(side, t) {
-    const own = PRINTS.map((p, i) => [p, i]).filter(([p]) => p[2] === side);
-    let k = own.length - 1; while (k > 0 && own[k][0][0] > t) k--;
-    const [cur, ci] = own[k], next = own[k + 1], x = (side === 'L' ? -1 : 1) * FOOT_X;
-    // + the swing's progress (-1: standing), the lift, and the foot's pitch (+ toe up; see placeFoot)
-    const at = z => [x, G(x, z) + ANKLE_UP, z, slopeZ(x, z), -1, 0, slopeZ(x, z)];
-    // standing: it lands on the heel (toe up), goes flat, and the heel comes up shortly before the other foot lands,
-    // so at push-off it stands steeply on the toe (amp: how steeply, less for the short last steps)
-    const stance = (A, ho, t0, amp) => { A[6] = A[3] + HEEL_UP * (1 - smooth((t - cur[0]) / 0.15)) * (k > 0 || t >= cur[0] ? 1 : 0); if (ho != null) A[6] -= amp * smooth((t - ho) / (t0 - ho)); return A; };
-    if (!next) return stance(at(cur[1]));
-    const prevOther = PRINTS[next[1] - 1], t0 = prevOther[0] + 0.1 * (next[0][0] - prevOther[0]), t1 = next[0][0];
-    const amp = TOE_OFF * clamp(Math.abs(next[0][1] - cur[1]) / (2 * STEP), 0, 1), ho = prevOther[0] - 0.34;
-    if (t < t0) return stance(at(cur[1]), ho, t0, amp);
-    const u = clamp((t - t0) / (t1 - t0), 0, 1), e = u * u * (3 - 2 * u), a = at(cur[1]), b = at(next[0][1]);
-    const lift = 0.085 * Math.sin(Math.PI * Math.pow(u, 0.8)) * Math.min(1, (b[2] - a[2]) / -0.5 + 0.3);
-    const w = smooth((u - 0.05) / 0.8);                     // the foot swings from toe-down to toe-up for the heel strike
-    return [x, a[1] + (b[1] - a[1]) * e + lift, a[2] + (b[2] - a[2]) * e, a[3] + (b[3] - a[3]) * e, u, lift, (a[3] - amp) * (1 - w) + (b[3] + HEEL_UP) * w];
-  }
-  // the pelvis: midway between the feet when a foot lands, gliding between those points (Catmull-Rom in time)
-  const KNOTS = PRINTS.slice(1).map((p, i) => [p[0], (p[1] + PRINTS[i][1]) / 2]);
-  function pelvisZ(t) {
-    const K = KNOTS, n = K.length; if (t <= K[0][0]) return K[0][1] + (K[0][0] - t) * (K[1][1] - K[0][1]) / (K[1][0] - K[0][0]);
-    if (t >= K[n - 1][0]) return K[n - 1][1];
-    let i = 0; while (K[i + 1][0] < t) i++;
-    const p0 = K[Math.max(i - 1, 0)], p1 = K[i], p2 = K[i + 1], p3 = K[Math.min(i + 2, n - 1)], u = (t - p1[0]) / (p2[0] - p1[0]);
-    const m1 = (p2[1] - p0[1]) / (p2[0] - p0[0] || 1) * (p2[0] - p1[0]), m2 = (p3[1] - p1[1]) / (p3[0] - p1[0] || 1) * (p2[0] - p1[0]);
-    const h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u, h11 = u ** 3 - u * u;
-    return h00 * p1[1] + h10 * m1 + h01 * p2[1] + h11 * m2;
-  }
-  // 0 when a foot lands, 1 just before the next one; and how much of a stride is going on (0 once standing)
-  function phase(t) {
-    let i = 0; while (i < PRINTS.length - 1 && PRINTS[i + 1][0] <= t) i++;
-    if (i >= PRINTS.length - 1) return [0, 0];
-    return [(t - PRINTS[i][0]) / (PRINTS[i + 1][0] - PRINTS[i][0]), clamp(Math.abs(PRINTS[i + 1][1] - PRINTS[i][1]) / STEP, 0, 1)];
-  }
-
-  // two-bone IK in the side (y, z) plane: forward angle 0 = straight down, + = forward (-z)
-  const L1 = Math.hypot(0.48, 0.02), L2 = Math.hypot(0.56, 0.02), O1 = Math.atan2(0.02, 0.48), O2 = Math.atan2(0.02, 0.56);
-  function legIK(a, side, A, bx) {
-    const J = a.joints, hp = J['hip' + side].getWorldPosition(new a.T.Vector3());
-    let dy = A[1] - hp.y, dz = A[2] - hp.z, D = Math.hypot(dy, dz); const Dm = L1 + L2 - 0.0015;
-    if (D > Dm) { dy *= Dm / D; dz *= Dm / D; D = Dm; }
-    const phi = Math.atan2(-dz, -dy), al = Math.acos(clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
-    const th1 = phi + al, ky = hp.y - L1 * Math.cos(th1), kz = hp.z - L1 * Math.sin(th1);
-    const th2 = Math.atan2(-(hp.z + dz - kz), -(hp.y + dy - ky));
-    const hx = th1 + O1 - bx, kx = th2 - O2 - (bx + hx);
-    const s = side === 'L' ? -1 : 1;
-    J['hip' + side].rotation.set(hx, 0, s * Math.atan2(Math.abs(A[0]) - 0.105, 1.0));
-    J['knee' + side].rotation.set(kx, 0, 0);
-    return bx + hx + kx;                                    // the shin's forward angle
-  }
-  // The suit's ankle bends high up the shin (the foot turns inside the boot), so it can't bend far. A foot stays flat
-  // while it can; when the hip has moved on beyond the leg's reach it rolls (behind the hip over the toe: the heel
-  // comes off; ahead of it onto the heel: the heel strike), the toe or heel pinned where it touches; and it rolls a
-  // little more where the ankle would bend too far. The same in the swing, so takeoff and landing join smoothly.
-  const TOE = [-ANKLE_UP, -0.16], HEEL = [-ANKLE_UP, 0.09], AX_UP = 0.25, HEEL_UP = 0.15, TOE_OFF = 0.75, DMAX = L1 + L2 - 0.0035;   // the standing leg nearly straight (~9° at the knee: near full stretch a few mm make a big bend)
-  const rot = (p, y, z) => [y * Math.cos(p) - z * Math.sin(p), y * Math.sin(p) + z * Math.cos(p)];
-  function rolled(F, p) {
-    const d = p - F[3]; if (Math.abs(d) < 1e-6) return F;
-    const pv = d < 0 ? TOE : HEEL, w = rot(F[3], pv[0], pv[1]), r = rot(p, pv[0], pv[1]);
-    return [F[0], F[1] + w[0] - r[0], F[2] + w[1] - r[1], p];
-  }
-  function placeFoot(a, side, F, bx) {
-    const hp = a.joints['hip' + side].getWorldPosition(new a.T.Vector3());
-    const over = p => { const A = rolled(F, p); return Math.hypot(A[1] - hp.y, A[2] - hp.z) - DMAX; };
-    let p = F[6];
-    if (over(p) > 0) {                                       // still out of reach: roll just enough more
-      let lo = p, hi = p + (F[2] > hp.z ? -0.8 : 0.6);
-      if (over(hi) > 0) p = hi; else { for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (over(mid) > 0) lo = mid; else hi = mid; } p = hi; }
-    }
-    let psi = legIK(a, side, rolled(F, p), bx);
-    if (F[4] >= 0) {                                         // in the air the foot hangs nearly in line with the shin
-      const m = 0.85 * Math.sin(Math.PI * F[4]);
-      for (let i = 0; i < 2; i++) { p = F[6] + (psi + 0.05 - F[6]) * m; psi = legIK(a, side, rolled(F, p), bx); }
-    }
-    if (p - psi > AX_UP && p <= F[3]) { p = Math.min(p, psi + AX_UP); psi = legIK(a, side, rolled(F, p), bx); }   // never a deep bend at the ankle
-    a.joints['ankle' + side].rotation.set(clamp(p - psi, -0.6, 0.4), 0, -(side === 'L' ? -1 : 1) * 0.02);
-  }
+  // the astronaut's own walker (characters/astronaut.js, a.walk): 14 steps of 0.8 every 0.76 s up the slope, then
+  // three short ones to a stop on the crest. PRINTS (set in setup): [time it lands, z, side, x] of every footprint.
+  const STEP = 0.8, PER = 0.76, NSTEP = 14;
+  let W = null, PRINTS = null;
 
   // The plant, after the last step: the right arm lifts the flag high, holds a beat, thrusts it down into the ground
   // (leaning in, knees bending), holds, lets go and steps the arm back. Keys: [t, shoulder x, shoulder z, elbow, body
   // lean (- forward), crouch, left shoulder, head]; the thrust accelerates, the rest ease in and out.
-  const T_LAST = PRINTS[PRINTS.length - 1][0];
-  const PLANT = [
-    [T_LAST - 0.15, 0.15, 0.3, 1.25, 0, 0, 0, 0],
-    [T_LAST + 0.55, 1.3, 0.38, 0.95, 0.05, -0.01, 0.15, 0.12],
-    [T_LAST + 0.85, 1.42, 0.38, 0.85, 0.07, 0, 0.2, 0.15],
-    [T_LAST + 1.12, 0.52, 0.3, 0.22, -0.27, 0.15, 0.4, -0.05],
-    [T_LAST + 1.75, 0.5, 0.3, 0.22, -0.26, 0.15, 0.4, -0.05],
-    [T_LAST + 2.5, 0.08, 0.27, 0.55, 0, 0, 0, 0],
-  ];
-  const T_HIT = T_LAST + 1.06, T_DOWN = T_LAST + 1.12, T_REL = T_LAST + 1.7;   // the spike touches; all the way in; let go
+  let T_LAST, PLANT, T_HIT, T_DOWN, T_REL;
+  function initPlant() {
+    T_LAST = PRINTS[PRINTS.length - 1][0];
+    PLANT = [
+      [T_LAST - 0.15, 0.15, 0.3, 1.25, 0, 0, 0, 0],
+      [T_LAST + 0.55, 1.3, 0.38, 0.95, 0.05, -0.01, 0.15, 0.12],
+      [T_LAST + 0.85, 1.42, 0.38, 0.85, 0.07, 0, 0.2, 0.15],
+      [T_LAST + 1.12, 0.52, 0.3, 0.22, -0.27, 0.15, 0.4, -0.05],
+      [T_LAST + 1.75, 0.5, 0.3, 0.22, -0.26, 0.15, 0.4, -0.05],
+      [T_LAST + 2.5, 0.08, 0.27, 0.55, 0, 0, 0, 0],
+    ];
+    T_HIT = T_LAST + 1.06; T_DOWN = T_LAST + 1.12; T_REL = T_LAST + 1.7;   // the spike touches; all the way in; let go
+  }
   function plant(t) {
     const K = PLANT; let i = 0;
     if (t <= K[0][0]) i = -1; else while (i < K.length - 1 && K[i + 1][0] < t) i++;
@@ -185,48 +102,21 @@
   const GRIP_AT = [0, -0.108, -0.045];
 
   function walk(a, t) {
-    const J = a.joints;
-    a.pose(t, { glance: false });                            // breathing, fingers, the antenna
-    const fl = foot('L', t), fr = foot('R', t), [ph, stride] = phase(t);
-    const z = pelvisZ(t), stand = 1 - stride;
-    // the pelvis rides on nearly straight legs, like a compass: lowest as a foot lands (the feet a step apart), highest
-    // above the standing foot. Near a landing: over the ground smoothed along the path, raised by the slope so the
-    // foot ahead (uphill: higher) is reached straight, the one behind rising on its toe; mid-stance: right over the
-    // standing foot, its leg straight (the slope's bumps would bend it)
-    const hz = z - 0.035, pk0 = plant(t);
-    let li = 0; while (li < PRINTS.length - 1 && PRINTS[li + 1][0] <= t) li++;
-    const Li = li > 0 ? Math.abs(PRINTS[li][1] - PRINTS[li - 1][1]) : STEP, Ln = li < PRINTS.length - 1 ? Math.abs(PRINTS[li + 1][1] - PRINTS[li][1]) : Li;
-    const dzs = ph < 0.5 ? (0.5 - ph) * Li : (ph - 0.5) * Ln;
-    let gs = 0; for (let k = -2; k <= 2; k++) gs += G(0, hz + 0.2 * k) / 5;
-    const rise = Math.max(0, (G(0, hz - 0.4) - G(0, hz + 0.4)) / 0.8);
-    const yA = gs + rise * dzs + ANKLE_UP + 0.13 + Math.sqrt(DMAX * DMAX - dzs * dzs);
-    const sf = PRINTS[li][2] === 'L' ? fl : fr, yS = sf[1] - sf[5] + 0.13 + Math.sqrt(DMAX * DMAX - Math.min(Math.abs(sf[2] - hz), 0.9) ** 2);
-    const mid = Math.sin(Math.PI * ph) ** 2 * stride;
-    const y = yA + (yS - yA) * mid - pk0.crouch;
-    const lead = (fr[2] - fl[2]) / -STEP;                    // + when the right foot is ahead
-    const sway = 0.025 * Math.sin(Math.PI * clamp((t + 0.3) / PER, 0, 99)) * stride;
-    a.group.position.set(sway, y, z);
-    a.group.rotation.set(0, 0, 0);
-    const bx = -0.09 * stride - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * stride + pk0.lean;   // leaning into the walk (- = forward)
-    J.body.rotation.set(bx, -0.07 * lead, 0.02 * lead);
-    J.body.position.set(0, 0, 0);
-    a.group.updateMatrixWorld(true);
-    placeFoot(a, 'L', fl, bx); placeFoot(a, 'R', fr, bx);
-    // the left arm swings against the legs; the right one carries the flag (and plants it, see PLANT)
-    const sw = lead, pk = plant(t);
-    // the left arm hangs at the side, the elbow a little bent, the palm towards the thigh (at rest the palm faces
-    // forward: the wrist turns it in)
-    J.shoulderL.rotation.set(0.04 + 0.3 * sw * stride + pk.shL, -0.05, -0.17);
-    J.elbowL.rotation.set(0.25 + 0.2 * Math.max(0, sw) * stride + 0.3 * pk.shL, 0, 0);
-    J.wristL.rotation.set(0.05, -1.4, -0.04);
-    J.shoulderR.rotation.set(pk.shX - 0.06 * sw * stride, 0.05, pk.shZ);
+    const J = a.joints, pk = plant(t);
+    const { stride, lead } = W.update(t, { lean: pk.lean, crouch: pk.crouch });
+    // the left arm hangs and swings (the walker), lifting a little for balance as the flag goes in; the right one
+    // carries the flag (and plants it, see PLANT)
+    J.shoulderL.rotation.x += pk.shL; J.elbowL.rotation.x += 0.3 * pk.shL;
+    J.shoulderR.rotation.set(pk.shX - 0.06 * lead * stride, 0.05, pk.shZ);
     J.elbowR.rotation.set(pk.el, 0, 0);
     J.wristR.rotation.set(0, Math.PI / 2, 0);
-    J.head.rotation.set(-0.12 - bx + pk.head, 0.05 * lead, 0);
+    J.head.rotation.x += pk.head;
     const w = 1 - smooth((t - T_REL + 0.12) / 0.3);         // the fist round the pole, opening as it lets go
     if (w > 0) a.hand('R', GRIP, w);
     if (t > T_REL - 0.2) a.hand('R', 'open', 0.6 * Math.sin(Math.PI * clamp((t - T_REL + 0.2) / 0.8, 0, 1)));
+    a.group.updateMatrixWorld(true);
   }
+
 
   // ---------------- the scene ----------------
   let S = null;
@@ -234,6 +124,9 @@
     const T = r.THREE, scene = new T.Scene(), a = window.__makeAstronaut(T);
     a.T = T;
     await a.ready;
+    W = a.walk({ ground: G, from: [0, RIDGE + 0.15 + NSTEP * STEP + 0.55 + 0.32 + 0.15 + STEP / 2], steps: NSTEP, step: STEP, period: PER, start: -0.3, arms: { R: false } });
+    PRINTS = W.prints.map(p => [p.t, p.z, p.side, p.x]);
+    initPlant();
     scene.add(a.group);
     const sun = new T.Vector3(-0.25, 0.14, -1).normalize(), phobos = new T.Vector3(0.42, 0.3, -1).normalize();
 
@@ -503,8 +396,8 @@
     const pTex = new T.CanvasTexture(pcv), aTex = new T.CanvasTexture(acv);
     const pMat = marsify(new T.MeshPhysicalMaterial({ color: 0xffffff, map: pTex, alphaMap: aTex, bumpMap: pTex, bumpScale: 0.012, transparent: true, depthWrite: false,
       roughness: 1, specularIntensity: 0.12, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), false);
-    const prints = PRINTS.map(([tl, z, side]) => {
-      const x = (side === 'L' ? -1 : 1) * FOOT_X, g = new T.PlaneGeometry(0.15, 0.37, 6, 12).rotateX(-Math.PI / 2), P = g.attributes.position, col = [];
+    const prints = PRINTS.map(([tl, z, side, x]) => {
+      const g = new T.PlaneGeometry(0.15, 0.37, 6, 12).rotateX(-Math.PI / 2), P = g.attributes.position, col = [];
       for (let i = 0; i < P.count; i++) { const px = x + P.getX(i), pz = z - 0.085 + P.getZ(i); P.setXYZ(i, px, G(px, pz) + 0.004, pz); col.push(...colour(px, pz, 0, 1).map(v => v * 0.85)); }
       g.setAttribute('color', new T.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
       const m = new T.Mesh(g, pMat); m.material = pMat.clone(); m.material.vertexColors = true; m.material.onBeforeCompile = pMat.onBeforeCompile; m.receiveShadow = true; m.userData.t = tl; scene.add(m); return m;
@@ -516,9 +409,9 @@
     const DP = [], DV = [], DT = [], DL = [], DS = [], DK = [];
     const drng = (() => { let s = 777; return () => { s = Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((s >>> 0) % 1e6) / 1e6; }; })();
     const grain = (p, v, t0, life, size, k) => { DP.push(p[0], p[1], p[2]); DV.push(v[0], v[1], v[2]); DT.push(t0); DL.push(life); DS.push(size); DK.push(k); };
-    PRINTS.forEach(([tl, z, side], i) => {
+    PRINTS.forEach(([tl, z, side, x], i) => {
       if (i < 1) return;
-      const x = (side === 'L' ? -1 : 1) * FOOT_X, n = i >= PRINTS.length - 2 ? 20 : 46;
+      const n = i >= PRINTS.length - 2 ? 20 : 46;
       for (let k = 0; k < n; k++) {                            // the landing: out from under the sole, low and wide
         const a0 = drng() * 6.283, r = Math.sqrt(drng()), px = x + 0.09 * r * Math.cos(a0), pz = z - 0.08 + 0.17 * r * Math.sin(a0), sp = 0.25 + 0.75 * drng();
         grain([px, G(px, pz) + 0.01, pz], [Math.cos(a0) * sp, 0.12 + 0.45 * drng(), Math.sin(a0) * sp - 0.25], tl + 0.06 * drng(), 1.2 + 1.8 * drng(), 0.02 + 0.04 * drng(), 2.6);

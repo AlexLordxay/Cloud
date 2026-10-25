@@ -8,6 +8,7 @@
 //   const a = window.__makeAstronaut(THREE);         // a.group: ~1.9 units tall, pelvis at the origin, facing -z
 //   await a.ready;                                    // the emblem picture has loaded
 //   a.pose(t);                                        // the free-fall idle at time t (s): limbs drift slowly
+//   const w = a.walk({ ground, from, heading, steps }); w.update(t)   // on the ground: walking (see walk), or a.stand(…)
 //   a.setTint(r, g, b); a.setOpacity(x);              // colour and fade for the whole figure
 //   a.rim.color.value.set(…)                          // rim light on the edges (light from behind the figure)
 //   const env = window.__astronautEnv(THREE, renderer, { warm: dirVector });   // reflections: dark space, a warm glow
@@ -790,28 +791,42 @@
           }
           if (y > KY + KB) return [[hp, 1]];
           if (y > KY - KB) return spread([hp, knH1, knH2, kn], cubic((KY + KB - y) / (2 * KB)));
-          if (y > AY + 0.24) return [[kn, 1]];
-          if (y > AY + 0.14) return spread([kn, anH, an], quad((AY + 0.24 - y) / 0.1));
-          return [[an, 1]];
+          if (y > AY + 0.26) return [[kn, 1]];
+          if (y > AY + 0.13) { const u = sstep(AY + 0.26, AY + 0.13, y); return [[kn, 1 - u], [anH, u]]; }   // into the boot's collar
+          return [[anH, 1]];                                                                                  // inside it: with the collar
         },
       }));
       leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz)));
       proxy(hp, 0.25, 0.48, 0.25, -0.24); proxy(kn, 0.21, 0.5, 0.21, -0.27);
       pocket(hp, s * (legR(s, HY - 0.26, s * Math.PI / 2).base + 0.008), -0.26, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
       pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1, 0, 0.095);              // and a smaller one on each shin
-      // the boot: the ankle pivot sits inside it, 0.127 above the sole
-      an.add(at(band(0.104, 0.03, 0.011), 0, 0.14, 0));                                           // the ankle bearing on the boot's collar
-      an.add(mesh(bootGeo, [bootCloth, bootShell]));                                              // the boot
+      // The boot: the ankle pivot sits inside it, 0.103 above the sole. The ankle bends inside the boot, as in a real
+      // one: the foot turns with the ankle, the boot's column (and the sleeve inside it) only half way (anH), the upper
+      // creasing over the instep between them; the sleeve above the collar bends the other half, so a foot turned far
+      // never breaks the shin. Boot, straps and buckles are skinned alike (they stay on the boot); the sole is rigid.
+      const parts = new THREE.Group();
+      anH.add(at(band(0.104, 0.03, 0.011), 0, 0.14, 0));                                          // the ankle bearing on the boot's collar
+      parts.add(mesh(bootGeo, [bootCloth, bootShell]));                                           // the boot
       an.add(mesh(soleGeo, soleMat));                                                             // its sole
       // two straps lying on the boot, buckled on the outside: over the instep and round the ankle
       { const c = new THREE.Vector3(0, -0.06, -0.095), pts = [];
         for (let k = 0; k <= 24; k++) { const a = Math.PI * k / 24, h = bootHit(c, new THREE.Vector3(Math.cos(a), Math.sin(a), 0)); pts.push(h.addScaledVector(bootN(h), 0.0035)); }
-        an.add(webbing(pts, 0.026, 0.003, c, strap, 48, bootN));
-        const e = pts[s < 0 ? 24 : 0]; an.add(mesh(rbox(0.007, 0.03, 0.03, 0.002), machined, e.x + s * 0.003, e.y + 0.012, e.z)); }
+        parts.add(webbing(pts, 0.026, 0.003, c, strap, 48, bootN));
+        const e = pts[s < 0 ? 24 : 0]; parts.add(mesh(rbox(0.007, 0.03, 0.03, 0.002), machined, e.x + s * 0.003, e.y + 0.012, e.z)); }
       { const c = new THREE.Vector3(0, 0.07, 0.005), pts = [];
         for (let k = 0; k <= 48; k++) { const a = 2 * Math.PI * k / 48, d = new THREE.Vector3(Math.sin(a), 0, Math.cos(a)), h = bootHit(c, d); pts.push(h.addScaledVector(bootN(h), 0.0035)); }
-        an.add(webbing(pts, 0.024, 0.003, c, strap, 96, bootN));
-        const e = bootHit(c, new THREE.Vector3(s, 0, 0)); an.add(mesh(rbox(0.007, 0.03, 0.028, 0.002), machined, e.x + s * 0.005, 0.07, e.z)); }
+        parts.add(webbing(pts, 0.024, 0.003, c, strap, 96, bootN));
+        const e = bootHit(c, new THREE.Vector3(s, 0, 0)); parts.add(mesh(rbox(0.007, 0.03, 0.028, 0.002), machined, e.x + s * 0.005, 0.07, e.z)); }
+      { const rest = hp.position.clone().add(kn.position).add(an.position), ia = bones.indexOf(an), ih = bones.indexOf(anH);
+        parts.updateMatrixWorld(true);
+        parts.traverse(o => { if (!o.isMesh) return;
+          const g = o.geometry.clone().applyMatrix4(o.matrixWorld), P = g.attributes.position, si = [], sw = [];
+          for (let i = 0; i < P.count; i++) { const w = sstep(-0.01, 0.075, P.getY(i)) * sstep(-0.24, -0.12, P.getZ(i)); si.push(ih, ia, 0, 0); sw.push(w, 1 - w, 0, 0); }
+          g.translate(rest.x, rest.y, rest.z);
+          g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+          g.boundingBox = new THREE.Box3(new THREE.Vector3(-0.01, -0.01, -0.01), new THREE.Vector3(0.01, 0.01, 0.01));   // as the sleeves (see skinTube)
+          const m = new THREE.SkinnedMesh(g, o.material); m.frustumCulled = false; body.add(m); skinned.push(m); }); }
+      proxy(an, 0.2, 0.24, 0.43, 0.02, -0.085);                                                   // the boot's box, for placing on the ground
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
     proxy(body, 0.48, 0.4, 0.34, -0.07);   // the briefs
@@ -999,6 +1014,148 @@
       const p = Math.min(1.6, 0.03 + 1.55 * c), o = SHAPES.open.th, fi = SHAPES.fist.th;
       hand(side, { f: [0, 1, 2, 3].map(() => [0.02 + 1.35 * c, p, 0.6 * p]), spread, th: o.map((v, i) => v + (fi[i] - v) * tc) }, k);
     }
+
+    // ---- On the ground: walking and standing ----
+    // a.walk(opts) -> a walker: the figure walks over a ground along a straight line, each foot planted on a footprint
+    // laid out in time. The legs are solved by two-bone IK in the side plane; the pelvis rides on nearly straight legs
+    // (like a compass: lowest as a foot lands, highest over the standing foot); a foot lands on its heel, goes flat,
+    // lifts its heel before the other foot lands and pushes off steeply from the toe, and in the air hangs nearly in line
+    // with the shin; the arms hang at the sides, palms to the thighs, and swing against the legs.
+    //   opts: ground(x, z) -> y (world); from [x, z]: the pelvis's spot as the first counted foot lands (at `start`);
+    //   heading: the walk's direction (0 = towards -z, + turns to the left, as rotation.y); steps: how many full steps,
+    //   or [their lengths]; step 0.8 (a full step), period 0.76 s (per step); start 0 (the first footfall);
+    //   stop true (end with three short steps, the feet side by side); arms { L: true, R: true } (false: the scene
+    //   moves that arm itself, e.g. to carry something); glance false (look about while standing).
+    //   w.update(t, { lean, crouch }) poses everything at time t (group, body, legs, arms, head; it calls pose(t) first
+    //   for the breathing, the fingers and the antenna); lean: added to the body's pitch (- forward), crouch: lowers the
+    //   pelvis (the knees bend). w.prints: [{ t, x, y, z, side }] the footprints (world, y = the ground);
+    //   w.end: the last footfall; w.local(x, z) / w.world(lx, lz): between world and the walk's own frame.
+    // a.stand(opts) is a walk of no steps: standing at `from`, the feet side by side, legs straight, arms at the sides.
+    // Lessons (see HANDOFF): near a straight leg a few mm of reach make a big knee bend (keep the pelvis at the full
+    // reach less ~3 mm); the hand's palm faces forward at rest (turn the wrist about y, s * 1.4, for palm-in).
+    const FOOT_X = 0.135, ANKLE_UP = 0.101;   // the ankles' spread; the pivot over the ground (the sole is 0.103 below it, sunk 2 mm)
+    const L1 = Math.hypot(0.48, 0.02), L2 = Math.hypot(0.56, 0.02), O1 = Math.atan2(0.02, 0.48), O2 = Math.atan2(0.02, 0.56);
+    const DMAX = L1 + L2 - 0.0035, TOE = [-ANKLE_UP, -0.16], HEEL = [-ANKLE_UP, 0.09], AX_UP = 0.25, HEEL_UP = 0.15, TOE_OFF = 0.75;
+    const sm = x => sstep(0, 1, x), clampN = (x, a, b) => Math.min(b, Math.max(a, x));
+    function walk(o = {}) {
+      const ground = o.ground || (() => 0), from = o.from || [0, 0], hd = o.heading || 0, ch = Math.cos(hd), sh = Math.sin(hd);
+      const step = o.step || 0.8, per = o.period || 0.76, arms = Object.assign({ L: true, R: true }, o.arms);
+      const world = (lx, lz) => [from[0] + lx * ch + lz * sh, from[1] - lx * sh + lz * ch];
+      const local = (x, z) => { const dx = x - from[0], dz = z - from[1]; return [dx * ch - dz * sh, dx * sh + dz * ch]; };
+      const G = (lx, lz) => { const w = world(lx, lz); return ground(w[0], w[1]); };
+      const slope = (lx, lz) => Math.atan((G(lx, lz - 0.15) - G(lx, lz + 0.15)) / 0.3);   // + where it rises ahead
+      // footprints in the walk's frame: [time it lands, z of the ankle, side]
+      const lens = Array.isArray(o.steps) ? o.steps.slice() : Array(o.steps || 0).fill(step), durs = lens.map(() => per);
+      if (o.stop !== false && lens.length) { lens.push(0.55 * step / 0.8, 0.32 * step / 0.8, 0.15); durs.push(per * 0.947, per * 0.868, per * 0.79); }
+      const t0 = o.start != null ? o.start : lens.length ? 0 : -100;
+      const P = lens.length ? [[t0 - per, step / 2, 'R'], [t0, -step / 2, 'L']] : [[t0 - 1, 0, 'R'], [t0, 0, 'L']];
+      lens.forEach((L, i) => { const [t, z, sd] = P[P.length - 1]; P.push([t + durs[i], z - L, sd === 'L' ? 'R' : 'L']); });
+      const KN = P.slice(1).map((p, i) => [p[0], (p[1] + P[i][1]) / 2]);   // the pelvis: midway between the feet as one lands
+      function pelvisZ(t) {
+        const K = KN, n = K.length; if (n < 2 || t <= K[0][0]) return n < 2 ? K[0][1] : K[0][1] + (K[0][0] - t) * (K[1][1] - K[0][1]) / (K[1][0] - K[0][0]);
+        if (t >= K[n - 1][0]) return K[n - 1][1];
+        let i = 0; while (K[i + 1][0] < t) i++;
+        const p0 = K[Math.max(i - 1, 0)], p1 = K[i], p2 = K[i + 1], p3 = K[Math.min(i + 2, n - 1)], u = (t - p1[0]) / (p2[0] - p1[0]);
+        const m1 = (p2[1] - p0[1]) / (p2[0] - p0[0] || 1) * (p2[0] - p1[0]), m2 = (p3[1] - p1[1]) / (p3[0] - p1[0] || 1) * (p2[0] - p1[0]);
+        return (2 * u ** 3 - 3 * u * u + 1) * p1[1] + (u ** 3 - 2 * u * u + u) * m1 + (-2 * u ** 3 + 3 * u * u) * p2[1] + (u ** 3 - u * u) * m2;
+      }
+      // where a foot would be if it stayed flat: [x, y, z, slope] of its ankle pivot, + the swing's progress (-1:
+      // standing), the lift, and the foot's pitch (+ toe up; placeFoot rolls the foot to it about the toe or heel)
+      function foot(side, t) {
+        const own = P.map((p, i) => [p, i]).filter(([p]) => p[2] === side);
+        let k = own.length - 1; while (k > 0 && own[k][0][0] > t) k--;
+        const [cur] = own[k], next = own[k + 1], x = (side === 'L' ? -1 : 1) * FOOT_X;
+        const at = z => [x, G(x, z) + ANKLE_UP, z, slope(x, z), -1, 0, slope(x, z)];
+        const stance = (A, ho, te, amp) => { A[6] = A[3] + HEEL_UP * (1 - sm((t - cur[0]) / 0.15)) * (t >= cur[0] ? 1 : 0); if (ho != null) A[6] -= amp * sm((t - ho) / (te - ho)); return A; };
+        if (!next) return stance(at(cur[1]));
+        const prevOther = P[next[1] - 1], ts = prevOther[0] + 0.1 * (next[0][0] - prevOther[0]), te = next[0][0];
+        const amp = TOE_OFF * clampN(Math.abs(next[0][1] - cur[1]) / (2 * step), 0, 1), ho = prevOther[0] - 0.34;
+        if (t < ts) return stance(at(cur[1]), ho, ts, amp);
+        const u = clampN((t - ts) / (te - ts), 0, 1), e = u * u * (3 - 2 * u), a = at(cur[1]), b = at(next[0][1]);
+        const lift = 0.085 * Math.sin(Math.PI * Math.pow(u, 0.8)) * Math.min(1, (b[2] - a[2]) / -0.5 + 0.3);
+        const w = sm((u - 0.05) / 0.8);                     // from toe-down at push-off to toe-up for the heel strike
+        return [x, a[1] + (b[1] - a[1]) * e + lift, a[2] + (b[2] - a[2]) * e, a[3] + (b[3] - a[3]) * e, u, lift, (a[3] - amp) * (1 - w) + (b[3] + HEEL_UP) * w];
+      }
+      // 0 as a foot lands, 1 just before the next one; and how much of a stride is going on (0 once standing)
+      function phase(t) {
+        let i = 0; while (i < P.length - 1 && P[i + 1][0] <= t) i++;
+        if (i >= P.length - 1) return [0, 0, i];
+        return [(t - P[i][0]) / (P[i + 1][0] - P[i][0]), clampN(Math.abs(P[i + 1][1] - P[i][1]) / step, 0, 1), i];
+      }
+      const hipLocal = side => { const w = J['hip' + side].getWorldPosition(new THREE.Vector3()), l = local(w.x, w.z); return [l[0], w.y, l[1]]; };
+      // two-bone IK in the side (y, z) plane of the walk: forward angle 0 = straight down, + = forward (-z)
+      function legIK(side, A, bx) {
+        const hp = hipLocal(side);
+        let dy = A[1] - hp[1], dz = A[2] - hp[2], D = Math.hypot(dy, dz); const Dm = L1 + L2 - 0.0015;
+        if (D > Dm) { dy *= Dm / D; dz *= Dm / D; D = Dm; }
+        const phi = Math.atan2(-dz, -dy), al = Math.acos(clampN((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
+        const th1 = phi + al, ky = hp[1] - L1 * Math.cos(th1), kz = hp[2] - L1 * Math.sin(th1);
+        const th2 = Math.atan2(-(hp[2] + dz - kz), -(hp[1] + dy - ky)), hx = th1 + O1 - bx, kx = th2 - O2 - (bx + hx), s = side === 'L' ? -1 : 1;
+        J['hip' + side].rotation.set(hx, 0, s * Math.atan2(Math.abs(A[0]) - 0.105, 1.0));
+        J['knee' + side].rotation.set(kx, 0, 0);
+        return bx + hx + kx;                                // the shin's forward angle
+      }
+      const rot = (p, y, z) => [y * Math.cos(p) - z * Math.sin(p), y * Math.sin(p) + z * Math.cos(p)];
+      function rolled(F, p) {                               // the ankle when the foot is pitched to p about its toe or heel
+        const d = p - F[3]; if (Math.abs(d) < 1e-6) return F;
+        const pv = d < 0 ? TOE : HEEL, w = rot(F[3], pv[0], pv[1]), r = rot(p, pv[0], pv[1]);
+        return [F[0], F[1] + w[0] - r[0], F[2] + w[1] - r[1], p];
+      }
+      function placeFoot(side, F, bx) {
+        const hp = hipLocal(side), over = p => { const A = rolled(F, p); return Math.hypot(A[1] - hp[1], A[2] - hp[2]) - DMAX; };
+        let p = F[6];
+        if (over(p) > 0) {                                  // out of reach: roll just enough more
+          let lo = p, hi = p + (F[2] > hp[2] ? -0.8 : 0.6);
+          if (over(hi) > 0) p = hi; else { for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (over(mid) > 0) lo = mid; else hi = mid; } p = hi; }
+        }
+        let psi = legIK(side, rolled(F, p), bx);
+        if (F[4] >= 0) { const m = 0.85 * Math.sin(Math.PI * F[4]); for (let i = 0; i < 2; i++) { p = F[6] + (psi + 0.05 - F[6]) * m; psi = legIK(side, rolled(F, p), bx); } }
+        if (p - psi > AX_UP && p <= F[3]) { p = Math.min(p, psi + AX_UP); psi = legIK(side, rolled(F, p), bx); }   // never a deep bend at the ankle
+        J['ankle' + side].rotation.set(clampN(p - psi, -0.6, 0.4), 0, -(side === 'L' ? -1 : 1) * 0.02);
+      }
+      function update(t, extra = {}) {
+        const lean = extra.lean || 0, crouch = extra.crouch || 0;
+        pose(t, { glance: !!o.glance });                    // breathing, fingers, the antenna (and glances, if asked)
+        const head0 = J.head.rotation.clone();
+        const fl = foot('L', t), fr = foot('R', t), [ph, stride, li] = phase(t), z = pelvisZ(t), hz = z - 0.035;
+        // the pelvis: near a landing over the ground smoothed along the walk, raised by the slope so the foot ahead
+        // (uphill: higher) is reached straight, the one behind rising on its toe; mid-stance right over the standing foot
+        const Li = li > 0 ? Math.abs(P[li][1] - P[li - 1][1]) : step, Ln = li < P.length - 1 ? Math.abs(P[li + 1][1] - P[li][1]) : Li;
+        const dzs = stride > 0 ? (ph < 0.5 ? (0.5 - ph) * Li : (ph - 0.5) * Ln) : 0.5 * (li > 0 ? Math.abs(P[li][1] - P[li - 1][1]) : 0);   // standing: half the feet's stagger
+        let gs = 0; for (let k = -2; k <= 2; k++) gs += G(0, hz + 0.2 * k) / 5;
+        const rise = Math.max(0, (G(0, hz - 0.4) - G(0, hz + 0.4)) / 0.8);
+        const yA = gs + rise * dzs + ANKLE_UP + 0.13 + Math.sqrt(DMAX * DMAX - dzs * dzs);
+        const sf = P[li][2] === 'L' ? fl : fr, yS = sf[1] - sf[5] + 0.13 + Math.sqrt(DMAX * DMAX - Math.min(Math.abs(sf[2] - hz), 0.9) ** 2);
+        const y = yA + (yS - yA) * Math.sin(Math.PI * ph) ** 2 * stride - crouch;
+        const lead = (fr[2] - fl[2]) / -step;               // + when the right foot is ahead
+        const sway = 0.025 * Math.sin(Math.PI * Math.max(0, (t - t0 + per) / per)) * stride;
+        const wp = world(sway, z);
+        group.position.set(wp[0], y, wp[1]);
+        group.rotation.set(0, hd, 0);
+        const bx = -0.09 * stride - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * stride + 0.008 * breath(t) * (1 - stride) + lean;   // leaning into the walk (- forward)
+        J.body.rotation.set(bx, -0.07 * lead, 0.02 * lead);
+        J.body.position.set(0, 0, 0);
+        group.updateMatrixWorld(true);
+        placeFoot('L', fl, bx); placeFoot('R', fr, bx);
+        // the arms hang at the sides, the elbows a little bent, the palms to the thighs (the wrist turns the palm in:
+        // at rest it faces forward), swinging against the legs
+        for (const [sd, s, sw] of [['L', -1, lead], ['R', 1, -lead]]) {
+          if (!arms[sd]) continue;
+          J['shoulder' + sd].rotation.set(0.04 + 0.3 * sw * stride, s * 0.05, s * 0.17);
+          J['elbow' + sd].rotation.set(0.25 + 0.2 * Math.max(0, sw) * stride, 0, 0);
+          J['wrist' + sd].rotation.set(0.05, s * 1.4, s * 0.04);
+        }
+        // the head: steady, looking a little down the way ahead; standing, its glances (if asked) come back in
+        const g = o.glance ? 1 - stride : 0;
+        J.head.rotation.set((-0.12 - bx) * (1 - g) + head0.x * g, 0.05 * lead * (1 - g) + head0.y * g, head0.z * g);
+        group.updateMatrixWorld(true);
+        return { phase: ph, stride, lead };
+      }
+      const prints = P.map(([t, z, sd]) => { const x = (sd === 'L' ? -1 : 1) * FOOT_X, w = world(x, z); return { t, x: w[0], y: ground(w[0], w[1]), z: w[1], side: sd }; });
+      return { update, prints, end: P[P.length - 1][0], local, world, ground };
+    }
+    const stand = (o = {}) => walk(Object.assign({}, o, { steps: 0, stop: false }));
+
     pose(0);
 
     // shadow-casting lights that follow the figure (each keeps it inside its shadow camera): a.light(color, k, dir)
@@ -1018,7 +1175,7 @@
     }
     return {
       group, joints: J, materials: mats, pose, rim, light, aim, lights, ready, hand, handCurl, hands: HANDS, shapes: SHAPES, visor: VIS,
-      wave, point, pointDir, thumbsUp, lookAt, gesture, gestureAt,
+      wave, point, pointDir, thumbsUp, lookAt, gesture, gestureAt, walk, stand,
       setTint(r, g, b) { const c = new THREE.Color(r, g, b); for (const m of mats) m.color.copy(m.userData.base).multiply(c); },
       // opaque until it fades: a transparent material lets the parts behind show through
       setOpacity(x) { glowK = x; for (const g of glows) g.material.opacity = 0.85 * x; const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
