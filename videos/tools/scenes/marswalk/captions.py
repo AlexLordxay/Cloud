@@ -1,8 +1,13 @@
-# The astronaut walks on Mars at sunset and plants the Nebozvid flag on a ridge. One small caption at the end.
-DURATION = 21
-CAP_FADE = 0.35
-CAPTIONS = []
+# "An astronaut on Mars": the Nebozvid astronaut walks up to a ridge at sunset, plants the Nebozvid flag and gives a
+# thumbs-up; the camera rises over the valley into the blue dusk. Fact: the sunset on Mars is blue — fine dust high in
+# the air scatters blue light forward, round the Sun (Curiosity filmed it in Gale crater, April 2015).
+DURATION = 23.0
+CAP_FADE = 0.45
+CAPTIONS = [
+    (17.4, 20.4, 'cap', 'На Марсі захід Сонця —\nблакитний'),
+]
 CUTS = []
 FADE_IN = 0
-END_CARD = 99
-END_TITLE = ''
+SUBSCRIBE_AT = 8.6
+END_CARD = 20.6
+END_TITLE = 'Покрути Марс сам —\nна сайті'

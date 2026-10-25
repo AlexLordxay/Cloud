@@ -1,6 +1,6 @@
-// "Sunset on Mars is blue" — the video's own score: the organ of the Hoverla video (see MUSIC.md), retimed to the
-// sunset: the clock-like figure in A minor through the blue glow, a long rise as the twilight deepens, a hush just
-// before the Earth appears, the lift to A major on the Earth, then the quiet figure under the last caption.
+// "An astronaut on Mars" — the score of "Sunset on Mars is blue" (the organ of the Hoverla video, see MUSIC.md),
+// retimed to the walk: the clock-like figure in A minor rising with every step up the slope, a hush while the flag is
+// held high, a hit and the lift to A major as the spike goes in, then the quiet figure as the camera rises.
 // Everything is synthesised.
 function createSceneMusic(ctx, dest) {
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
@@ -8,7 +8,6 @@ function createSceneMusic(ctx, dest) {
   const BEAT = 0.625, S16 = BEAT / 4, CHORD = 8 * BEAT;
   const ROOTS = [36, 32, 29, 31];
   const UPPER = [[60, 63, 67], [60, 63, 68], [60, 65, 68], [59, 62, 67]];
-  const HIT = 26.25;
 
   // Glue and space: a compressor on the whole mix and a long generated hall.
   const master = ctx.createDynamicsCompressor();
@@ -121,7 +120,7 @@ function createSceneMusic(ctx, dest) {
   // The hit: a deep falling boom with a burst of noise, timpani and the whole chord at once.
   function hit(t) {
     const g = ctx.createGain(); g.connect(drums);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1.6, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + 3.5);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1.2, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + 3.5);
     const o = ctx.createOscillator(); o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(28, t + 2.5);
     o.connect(g); o.start(t); o.stop(t + 3.6);
     const n = ctx.createBufferSource(); n.buffer = noise;
@@ -129,8 +128,8 @@ function createSceneMusic(ctx, dest) {
     const ng = ctx.createGain(); ng.gain.setValueAtTime(0.8, t); ng.gain.exponentialRampToValueAtTime(0.001, t + 2);
     n.connect(lp).connect(ng).connect(fx); n.start(t); n.stop(t + 2);
     timp(t, 1.2);
-    for (const m of [48, 55, 60, 63]) horn(t, t + 0.8, m, 0.9);
-    for (const m of [72, 75, 79]) aah(t, t + 1.2, m, 0.6);
+    for (const m of [45, 52, 57, 61]) horn(t, t + 0.8, m, 0.9);   // A major: the flag is in
+    for (const m of [69, 73, 76]) aah(t, t + 1.2, m, 0.6);
   }
 
   // Tremolo strings: two saws through a rising low-pass, amplitude flickering fast (the "tense bow" sound).
@@ -178,13 +177,14 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const SUN = 28.0, HUSH = 26.4, MOON = 35.5, END = 41.6, E8 = BEAT / 2;   // SUN: the Earth's lift; MOON: the quiet end
+    // HIT: the spike goes into the ground (cam.js: T_HIT = the last footfall + 1.06); HUSH: the flag held high; CALM:
+    // the camera rises, the music settles
+    const HIT_T = 13.38, HUSH = 12.85, CALM = 18.6, END = 23.0, E8 = BEAT / 2;
     const FL = [[1, 1], [2, 0.35]];
-    // a chord every 5 s (two bars): Am Am F F C G | the Earth: A major | the end: Am
+    // a chord every 2.5 s (one bar): Am Am F F C, G under the raised flag | the flag in: A major | the end: Am
     const CH = { Am: [57, 60, 64], F: [53, 57, 60], C: [55, 60, 64], G: [55, 59, 62], A: [57, 61, 64] };
     const PLAN = ['Am', 'Am', 'F', 'F', 'C', 'G'];
-    const chordAt = t => t >= MOON ? 'Am' : t >= SUN - 0.01 ? 'A' : PLAN[Math.min(5, Math.floor(t / 5))];
-    // the figure: root, fifth, octave, repeated, so it falls in threes across the eight eighths of a bar
+    const chordAt = t => t >= CALM ? 'Am' : t >= HIT_T - 0.01 ? 'A' : PLAN[Math.min(5, Math.floor(t / 2.5))];
     const fig = ch => [ch[0], ch[0] + 7, ch[0] + 12];
     const play = (t0, t1, dyn) => {                       // dyn(t): 0..1 loudness; also brings in the octave above
       for (let t = t0, i = 0; t < t1 - 0.05; t += E8, i++) {
@@ -193,26 +193,21 @@ function createSceneMusic(ctx, dest) {
         if (d > 0.45) organ(t, t + E8 * 0.9, m + 12, FL, 0.05 + 0.12 * (d - 0.45), 2500, 0.01, 0.12);
       }
     };
-    // waves: a first swell under the blue glow, back down as the Sun touches the rim, then one long rise to the hush
-    const wave = t => t < 5 ? 0.1 : t < 13 ? 0.1 + 0.35 * (t - 5) / 8 : t < 17 ? 0.45 - 0.25 * (t - 13) / 4 :
-      t < 17 ? 0.2 : 0.2 + 0.8 * Math.min(1, (t - 17) / (HUSH - 17));
+    const wave = t => 0.12 + 0.55 * Math.min(1, t / 12.5);   // one rise with the slope
     play(0, HUSH, wave);
-    // held chords that breathe: each swells in and out over its 5 s
-    PLAN.forEach((k, c) => {
-      const t0 = c * 5, t1 = c >= 5 ? HUSH : t0 + 5.4, w = wave(t0 + 2.5);
-      for (const m of CH[k]) organ(t0, t1, m + 12, c < 4 ? FL : REG_MID, 0.08 + 0.22 * w, 900 + 2500 * w, 2.2, 1.6);
+    PLAN.forEach((k, c) => {                              // held chords that breathe
+      const t0 = c * 2.5, t1 = c === 5 ? HUSH + 0.2 : t0 + 2.8, w = wave(t0 + 1.2);
+      for (const m of CH[k]) organ(t0, t1, m + 12, c < 3 ? FL : REG_MID, 0.08 + 0.22 * w, 900 + 2500 * w, 1.2, 1.0);
     });
-    // a long high line over the last rise
-    [[18, 4, 76], [22, 4.2, 79]].forEach(([t0, len, m]) => organ(t0, t0 + len, m + 12, FL, 0.16, 3000, 1.5, 0.6));
-    // the hush: everything stops, one high note hangs on
-    organ(HUSH - 0.2, SUN + 0.5, 81, FL, 0.12, 2500, 0.3, 1.0);
-    // the Earth: A major breathes in over 2.5 s, the figure comes back in full, then calms down for the end
-    for (const m of [57, 61, 64, 69, 73, 76]) organ(SUN - 1.0, MOON + 0.5, m, REG_MID, 0.30, 3500, 2.5, 2.0);
-    play(SUN, MOON, t => 0.85 - 0.5 * Math.max(0, (t - 33) / 2.5));
-    organ(SUN + 1.5, MOON, 85, FL, 0.16, 3000, 1.5, 1.0);
-    // the end: the quiet figure alone, fading to nothing
-    play(MOON, END - 1.0, t => 0.25 * (1 - (t - MOON) / (END - MOON)));
-    for (const m of CH.Am) organ(MOON, END, m + 12, FL, 0.12, 1500, 1.5, 1.0);
+    organ(9.6, 12.9, 88, FL, 0.13, 3000, 1.5, 0.6);       // a high line over the last steps
+    organ(HUSH - 0.1, HIT_T + 0.3, 81, FL, 0.12, 2500, 0.2, 0.5);   // the hush: one high note hangs on
+    riser(HUSH, HIT_T);
+    hit(HIT_T);
+    for (const m of [57, 61, 64, 69, 73, 76]) organ(HIT_T - 0.05, CALM + 0.6, m, REG_MID, 0.30, 3500, 0.3, 2.0);
+    play(HIT_T, CALM, t => 0.85 - 0.5 * Math.max(0, (t - 16.6) / 2));
+    organ(HIT_T + 1.2, CALM, 85, FL, 0.16, 3000, 1.5, 1.0);
+    play(CALM, END - 1.0, t => 0.25 * (1 - (t - CALM) / (END - CALM)));   // the end: the quiet figure, fading
+    for (const m of CH.Am) organ(CALM, END, m + 12, FL, 0.12, 1500, 1.5, 1.0);
   }
   return {
     output: master,

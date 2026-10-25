@@ -433,8 +433,11 @@
     add(new T.CylinderGeometry(0.009, 0.009, CW + 0.03, 12).rotateZ(Math.PI / 2), alu, (CW + 0.03) / 2, POLE - 0.035, 0);   // the cross bar
     const clothGeo = new T.PlaneGeometry(CW, CH, 33, 22).translate(CW / 2 + 0.015, POLE - 0.04 - CH / 2, 0);
     const clothRest = clothGeo.attributes.position.array.slice();
-    const cloth = add(clothGeo, new T.MeshStandardMaterial({ map: ftex, side: T.DoubleSide, roughness: 0.8, metalness: 0,
-      emissive: 0xffffff, emissiveMap: ftex, emissiveIntensity: 0.18 }), 0, 0, 0);               // a little of the dusk shining through
+    // printed on both faces (the back one mirrored back, so the name reads right from either side); a little of the
+    // dusk shines through
+    const ftexB = ftex.clone(); ftexB.wrapS = T.RepeatWrapping; ftexB.repeat.x = -1; ftexB.offset.x = 1; ftexB.needsUpdate = true;
+    for (const [side, tx] of [[T.FrontSide, ftex], [T.BackSide, ftexB]])
+      add(clothGeo, new T.MeshStandardMaterial({ map: tx, side, roughness: 0.8, metalness: 0, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: 0.18 }), 0, 0, 0);
     // the cloth stirs in the thin wind, more while it is carried (amp: 0 at the pole, 1 at the free edge)
     function stir(t, carried) {
       const P = clothGeo.attributes.position;
@@ -545,7 +548,7 @@
       fragmentShader: `varying float vA; varying float vPh;
         void main() {
           vec2 q = gl_PointCoord * 2.0 - 1.0; float r = dot(q, q); if (r > 1.0) discard;
-          vec3 c = vec3(0.55, 0.36, 0.24) * (0.45 + 3.5 * vPh) + vec3(0.25, 0.4, 0.7) * 1.5 * vPh;
+          vec3 c = vec3(0.55, 0.36, 0.24) * (0.45 + 2.4 * vPh) + vec3(0.2, 0.3, 0.5) * 0.4 * vPh;
           gl_FragColor = vec4(c, vA * exp(-r * 3.0));
           #include <tonemapping_fragment>
           #include <encodings_fragment>
@@ -569,7 +572,8 @@
     [13.4, [1.5, -0.55, 3.0], [-0.1, 0.05, -1.0]],
     [14.8, [1.7, -0.45, 2.6], [-0.1, -0.05, -0.8]],
     [16.6, [2.7, 0.05, 1.3], [0, 0.1, -0.3]],
-    [21.0, [1.8, 3.2, 6.5], [-0.5, -0.6, -7.0]],
+    [20.0, [1.8, 2.2, 5.5], [-0.4, 0.1, -7.0]],
+    [23.0, [1.6, 2.9, 7.4], [-0.4, 0.3, -9.0]],
   ];
   function shoot(t, a, cam) {
     const p = a.group.position, T = S.T, K = CAM, n = K.length;
