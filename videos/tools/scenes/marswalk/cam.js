@@ -423,7 +423,7 @@
       try { g.letterSpacing = '8px'; } catch (e) {}
       g.fillText('НЕБОЗВІД', 512, 600); }
     const ftex = new T.CanvasTexture(fcv); ftex.encoding = T.sRGBEncoding; ftex.anisotropy = 8;
-    const POLE = 1.75, CW = 0.66, CH = 0.445;
+    const POLE = 2.0, CW = 0.66, CH = 0.445;
     const flag = new T.Group(); scene.add(flag);
     const alu = new T.MeshStandardMaterial({ color: 0xd4d8de, metalness: 0.85, roughness: 0.32 });
     const add = (g, m, x, y, z) => { const o = new T.Mesh(g, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; flag.add(o); return o; };
@@ -459,14 +459,14 @@
       a.group.updateMatrixWorld(true);
       const grip = W.localToWorld(new T.Vector3(...GRIP_AT));
       const slide = S0 + (S1 - S0) * smooth((t - T_LAST - 0.05) / 0.5);
-      const side = new T.Vector3(0.45 + 0.55 * (1 - carry), 0, 1 - 0.4 * (1 - carry)), X = side.addScaledVector(D, -side.dot(D)).normalize();
+      const side = new T.Vector3(0.15 + 0.85 * (1 - carry), 0, 1 - 0.4 * (1 - carry)), X = side.addScaledVector(D, -side.dot(D)).normalize();
       const M = new T.Matrix4().makeBasis(X, D, new T.Vector3().crossVectors(X, D)).setPosition(grip.addScaledVector(D, -slide));
       return M;
     }
-    const S0 = 0.62, DEPTH = 0.2;
+    const S0 = 0.5, DEPTH = 0.2;
     let S1 = S0;
     walk(a, T_DOWN); { const M = holdFlag(T_DOWN), foot = new T.Vector3().setFromMatrixPosition(M), Dy = M.elements[5];
-      S1 = clamp(S0 + (foot.y - (G(foot.x, foot.z) - DEPTH)) / Dy, 0.4, 1.15); }
+      S1 = clamp(S0 + (foot.y - (G(foot.x, foot.z) - DEPTH)) / Dy, 0.4, 1.3); }
     walk(a, T_REL); const PLANTED = holdFlag(T_REL);
     const FOOT = new T.Vector3().setFromMatrixPosition(PLANTED);
     function placeFlag(t) {
@@ -514,9 +514,9 @@
           const px = x + 0.08 * (drng() - 0.5), pz = z - 0.24 + 0.06 * drng();
           grain([px, G(px, pz) + 0.01, pz], [0.3 * (drng() - 0.5), 0.35 + 0.7 * drng(), 0.4 + 0.8 * drng()], t0 + 0.12 * drng(), 1.0 + 1.6 * drng(), 0.015 + 0.03 * drng(), 2.2); } }
     });
-    for (let k = 0; k < 170; k++) {                            // the spike goes in
+    for (let k = 0; k < 400; k++) {                            // the spike goes in
       const a0 = drng() * 6.283, sp = 0.3 + 1.1 * drng();
-      grain([FOOT.x + 0.04 * Math.cos(a0), G(FOOT.x, FOOT.z) + 0.01, FOOT.z + 0.04 * Math.sin(a0)], [Math.cos(a0) * sp, 0.2 + 0.9 * drng(), Math.sin(a0) * sp], T_HIT + 0.08 * drng(), 1.8 + 2.2 * drng(), 0.02 + 0.05 * drng(), 2.0);
+      grain([FOOT.x + 0.04 * Math.cos(a0), G(FOOT.x, FOOT.z) + 0.01, FOOT.z + 0.04 * Math.sin(a0)], [Math.cos(a0) * sp, 0.2 + 0.9 * drng(), Math.sin(a0) * sp], T_HIT + 0.08 * drng(), 1.8 + 2.2 * drng(), 0.012 + 0.025 * drng(), 2.0);
     }
     for (let k = 0; k < 700; k++) {                            // motes in the air along the walk
       const px = -5 + 10 * drng(), pz = -10 + 24 * drng();
@@ -569,11 +569,11 @@
     [7.2, [3.8, 0.5, -3.0], [0, -0.15, 0]],
     [9.8, [-2.6, 0.5, -4.4], [0, 0.0, 0.3]],
     [12.0, [-1.2, 0.6, 4.8], [0, -0.1, -2.0]],
-    [13.4, [1.5, -0.55, 3.0], [-0.1, 0.05, -1.0]],
-    [14.8, [1.7, -0.45, 2.6], [-0.1, -0.05, -0.8]],
+    [13.4, [1.7, -0.4, 4.2], [-0.15, 0.15, -1.0]],
+    [14.8, [1.9, -0.3, 3.8], [-0.1, 0.05, -0.8]],
     [16.6, [2.7, 0.05, 1.3], [0, 0.1, -0.3]],
-    [20.0, [1.8, 2.2, 5.5], [-0.4, 0.1, -7.0]],
-    [23.0, [1.6, 2.9, 7.4], [-0.4, 0.3, -9.0]],
+    [20.0, [1.8, 2.3, 6.6], [-0.4, 0.0, -7.0]],
+    [23.0, [1.6, 3.0, 8.8], [-0.4, 0.2, -9.0]],
   ];
   function shoot(t, a, cam) {
     const p = a.group.position, T = S.T, K = CAM, n = K.length;
