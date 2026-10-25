@@ -46,9 +46,12 @@
     const r = Math.hypot(x, z + 40);
     h += 2.2 * fbm(x * 0.045, z * 0.045, 3) * smooth((r - 10) / 30) + 0.5 * fbm(x * 0.13, z * 0.13, 3);
     const m = pathMask(x, z);
-    // rock slabs: ridged noise cut into a step, on the hillsides and in the valley
+    // rock outcrops: ridged noise lifted in soft-edged layers, on the hillsides and in the valley
     const rg = ridged(x * 0.11 + 3, z * 0.11, 3);
-    h += (0.35 * smooth((rg - 0.52) / 0.06) + 0.12 * smooth((rg - 0.7) / 0.03)) * (0.25 + 0.75 * m);
+    h += (0.22 * smooth((rg - 0.5) / 0.14) + 0.07 * smooth((rg - 0.68) / 0.08)) * (0.25 + 0.75 * m);
+    // dunes on the valley floor: long crests across the wind, a gentle back and a steeper lee face
+    { const ph = (x * 0.3 + z * 0.95) / 7 + 2.5 * fbm(x * 0.04 + 9, z * 0.04, 2), f = ph - Math.floor(ph);
+      h += 0.8 * (f < 0.72 ? smooth(f / 0.72) : smooth((1 - f) / 0.28)) * smooth((-dz - 9) / 6) * (0.4 + vn(x * 0.04, z * 0.04)) * (1 - smooth((Math.hypot(x, z + 60) - 120) / 60)); }
     h += craters(x, z, 3.2, 0.25, 0.8, 0.45, 11) * m + craters(x, z, 13, 1.2, 4.5, 0.5, 23) * (0.3 + 0.7 * m) + craters(x, z, 70, 8, 26, 0.6, 37);
     // fine rubble and sand ripples (ripples where the ground is low and calm)
     h += 0.05 * fbm(x * 0.9, z * 0.9, 3) * (0.35 + 0.65 * m);
@@ -56,7 +59,7 @@
     // far away: the valley floor, mesas, and the rim of a big crater all round (highest ahead, under the Sun)
     const R = Math.hypot(x, z + 60);
     h += 55 * smooth((R - 250) / 500) * (0.45 + ridged(x / 160, z / 160, 4)) * (0.8 + 0.2 * Math.sin(Math.atan2(x, -z - 60) * 3));
-    h += 10 * smooth((ridged(x / 45 + 7, z / 45, 2) - 0.62) / 0.05) * smooth((R - 60) / 60) * (1 - smooth((R - 400) / 100));
+    h += 7 * smooth((ridged(x / 45 + 7, z / 45, 2) - 0.58) / 0.16) * smooth((R - 60) / 60) * (1 - smooth((R - 400) / 100));
     return h;
   }
   const H0 = H(0, 0);
@@ -165,12 +168,13 @@
       uniform vec3 sunD; uniform vec3 phoD;
       vec3 skyCol(vec3 d) {
         float e = d.y;
-        vec3 c = mix(vec3(0.30, 0.22, 0.17), vec3(0.07, 0.065, 0.08), smoothstep(-0.02, 0.45, e));
-        vec3 dh = normalize(vec3(d.x, d.y * 1.6, d.z));
+        vec3 c = mix(vec3(0.22, 0.165, 0.135), vec3(0.045, 0.045, 0.06), smoothstep(-0.02, 0.4, e));
+        vec3 dh = normalize(vec3(d.x, d.y * 1.5, d.z));
         float a = acos(clamp(dot(dh, sunD), -1.0, 1.0));
-        c += vec3(0.16, 0.30, 0.58) * exp(-a / 0.22) * 1.2 + vec3(0.55, 0.75, 1.0) * exp(-a / 0.06) * 1.2;
-        c += vec3(0.25, 0.18, 0.14) * exp(-max(e, 0.0) / 0.05) * 0.6 * (0.6 + 0.4 * max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(sunD.x, 0.0, sunD.z))), 0.0));
-        return pow(c, vec3(2.2)) * 1.6;
+        float toward = max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(sunD.x, 0.0, sunD.z))), 0.0);
+        c += vec3(0.13, 0.24, 0.46) * exp(-a / 0.4) * 0.9 + vec3(0.2, 0.38, 0.72) * exp(-a / 0.16) * 1.1 + vec3(0.6, 0.8, 1.0) * exp(-a / 0.045) * 1.3;
+        c += vec3(0.2, 0.15, 0.13) * exp(-max(e, 0.0) / 0.04) * (0.25 + 0.45 * toward);   // the dusty band along the horizon
+        return pow(c, vec3(2.2)) * 1.8;
       }`;
     const sky = new T.Mesh(new T.SphereGeometry(8000, 64, 32), new T.ShaderMaterial({
       side: T.BackSide, depthWrite: false, uniforms: { sunD: { value: sun }, phoD: { value: phobos } },
@@ -202,11 +206,17 @@
     { const g = cv.getContext('2d'), im = g.createImageData(512, 512);
       for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
         const n = 0.5 * vn(x / 9, y / 9) + 0.3 * vn(x / 3.5 + 40, y / 3.5) + 0.2 * vn(x / 1.3 + 9, y / 1.3 + 3);
-        const peb = hash2(x >> 2, y >> 2) > 0.985 ? 0.6 * (1 - Math.hypot((x & 3) - 1.5, (y & 3) - 1.5) / 2.2) : 0;
-        const v = clamp(150 + 105 * (n - 0.5) * 2 - 60 * peb, 0, 255), k = (y * 512 + x) * 4;
+        const v = clamp(175 + 80 * (n - 0.5) * 2, 0, 255), k = (y * 512 + x) * 4;
         im.data[k] = im.data[k + 1] = im.data[k + 2] = v; im.data[k + 3] = 255;
       }
-      g.putImageData(im, 0, 0); }
+      g.putImageData(im, 0, 0);
+      let sd = 7; const rr = () => { sd = Math.imul(sd ^ (sd >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((sd >>> 0) % 1e6) / 1e6; };
+      for (let i = 0; i < 1400; i++) {                                    // grit and pebbles (wrapped at the edges)
+        const x = rr() * 512, y = rr() * 512, r = 0.6 + 3.2 * rr() ** 4, sh = 70 + 90 * rr();
+        for (const ox of [-512, 0, 512]) for (const oy of [-512, 0, 512]) {
+          g.fillStyle = `rgba(${sh},${sh},${sh},0.85)`; g.beginPath(); g.ellipse(x + ox, y + oy, r, r * (0.7 + 0.3 * rr()), rr() * 3, 0, 6.3); g.fill();
+          g.fillStyle = 'rgba(235,235,235,0.5)'; g.beginPath(); g.arc(x + ox - r * 0.25, y + oy - r * 0.25, r * 0.45, 0, 6.3); g.fill(); }
+      } }
     const tex = new T.CanvasTexture(cv); tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.anisotropy = 8;
 
     // baked sunlight on the ground: march towards the Sun; 1 = lit, 0 = in a shadow (a soft edge)
@@ -324,13 +334,13 @@
 
     // the light: the low Sun (its shadow map covers the walk and the rocks round it: the Sun is so low that this
     // box reaches far along the ground), a dim brown sky and ground, a cool rim on the figure
-    const key = new T.DirectionalLight(0xfff0e0, 4.2);
+    const key = new T.DirectionalLight(0xfff4ea, 3.6);
     key.position.copy(sun).multiplyScalar(80).add(new T.Vector3(0, 0, -5)); key.target.position.set(0, 0, -5);
     key.castShadow = true; key.shadow.mapSize.set(4096, 4096); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 3;
     Object.assign(key.shadow.camera, { left: -16, right: 16, top: 7, bottom: -7, near: 15, far: 170 });
     scene.add(key, key.target);
-    scene.add(new T.HemisphereLight(0x8a7a78, 0x5a3424, 0.9));
-    a.rim.color.value.setRGB(0.35, 0.5, 0.75);
+    scene.add(new T.HemisphereLight(0x6a7088, 0x4a2c1e, 0.32));
+    a.rim.color.value.setRGB(0.45, 0.65, 1.0);
     scene.environment = window.__astronautEnv(T, r.renderer, { warm: sun });
 
     const cam = new T.PerspectiveCamera(36, 720 / 1280, 0.03, 12000);
@@ -342,15 +352,15 @@
   // low by the boots (a step into the dust), alongside, ahead-left looking back, round behind on the crest for the
   // flag, then up and back over the valley into the blue dusk.
   const CAM = [
-    [0.0, [0.75, -0.95, 0.35], [0.05, -1.05, -0.35]],
-    [2.6, [0.95, -0.8, -0.3], [0.05, -0.9, -0.6]],
-    [4.4, [3.0, 0.0, 0.3], [0, -0.1, -0.3]],
-    [7.0, [2.6, 0.3, -1.6], [0, -0.1, 0]],
-    [9.6, [-1.6, 0.8, -3.0], [0, -0.15, 0.2]],
-    [11.8, [-0.4, 0.5, 3.4], [0, -0.05, -1.5]],
-    [13.2, [1.4, 0.15, 1.6], [0.1, 0.0, -0.6]],
-    [15.8, [1.6, 0.3, 2.4], [-0.1, 0.0, -1.0]],
-    [21.0, [1.5, 2.8, 5.0], [-0.5, -0.4, -6.0]],
+    [0.0, [0.55, -1.12, 1.3], [0.0, -1.0, -0.9]],
+    [2.6, [1.1, -0.65, 1.9], [0.0, -0.5, -0.6]],
+    [4.6, [4.8, 0.15, 1.2], [0, -0.2, -0.8]],
+    [7.2, [3.8, 0.5, -3.0], [0, -0.15, 0]],
+    [9.8, [-2.8, 1.2, -4.2], [0, -0.25, 0.3]],
+    [12.0, [-1.2, 0.6, 4.8], [0, -0.1, -2.0]],
+    [13.4, [2.0, 0.2, 2.8], [0.0, -0.1, -0.8]],
+    [15.8, [2.3, 0.4, 3.6], [-0.1, -0.1, -1.2]],
+    [21.0, [1.8, 3.2, 6.5], [-0.5, -0.6, -7.0]],
   ];
   function shoot(t, a, cam) {
     const p = a.group.position, T = S.T, K = CAM, n = K.length;
@@ -374,7 +384,7 @@
     shoot(t, a, cam);
     sky.position.copy(cam.position);
     const tm = ren.toneMapping, te = ren.toneMappingExposure, sm = ren.shadowMap.enabled, st = ren.shadowMap.type;
-    ren.toneMapping = T.ACESFilmicToneMapping; ren.toneMappingExposure = 1.0; ren.shadowMap.enabled = true; ren.shadowMap.type = T.PCFSoftShadowMap;
+    ren.toneMapping = T.ACESFilmicToneMapping; ren.toneMappingExposure = 1.1; ren.shadowMap.enabled = true; ren.shadowMap.type = T.PCFSoftShadowMap;
     ren.setRenderTarget(null); ren.render(scene, cam);
     ren.toneMapping = tm; ren.toneMappingExposure = te; ren.shadowMap.enabled = sm; ren.shadowMap.type = st;
   };
