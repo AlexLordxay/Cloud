@@ -41,7 +41,8 @@ function serve(page) {
       if (u === '/' || u === '/rec.html') { rsp.writeHead(200, { 'Content-Type': 'text/html' }); return rsp.end(page); }
       if (u.startsWith('/textures/')) file = path.join(SITE, u);
       if (u.startsWith('/scene/')) file = path.join(SCENE, u.slice(7));   // the scene's own pictures (e.g. the galaxy)
-      if (!file || !(file.startsWith(SITE) || file.startsWith(SCENE)) || !fs.existsSync(file)) { rsp.writeHead(404); return rsp.end(); }
+      if (u.startsWith('/fonts/')) file = path.join(TOOLS, u);              // the video fonts (e.g. for text drawn in a scene)
+      if (!file || !(file.startsWith(SITE) || file.startsWith(SCENE) || file.startsWith(path.join(TOOLS, 'fonts'))) || !fs.existsSync(file)) { rsp.writeHead(404); return rsp.end(); }
       rsp.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
       fs.createReadStream(file).pipe(rsp);
     }).listen(0, '127.0.0.1', () => res(srv));
