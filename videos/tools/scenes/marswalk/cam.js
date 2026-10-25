@@ -67,16 +67,17 @@
   const slopeZ = (x, z) => Math.atan((G(x, z - 0.15) - G(x, z + 0.15)) / 0.3);   // + where it rises ahead (-z)
 
   // ---------------- the walk ----------------
-  // footprints: [time it lands, z of the ankle, side]; steps of 0.92 every 0.78 s, then shorter ones to a stop on the crest
+  // footprints: [time it lands, z of the ankle, side]; steps of 0.8 every 0.76 s, then shorter ones to a stop on the crest
+  const STEP = 0.8, PER = 0.76;
   const PRINTS = (() => {
-    const lens = [...Array(14).fill(0.92), 0.6, 0.35, 0.15], durs = [...Array(14).fill(0.78), 0.72, 0.66, 0.6];
+    const lens = [...Array(14).fill(STEP), 0.55, 0.32, 0.15], durs = [...Array(14).fill(PER), 0.72, 0.66, 0.6];
     const total = lens.reduce((a, b) => a + b, 0), z0 = RIDGE + 0.15 + total;
-    const P = [[-1.08, z0 + 0.92, 'R'], [-0.3, z0, 'L']];
+    const P = [[-0.3 - PER, z0 + STEP, 'R'], [-0.3, z0, 'L']];
     lens.forEach((L, i) => { const [t, z, s] = P[P.length - 1]; P.push([t + durs[i], z - L, s === 'L' ? 'R' : 'L']); });
     return P;
   })();
-  const FOOT_X = 0.135, ANKLE_UP = 0.127;
-  // where a foot is at t: [x, y, z, pitch] of the ankle pivot; pitch: + toe up
+  const FOOT_X = 0.135, ANKLE_UP = 0.118;
+  // where a foot would be at t if it stayed flat: [x, y, z, slope] of the ankle pivot (+ toe up); placeFoot rolls it
   function foot(side, t) {
     const own = PRINTS.map((p, i) => [p, i]).filter(([p]) => p[2] === side);
     let k = own.length - 1; while (k > 0 && own[k][0][0] > t) k--;
@@ -86,8 +87,8 @@
     const prevOther = PRINTS[next[1] - 1], t0 = prevOther[0] + 0.1 * (next[0][0] - prevOther[0]), t1 = next[0][0];
     if (t < t0) return at(cur[1]);
     const u = clamp((t - t0) / (t1 - t0), 0, 1), e = u * u * (3 - 2 * u), a = at(cur[1]), b = at(next[0][1]);
-    const lift = 0.15 * Math.sin(Math.PI * Math.pow(u, 0.85)) * Math.min(1, (b[2] - a[2]) / -0.5 + 0.3);
-    return [x, a[1] + (b[1] - a[1]) * e + lift, a[2] + (b[2] - a[2]) * e, a[3] + (b[3] - a[3]) * e + 0.5 * Math.sin(Math.PI * u) * (u - 0.55)];
+    const lift = 0.11 * Math.sin(Math.PI * Math.pow(u, 0.8)) * Math.min(1, (b[2] - a[2]) / -0.5 + 0.3);
+    return [x, a[1] + (b[1] - a[1]) * e + lift, a[2] + (b[2] - a[2]) * e, a[3] + (b[3] - a[3]) * e];
   }
   // the pelvis: midway between the feet when a foot lands, gliding between those points (Catmull-Rom in time)
   const KNOTS = PRINTS.slice(1).map((p, i) => [p[0], (p[1] + PRINTS[i][1]) / 2]);
@@ -104,7 +105,7 @@
   function phase(t) {
     let i = 0; while (i < PRINTS.length - 1 && PRINTS[i + 1][0] <= t) i++;
     if (i >= PRINTS.length - 1) return [0, 0];
-    return [(t - PRINTS[i][0]) / (PRINTS[i + 1][0] - PRINTS[i][0]), clamp(Math.abs(PRINTS[i + 1][1] - PRINTS[i][1]) / 0.92, 0, 1)];
+    return [(t - PRINTS[i][0]) / (PRINTS[i + 1][0] - PRINTS[i][0]), clamp(Math.abs(PRINTS[i + 1][1] - PRINTS[i][1]) / STEP, 0, 1)];
   }
 
   // two-bone IK in the side (y, z) plane: forward angle 0 = straight down, + = forward (-z)
@@ -120,7 +121,23 @@
     const s = side === 'L' ? -1 : 1;
     J['hip' + side].rotation.set(hx, 0, s * Math.atan2(Math.abs(A[0]) - 0.105, 1.0));
     J['knee' + side].rotation.set(kx, 0, 0);
-    J['ankle' + side].rotation.set(A[3] - (bx + hx + kx), 0, -s * 0.02);
+    return bx + hx + kx;                                    // the shin's forward angle
+  }
+  // The suit's ankle bends high up the shin (the foot turns inside the boot), so it can't bend far: the foot stays as
+  // flat as the ankle allows and rolls for the rest, over the toe behind (heel off) and on the heel in front (heel
+  // strike), the toe or heel pinned where it touches. The same in the swing, so takeoff and landing join smoothly.
+  const TOE = [-ANKLE_UP, -0.16], HEEL = [-ANKLE_UP, 0.09], AX_UP = 0.2, AX_DN = -0.3;
+  const rot = (p, y, z) => [y * Math.cos(p) - z * Math.sin(p), y * Math.sin(p) + z * Math.cos(p)];
+  function rolled(F, p) {
+    const d = p - F[3]; if (Math.abs(d) < 1e-6) return F;
+    const pv = d < 0 ? TOE : HEEL, w = rot(F[3], pv[0], pv[1]), r = rot(p, pv[0], pv[1]);
+    return [F[0], F[1] + w[0] - r[0], F[2] + w[1] - r[1], p];
+  }
+  function placeFoot(a, side, F, bx) {
+    let p = F[3], psi = 0;
+    for (let it = 0; it < 5; it++) { psi = legIK(a, side, rolled(F, p), bx); p = psi + clamp(F[3] - psi, AX_DN, AX_UP); }
+    psi = legIK(a, side, rolled(F, p), bx);
+    a.joints['ankle' + side].rotation.set(p - psi, 0, -(side === 'L' ? -1 : 1) * 0.02);
   }
 
   function walk(a, t) {
@@ -130,25 +147,25 @@
     const z = pelvisZ(t), stand = 1 - stride;
     // the pelvis: low as a foot lands, up over the standing leg; a slight sway towards the standing foot
     const gy = (fl[1] + fr[1]) / 2 - ANKLE_UP;
-    let y = gy + 1.13 + 0.075 * Math.sin(Math.PI * ph) * stride + 0.05 * stand;
+    let y = gy + 1.17 + 0.06 * Math.sin(Math.PI * ph) * stride + 0.06 * stand;
     for (const f of [fl, fr]) {                              // never further than the legs reach
       const hz = z - 0.035, dz = f[2] - hz, dmax = L1 + L2 - 0.02;
       if (Math.abs(dz) < dmax) y = Math.min(y, f[1] + 0.13 + Math.sqrt(dmax * dmax - dz * dz));
     }
-    const lead = (fr[2] - fl[2]) / -0.92;                    // + when the right foot is ahead
-    const sway = 0.025 * Math.sin(Math.PI * clamp((t + 0.3) / 0.78, 0, 99)) * stride;
+    const lead = (fr[2] - fl[2]) / -STEP;                    // + when the right foot is ahead
+    const sway = 0.025 * Math.sin(Math.PI * clamp((t + 0.3) / PER, 0, 99)) * stride;
     a.group.position.set(sway, y, z);
     a.group.rotation.set(0, 0, 0);
     const bx = -0.09 * stride - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * stride;   // leaning into the walk (- = forward)
     J.body.rotation.set(bx, -0.07 * lead, 0.02 * lead);
     J.body.position.set(0, 0, 0);
     a.group.updateMatrixWorld(true);
-    legIK(a, 'L', fl, bx); legIK(a, 'R', fr, bx);
+    placeFoot(a, 'L', fl, bx); placeFoot(a, 'R', fr, bx);
     // the arms swing against the legs, the elbows a little bent
     for (const [s, L] of [[-1, 'L'], [1, 'R']]) {
       const sw = -s * lead;                                  // the left arm forward when the right foot is ahead
-      J['shoulder' + L].rotation.set(0.1 + 0.38 * sw * stride, 0.05 * s, s * 0.2);
-      J['elbow' + L].rotation.set(0.45 + 0.25 * Math.max(0, sw) * stride, 0, 0);
+      J['shoulder' + L].rotation.set(0.08 + 0.32 * sw * stride, 0.05 * s, s * 0.27);
+      J['elbow' + L].rotation.set(0.55 + 0.25 * Math.max(0, sw) * stride, 0, 0);
     }
     J.head.rotation.set(-0.12 - bx, 0.05 * lead, 0);
   }
