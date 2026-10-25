@@ -1,5 +1,5 @@
 # The astronaut walks on Mars at sunset and plants the Nebozvid flag on a ridge. One small caption at the end.
-DURATION = 9.5
+DURATION = 21
 CAP_FADE = 0.35
 CAPTIONS = []
 CUTS = []

@@ -37,11 +37,11 @@
   const RIDGE = -4.6;
   const ridgeZ = x => RIDGE + 0.5 * Math.sin(x * 0.23 + 0.4) + 0.25 * Math.sin(x * 0.61);
   // the path: a calm strip along x ~ 0 (no rocks, small features damped)
-  const pathMask = (x, z) => 1 - (1 - smooth((Math.abs(x) - 0.9) / 1.6)) * (1 - smooth((z - 8) / 3)) * (1 - smooth((-z - 6) / 1.5));
+  const pathMask = (x, z) => 1 - (1 - smooth((Math.abs(x) - 0.9) / 1.6)) * (1 - smooth((z - 16) / 3)) * (1 - smooth((-z - 6) / 1.5));
   function H(x, z) {
     const dz = z - ridgeZ(x);
     // the hill: up along the path to the crest, then down into the valley
-    let h = dz > 0 ? 1.05 * (1 - Math.min(1, dz / 13) ** 2) : 1.05 - 6.2 * (1 - Math.exp(-dz * dz / 60));
+    let h = dz > 0 ? 1.3 * (1 - Math.min(1, dz / 19) ** 2) : 1.3 - 6.5 * (1 - Math.exp(-dz * dz / 60));
     h -= 0.004 * x * x * smooth(dz / 4) * (1 - smooth((Math.abs(x) - 12) / 10));   // the hill's back rounds off to the sides
     const r = Math.hypot(x, z + 40);
     h += 2.2 * fbm(x * 0.045, z * 0.045, 3) * smooth((r - 10) / 30) + 0.5 * fbm(x * 0.13, z * 0.13, 3);
@@ -66,7 +66,7 @@
   // ---------------- the walk ----------------
   // footprints: [time it lands, z of the ankle, side]; steps of 0.92 every 0.78 s, then shorter ones to a stop on the crest
   const PRINTS = (() => {
-    const lens = [0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.6, 0.35, 0.15], durs = [0.78, 0.78, 0.78, 0.78, 0.78, 0.78, 0.72, 0.66, 0.6];
+    const lens = [...Array(14).fill(0.92), 0.6, 0.35, 0.15], durs = [...Array(14).fill(0.78), 0.72, 0.66, 0.6];
     const total = lens.reduce((a, b) => a + b, 0), z0 = RIDGE + 0.15 + total;
     const P = [[-1.08, z0 + 0.92, 'R'], [-0.3, z0, 'L']];
     lens.forEach((L, i) => { const [t, z, s] = P[P.length - 1]; P.push([t + durs[i], z - L, s === 'L' ? 'R' : 'L']); });
@@ -246,7 +246,7 @@
       return g;
     }
     // the fine mesh round the path
-    const X0 = -16, X1 = 16, Z0 = -24, Z1 = 10, STEP = 0.1, NX = Math.round((X1 - X0) / STEP) + 1, NZ = Math.round((Z1 - Z0) / STEP) + 1;
+    const X0 = -16, X1 = 16, Z0 = -26, Z1 = 18, STEP = 0.1, NX = Math.round((X1 - X0) / STEP) + 1, NZ = Math.round((Z1 - Z0) / STEP) + 1;
     const nearGeo = (() => {
       const pos = new Float32Array(NX * NZ * 3), idx = new Uint32Array((NX - 1) * (NZ - 1) * 6);
       for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const x = X0 + i * STEP, z = Z0 + j * STEP; pos.set([x, G(x, z), z], (j * NX + i) * 3); }
@@ -254,7 +254,7 @@
       return terrainGeo(pos, idx, 60);
     })();
     // the far mesh: rings round the middle out to the horizon; under the fine mesh it is pushed down out of sight
-    const CX = 0, CZ = -7, NA = 720, NR = 200, RMIN = 12, RMAX = 4000;
+    const CX = 0, CZ = -4, NA = 720, NR = 200, RMIN = 12, RMAX = 4000;
     const farGeo = (() => {
       const pos = new Float32Array(NA * NR * 3), idx = new Uint32Array(NA * (NR - 1) * 6);
       for (let j = 0; j < NR; j++) for (let i = 0; i < NA; i++) {
@@ -304,13 +304,13 @@
       g.computeVertexNormals(); return g;
     });
     const rng = (() => { let s = 12345; return () => { s = Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((s >>> 0) % 1e6) / 1e6; }; })();
-    const NROCK = 900, perShape = Math.ceil(NROCK / 3);
+    const NROCK = 1100, perShape = Math.ceil(NROCK / 3);
     const rockMeshes = shapes.map(g => { const m = new T.InstancedMesh(g, rockMat, perShape); m.castShadow = m.receiveShadow = true; m.count = 0; scene.add(m); return m; });
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), V = new T.Vector3(), SC = new T.Vector3(), Cc = new T.Color();
     for (let k = 0; k < NROCK * 3 && rockMeshes.some(m => m.count < perShape); k++) {
-      const x = -15 + 30 * rng(), z = -23 + 32 * rng(), u = rng();
+      const x = -15 + 30 * rng(), z = -25 + 42 * rng(), u = rng();
       let s = Math.min(1.3, 0.035 / Math.pow(1 - 0.985 * u, 0.55));
-      if (Math.abs(x) < 0.9 + s && z > -6 && z < 9) continue;       // keep the path clear
+      if (Math.abs(x) < 0.9 + s && z > -6 && z < 17) continue;       // keep the path clear
       if (pathMask(x, z) < 0.5 && s > 0.12) s *= 0.4;
       const m = rockMeshes[k % 3]; if (m.count >= perShape) continue;
       E.set(rng() * 0.5, rng() * 6.28, rng() * 0.5); Q.setFromEuler(E);
@@ -327,7 +327,7 @@
     const key = new T.DirectionalLight(0xfff0e0, 4.2);
     key.position.copy(sun).multiplyScalar(80).add(new T.Vector3(0, 0, -5)); key.target.position.set(0, 0, -5);
     key.castShadow = true; key.shadow.mapSize.set(4096, 4096); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 3;
-    Object.assign(key.shadow.camera, { left: -16, right: 16, top: 7, bottom: -7, near: 20, far: 160 });
+    Object.assign(key.shadow.camera, { left: -16, right: 16, top: 7, bottom: -7, near: 15, far: 170 });
     scene.add(key, key.target);
     scene.add(new T.HemisphereLight(0x8a7a78, 0x5a3424, 0.9));
     a.rim.color.value.setRGB(0.35, 0.5, 0.75);
@@ -338,22 +338,28 @@
   };
 
   // ---------------- the camera ----------------
-  // (a first draft: low by the boots, alongside, behind on the crest, then up over the valley)
+  // keys [t, camera offset from the pelvis (x, y, z; y kept above the ground), look-at offset]; Catmull-Rom between them.
+  // low by the boots (a step into the dust), alongside, ahead-left looking back, round behind on the crest for the
+  // flag, then up and back over the valley into the blue dusk.
+  const CAM = [
+    [0.0, [0.75, -0.95, 0.35], [0.05, -1.05, -0.35]],
+    [2.6, [0.95, -0.8, -0.3], [0.05, -0.9, -0.6]],
+    [4.4, [3.0, 0.0, 0.3], [0, -0.1, -0.3]],
+    [7.0, [2.6, 0.3, -1.6], [0, -0.1, 0]],
+    [9.6, [-1.6, 0.8, -3.0], [0, -0.15, 0.2]],
+    [11.8, [-0.4, 0.5, 3.4], [0, -0.05, -1.5]],
+    [13.2, [1.4, 0.15, 1.6], [0.1, 0.0, -0.6]],
+    [15.8, [1.6, 0.3, 2.4], [-0.1, 0.0, -1.0]],
+    [21.0, [1.5, 2.8, 5.0], [-0.5, -0.4, -6.0]],
+  ];
   function shoot(t, a, cam) {
-    const p = a.group.position, T = S.T;
-    const keys = [
-      [0.0, [0.75, -0.95, 0.35], [0.05, -1.05, -0.35]],
-      [2.0, [0.9, -0.85, -0.2], [0.05, -0.95, -0.6]],
-      [3.4, [3.2, 0.1, 0.4], [0, -0.1, -0.3]],
-      [5.6, [3.0, 0.2, 0.9], [0, -0.05, -0.5]],
-      [7.2, [1.5, 0.35, 3.0], [-0.2, 0.0, -1.5]],
-      [9.5, [1.4, 2.0, 3.8], [-0.4, -0.2, -4.0]],
-    ];
-    let i = 0; while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
-    const k0 = keys[i], k1 = keys[i + 1], u = smooth((t - k0[0]) / (k1[0] - k0[0]));
-    const L = (A, B) => A.map((v, j) => v + (B[j] - v) * u);
-    const o = L(k0[1], k1[1]), l = L(k0[2], k1[2]);
-    // the camera follows the pelvis along z, its height from the ground under it
+    const p = a.group.position, T = S.T, K = CAM, n = K.length;
+    let i = 0; while (i < n - 2 && t > K[i + 1][0]) i++;
+    const u = clamp((t - K[i][0]) / (K[i + 1][0] - K[i][0]), 0, 1);
+    const k0 = K[Math.max(i - 1, 0)], k1 = K[i], k2 = K[i + 1], k3 = K[Math.min(i + 2, n - 1)];
+    const cr = (a0, b, c, d) => 0.5 * (2 * b + (c - a0) * u + (2 * a0 - 5 * b + 4 * c - d) * u * u + (3 * b - a0 - 3 * c + d) * u * u * u);
+    const f = q => [0, 1, 2].map(j => cr(k0[q][j], k1[q][j], k2[q][j], k3[q][j]));
+    const o = f(1), l = f(2);
     const cx = o[0], cz = p.z + o[2], gy = G(cx, cz);
     cam.position.set(cx, Math.max(gy + 0.12, p.y + o[1]), cz);
     cam.lookAt(new T.Vector3(l[0], p.y + l[1], p.z + l[2]));
