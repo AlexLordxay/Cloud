@@ -1,0 +1,24 @@
+{
+  "title": "Космонавт на Марсі",
+  "date": "2026-10-25T12:00:00Z",
+  "rate": 0,
+  "duration": 9.5,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "include": [
+    "characters/emblem.js",
+    "characters/astronaut.js"
+  ],
+  "audio": {
+    "music": "scene",
+    "fadeIn": 0.15,
+    "fadeOut": 0.9
+  },
+  "patches": [
+    [
+      "  renderer.render(scene, camera);\n  requestAnimationFrame(tick);",
+      "  if (window.__recRender) window.__recRender(); else renderer.render(scene, camera);\n  requestAnimationFrame(tick);"
+    ]
+  ]
+}

@@ -1,0 +1,375 @@
+// "An astronaut on Mars": the Nebozvid astronaut walks up a gentle slope towards a ridge at sunset (the Martian dusk is
+// blue round the Sun), and on the crest plants the Nebozvid flag. Its own three.js scene drawn by __recRender.
+//
+// The ground is one deterministic height function H(x, z) (units ~ metres, the figure is ~1.9 tall, facing -z): a
+// broad hill rising along the path to a crest at z ~ -4.6, beyond it a slope down into a wide valley, and far off the
+// mountains of a crater's rim in the haze; on top, rolling noise, rock slabs (ridged noise cut into steps), craters
+// with raised rims on three scales and sand ripples in the low places. Two meshes: a fine one round the path (0.1 apart)
+// and a polar one out to the horizon. The terrain's own shadows (the Sun is low, they are long) are baked into the
+// vertices by marching towards the Sun; the figure and the rocks cast real shadows (one shadow map).
+// The walk: footprints laid out in time, each foot pinned to its print while it stands and swung on an arc between
+// prints, the legs solved by two-bone IK in the side plane, the pelvis riding between the feet with a soft bounce.
+(() => {
+  const smooth = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+
+  // ---------------- the ground ----------------
+  const hash2 = (i, j) => { let h = (Math.imul(i, 374761393) + Math.imul(j, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  function vn(x, z) {
+    const i = Math.floor(x), j = Math.floor(z), fx = x - i, fz = z - j, u = fx * fx * (3 - 2 * fx), v = fz * fz * (3 - 2 * fz);
+    const a = hash2(i, j), b = hash2(i + 1, j), c = hash2(i, j + 1), d = hash2(i + 1, j + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  const fbm = (x, z, n) => { let s = 0, a = 1, f = 1; for (let k = 0; k < n; k++) { s += a * (vn(x * f + 17 * k, z * f - 9 * k) - 0.5); a *= 0.5; f *= 2.03; } return s; };
+  const ridged = (x, z, n) => { let s = 0, a = 1, f = 1; for (let k = 0; k < n; k++) { const r = 1 - Math.abs(2 * vn(x * f + 5 * k, z * f + 11 * k) - 1); s += a * r * r; a *= 0.5; f *= 2.1; } return s / 1.75; };
+  // craters: at most one in each cell of a grid (size C), radius between r0 and r1; d = distance / radius
+  const craterShape = d => d < 1 ? 0.2 * (d * d - 1) + 0.055 * Math.exp(-(((d - 1) / 0.22) ** 2)) : 0.055 * Math.exp(-(((d - 1) / 0.4) ** 2));
+  function craters(x, z, C, r0, r1, p, seed) {
+    const ci = Math.floor(x / C), cj = Math.floor(z / C); let s = 0;
+    for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) {
+      if (hash2(i + seed, j) > p) continue;
+      const cx = (i + hash2(i, j + seed)) * C, cz = (j + hash2(i - seed, j)) * C, r = r0 + (r1 - r0) * hash2(j, i + seed) ** 2;
+      const d = Math.hypot(x - cx, z - cz) / r; if (d > 2.2) continue;
+      s += r * craterShape(d) * (0.55 + 0.45 * hash2(i + 3 * seed, j + 7));   // older ones softer
+    }
+    return s;
+  }
+  const RIDGE = -4.6;
+  const ridgeZ = x => RIDGE + 0.5 * Math.sin(x * 0.23 + 0.4) + 0.25 * Math.sin(x * 0.61);
+  // the path: a calm strip along x ~ 0 (no rocks, small features damped)
+  const pathMask = (x, z) => 1 - (1 - smooth((Math.abs(x) - 0.9) / 1.6)) * (1 - smooth((z - 8) / 3)) * (1 - smooth((-z - 6) / 1.5));
+  function H(x, z) {
+    const dz = z - ridgeZ(x);
+    // the hill: up along the path to the crest, then down into the valley
+    let h = dz > 0 ? 1.05 * (1 - Math.min(1, dz / 13) ** 2) : 1.05 - 6.2 * (1 - Math.exp(-dz * dz / 60));
+    h -= 0.004 * x * x * smooth(dz / 4) * (1 - smooth((Math.abs(x) - 12) / 10));   // the hill's back rounds off to the sides
+    const r = Math.hypot(x, z + 40);
+    h += 2.2 * fbm(x * 0.045, z * 0.045, 3) * smooth((r - 10) / 30) + 0.5 * fbm(x * 0.13, z * 0.13, 3);
+    const m = pathMask(x, z);
+    // rock slabs: ridged noise cut into a step, on the hillsides and in the valley
+    const rg = ridged(x * 0.11 + 3, z * 0.11, 3);
+    h += (0.35 * smooth((rg - 0.52) / 0.06) + 0.12 * smooth((rg - 0.7) / 0.03)) * (0.25 + 0.75 * m);
+    h += craters(x, z, 3.2, 0.25, 0.8, 0.45, 11) * m + craters(x, z, 13, 1.2, 4.5, 0.5, 23) * (0.3 + 0.7 * m) + craters(x, z, 70, 8, 26, 0.6, 37);
+    // fine rubble and sand ripples (ripples where the ground is low and calm)
+    h += 0.05 * fbm(x * 0.9, z * 0.9, 3) * (0.35 + 0.65 * m);
+    h += 0.012 * Math.sin((x * 0.35 + z) * 9.5 + 3 * fbm(x * 0.3, z * 0.3, 2)) * smooth(-dz / 6) * (1 - smooth((rg - 0.45) / 0.1));
+    // far away: the valley floor, mesas, and the rim of a big crater all round (highest ahead, under the Sun)
+    const R = Math.hypot(x, z + 60);
+    h += 55 * smooth((R - 250) / 500) * (0.45 + ridged(x / 160, z / 160, 4)) * (0.8 + 0.2 * Math.sin(Math.atan2(x, -z - 60) * 3));
+    h += 10 * smooth((ridged(x / 45 + 7, z / 45, 2) - 0.62) / 0.05) * smooth((R - 60) / 60) * (1 - smooth((R - 400) / 100));
+    return h;
+  }
+  const H0 = H(0, 0);
+  const G = (x, z) => H(x, z) - H0;   // the ground, with the start of the path at y = 0
+  const slopeZ = (x, z) => Math.atan((G(x, z - 0.15) - G(x, z + 0.15)) / 0.3);   // + where it rises ahead (-z)
+
+  // ---------------- the walk ----------------
+  // footprints: [time it lands, z of the ankle, side]; steps of 0.92 every 0.78 s, then shorter ones to a stop on the crest
+  const PRINTS = (() => {
+    const lens = [0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.6, 0.35, 0.15], durs = [0.78, 0.78, 0.78, 0.78, 0.78, 0.78, 0.72, 0.66, 0.6];
+    const total = lens.reduce((a, b) => a + b, 0), z0 = RIDGE + 0.15 + total;
+    const P = [[-1.08, z0 + 0.92, 'R'], [-0.3, z0, 'L']];
+    lens.forEach((L, i) => { const [t, z, s] = P[P.length - 1]; P.push([t + durs[i], z - L, s === 'L' ? 'R' : 'L']); });
+    return P;
+  })();
+  const FOOT_X = 0.135, ANKLE_UP = 0.127;
+  // where a foot is at t: [x, y, z, pitch] of the ankle pivot; pitch: + toe up
+  function foot(side, t) {
+    const own = PRINTS.map((p, i) => [p, i]).filter(([p]) => p[2] === side);
+    let k = own.length - 1; while (k > 0 && own[k][0][0] > t) k--;
+    const [cur, ci] = own[k], next = own[k + 1], x = (side === 'L' ? -1 : 1) * FOOT_X;
+    const at = z => [x, G(x, z) + ANKLE_UP, z, slopeZ(x, z)];
+    if (!next || t < cur[0]) return at(cur[1]);
+    const prevOther = PRINTS[next[1] - 1], t0 = prevOther[0] + 0.1 * (next[0][0] - prevOther[0]), t1 = next[0][0];
+    if (t < t0) return at(cur[1]);
+    const u = clamp((t - t0) / (t1 - t0), 0, 1), e = u * u * (3 - 2 * u), a = at(cur[1]), b = at(next[0][1]);
+    const lift = 0.15 * Math.sin(Math.PI * Math.pow(u, 0.85)) * Math.min(1, (b[2] - a[2]) / -0.5 + 0.3);
+    return [x, a[1] + (b[1] - a[1]) * e + lift, a[2] + (b[2] - a[2]) * e, a[3] + (b[3] - a[3]) * e + 0.5 * Math.sin(Math.PI * u) * (u - 0.55)];
+  }
+  // the pelvis: midway between the feet when a foot lands, gliding between those points (Catmull-Rom in time)
+  const KNOTS = PRINTS.slice(1).map((p, i) => [p[0], (p[1] + PRINTS[i][1]) / 2]);
+  function pelvisZ(t) {
+    const K = KNOTS, n = K.length; if (t <= K[0][0]) return K[0][1] + (K[0][0] - t) * (K[1][1] - K[0][1]) / (K[1][0] - K[0][0]);
+    if (t >= K[n - 1][0]) return K[n - 1][1];
+    let i = 0; while (K[i + 1][0] < t) i++;
+    const p0 = K[Math.max(i - 1, 0)], p1 = K[i], p2 = K[i + 1], p3 = K[Math.min(i + 2, n - 1)], u = (t - p1[0]) / (p2[0] - p1[0]);
+    const m1 = (p2[1] - p0[1]) / (p2[0] - p0[0] || 1) * (p2[0] - p1[0]), m2 = (p3[1] - p1[1]) / (p3[0] - p1[0] || 1) * (p2[0] - p1[0]);
+    const h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u, h11 = u ** 3 - u * u;
+    return h00 * p1[1] + h10 * m1 + h01 * p2[1] + h11 * m2;
+  }
+  // 0 when a foot lands, 1 just before the next one; and how much of a stride is going on (0 once standing)
+  function phase(t) {
+    let i = 0; while (i < PRINTS.length - 1 && PRINTS[i + 1][0] <= t) i++;
+    if (i >= PRINTS.length - 1) return [0, 0];
+    return [(t - PRINTS[i][0]) / (PRINTS[i + 1][0] - PRINTS[i][0]), clamp(Math.abs(PRINTS[i + 1][1] - PRINTS[i][1]) / 0.92, 0, 1)];
+  }
+
+  // two-bone IK in the side (y, z) plane: forward angle 0 = straight down, + = forward (-z)
+  const L1 = Math.hypot(0.48, 0.02), L2 = Math.hypot(0.56, 0.02), O1 = Math.atan2(0.02, 0.48), O2 = Math.atan2(0.02, 0.56);
+  function legIK(a, side, A, bx) {
+    const J = a.joints, hp = J['hip' + side].getWorldPosition(new a.T.Vector3());
+    let dy = A[1] - hp.y, dz = A[2] - hp.z, D = Math.hypot(dy, dz); const Dm = L1 + L2 - 0.004;
+    if (D > Dm) { dy *= Dm / D; dz *= Dm / D; D = Dm; }
+    const phi = Math.atan2(-dz, -dy), al = Math.acos(clamp((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
+    const th1 = phi + al, ky = hp.y - L1 * Math.cos(th1), kz = hp.z - L1 * Math.sin(th1);
+    const th2 = Math.atan2(-(hp.z + dz - kz), -(hp.y + dy - ky));
+    const hx = th1 + O1 - bx, kx = th2 - O2 - (bx + hx);
+    const s = side === 'L' ? -1 : 1;
+    J['hip' + side].rotation.set(hx, 0, s * Math.atan2(Math.abs(A[0]) - 0.105, 1.0));
+    J['knee' + side].rotation.set(kx, 0, 0);
+    J['ankle' + side].rotation.set(A[3] - (bx + hx + kx), 0, -s * 0.02);
+  }
+
+  function walk(a, t) {
+    const J = a.joints;
+    a.pose(t, { glance: false });                            // breathing, fingers, the antenna
+    const fl = foot('L', t), fr = foot('R', t), [ph, stride] = phase(t);
+    const z = pelvisZ(t), stand = 1 - stride;
+    // the pelvis: low as a foot lands, up over the standing leg; a slight sway towards the standing foot
+    const gy = (fl[1] + fr[1]) / 2 - ANKLE_UP;
+    let y = gy + 1.13 + 0.075 * Math.sin(Math.PI * ph) * stride + 0.05 * stand;
+    for (const f of [fl, fr]) {                              // never further than the legs reach
+      const hz = z - 0.035, dz = f[2] - hz, dmax = L1 + L2 - 0.02;
+      if (Math.abs(dz) < dmax) y = Math.min(y, f[1] + 0.13 + Math.sqrt(dmax * dmax - dz * dz));
+    }
+    const lead = (fr[2] - fl[2]) / -0.92;                    // + when the right foot is ahead
+    const sway = 0.025 * Math.sin(Math.PI * clamp((t + 0.3) / 0.78, 0, 99)) * stride;
+    a.group.position.set(sway, y, z);
+    a.group.rotation.set(0, 0, 0);
+    const bx = -0.09 * stride - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * stride;   // leaning into the walk (- = forward)
+    J.body.rotation.set(bx, -0.07 * lead, 0.02 * lead);
+    J.body.position.set(0, 0, 0);
+    a.group.updateMatrixWorld(true);
+    legIK(a, 'L', fl, bx); legIK(a, 'R', fr, bx);
+    // the arms swing against the legs, the elbows a little bent
+    for (const [s, L] of [[-1, 'L'], [1, 'R']]) {
+      const sw = -s * lead;                                  // the left arm forward when the right foot is ahead
+      J['shoulder' + L].rotation.set(0.1 + 0.38 * sw * stride, 0.05 * s, s * 0.2);
+      J['elbow' + L].rotation.set(0.45 + 0.25 * Math.max(0, sw) * stride, 0, 0);
+    }
+    J.head.rotation.set(-0.12 - bx, 0.05 * lead, 0);
+  }
+
+  // ---------------- the scene ----------------
+  let S = null;
+  window.__sceneSetup = async (r) => {
+    const T = r.THREE, scene = new T.Scene(), a = window.__makeAstronaut(T);
+    a.T = T;
+    await a.ready;
+    scene.add(a.group);
+    const sun = new T.Vector3(-0.25, 0.14, -1).normalize(), phobos = new T.Vector3(0.42, 0.3, -1).normalize();
+
+    // the sky (linear colour): the dusk's dim brown, a blue glow round the Sun, darker overhead; the Sun's small disc
+    // and Phobos lit from the side. The same function colours the haze over the ground.
+    const SKY = `
+      uniform vec3 sunD; uniform vec3 phoD;
+      vec3 skyCol(vec3 d) {
+        float e = d.y;
+        vec3 c = mix(vec3(0.30, 0.22, 0.17), vec3(0.07, 0.065, 0.08), smoothstep(-0.02, 0.45, e));
+        vec3 dh = normalize(vec3(d.x, d.y * 1.6, d.z));
+        float a = acos(clamp(dot(dh, sunD), -1.0, 1.0));
+        c += vec3(0.16, 0.30, 0.58) * exp(-a / 0.22) * 1.2 + vec3(0.55, 0.75, 1.0) * exp(-a / 0.06) * 1.2;
+        c += vec3(0.25, 0.18, 0.14) * exp(-max(e, 0.0) / 0.05) * 0.6 * (0.6 + 0.4 * max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(sunD.x, 0.0, sunD.z))), 0.0));
+        return pow(c, vec3(2.2)) * 1.6;
+      }`;
+    const sky = new T.Mesh(new T.SphereGeometry(8000, 64, 32), new T.ShaderMaterial({
+      side: T.BackSide, depthWrite: false, uniforms: { sunD: { value: sun }, phoD: { value: phobos } },
+      vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: SKY + `
+        varying vec3 vD;
+        void main(){
+          vec3 d = normalize(vD), c = skyCol(d);
+          float a = acos(clamp(dot(d, sunD), -1.0, 1.0));
+          c += vec3(1.0, 0.98, 0.95) * (smoothstep(0.0062, 0.0052, a) * 30.0 + exp(-a / 0.012) * 3.0);
+          // Phobos: a small lumpy disc, lit from the Sun's side
+          vec3 ux = normalize(cross(vec3(0.0, 1.0, 0.0), phoD)), uy = cross(phoD, ux);
+          vec2 q = vec2(dot(d, ux), dot(d, uy)) / 0.0075; q.x *= 1.25;
+          float rr = dot(q, q);
+          if (rr < 1.0 && dot(d, phoD) > 0.0) {
+            vec3 n = normalize(ux * q.x + uy * q.y + phoD * -sqrt(1.0 - rr));
+            float l = max(dot(n, sunD), 0.0);
+            c = mix(c, vec3(0.5, 0.45, 0.42) * l * 1.8 + c * 0.4, smoothstep(1.0, 0.85, rr));
+          }
+          gl_FragColor = vec4(c, 1.0);
+          #include <tonemapping_fragment>
+          #include <encodings_fragment>
+        }`,
+    }));
+    scene.add(sky);
+
+    // the regolith's fine texture (a multiplier near 1) and its bump
+    const cv = document.createElement('canvas'); cv.width = cv.height = 512;
+    { const g = cv.getContext('2d'), im = g.createImageData(512, 512);
+      for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
+        const n = 0.5 * vn(x / 9, y / 9) + 0.3 * vn(x / 3.5 + 40, y / 3.5) + 0.2 * vn(x / 1.3 + 9, y / 1.3 + 3);
+        const peb = hash2(x >> 2, y >> 2) > 0.985 ? 0.6 * (1 - Math.hypot((x & 3) - 1.5, (y & 3) - 1.5) / 2.2) : 0;
+        const v = clamp(150 + 105 * (n - 0.5) * 2 - 60 * peb, 0, 255), k = (y * 512 + x) * 4;
+        im.data[k] = im.data[k + 1] = im.data[k + 2] = v; im.data[k + 3] = 255;
+      }
+      g.putImageData(im, 0, 0); }
+    const tex = new T.CanvasTexture(cv); tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.anisotropy = 8;
+
+    // baked sunlight on the ground: march towards the Sun; 1 = lit, 0 = in a shadow (a soft edge)
+    const sunH = Math.hypot(sun.x, sun.z), tanE = sun.y / sunH, sx = sun.x / sunH, sz = sun.z / sunH;
+    function lit(x, y, z, far) {
+      let res = 1, t = 0.08;
+      while (t < far) {
+        const d = y + t * tanE - G(x + sx * t, z + sz * t);
+        res = Math.min(res, 6 * d / t);
+        if (res < -0.2) break;
+        t *= 1.13; t += 0.02;
+      }
+      return smooth((res + 0.2) / 1.2);
+    }
+    // the ground's colour: rusty regolith, dark rock on the slabs and steep faces, paler dust in the hollows
+    const lin = c => c.map(v => Math.pow(v, 2.2));
+    const C_SOIL = lin([0.66, 0.39, 0.24]), C_ROCK = lin([0.33, 0.22, 0.16]), C_DUST = lin([0.76, 0.52, 0.35]);
+    function colour(x, z, y, ny) {
+      const rg = ridged(x * 0.11 + 3, z * 0.11, 3), rock = clamp(smooth((rg - 0.5) / 0.06) * 0.8 + smooth((0.82 - ny) / 0.15), 0, 1);
+      const dust = clamp(smooth(fbm(x * 0.2 + 30, z * 0.2, 3) * 3 + 0.2) * (1 - rock), 0, 1);
+      const v = 0.85 + 0.3 * (vn(x * 1.7, z * 1.7) - 0.5) + 0.2 * (vn(x * 0.21, z * 0.21) - 0.5);
+      return [0, 1, 2].map(i => (C_SOIL[i] + (C_DUST[i] - C_SOIL[i]) * dust * 0.7 + (C_ROCK[i] - C_SOIL[i]) * rock) * v);
+    }
+    function terrainGeo(pos, idx, far) {
+      const n = pos.length / 3, col = new Float32Array(n * 3), sh = new Float32Array(n), uv = new Float32Array(n * 2);
+      const g = new T.BufferGeometry();
+      g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setIndex(new T.BufferAttribute(idx, 1));
+      g.computeVertexNormals();
+      const N = g.attributes.normal;
+      for (let i = 0; i < n; i++) {
+        const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+        col.set(colour(x, z, y, N.getY(i)), i * 3);
+        sh[i] = lit(x, y + 0.01, z, far);
+        uv[i * 2] = x * 0.4; uv[i * 2 + 1] = z * 0.4;
+      }
+      g.setAttribute('color', new T.BufferAttribute(col, 3)); g.setAttribute('sunlit', new T.BufferAttribute(sh, 1)); g.setAttribute('uv', new T.BufferAttribute(uv, 2));
+      return g;
+    }
+    // the fine mesh round the path
+    const X0 = -16, X1 = 16, Z0 = -24, Z1 = 10, STEP = 0.1, NX = Math.round((X1 - X0) / STEP) + 1, NZ = Math.round((Z1 - Z0) / STEP) + 1;
+    const nearGeo = (() => {
+      const pos = new Float32Array(NX * NZ * 3), idx = new Uint32Array((NX - 1) * (NZ - 1) * 6);
+      for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const x = X0 + i * STEP, z = Z0 + j * STEP; pos.set([x, G(x, z), z], (j * NX + i) * 3); }
+      let m = 0; for (let j = 0; j < NZ - 1; j++) for (let i = 0; i < NX - 1; i++) { const q = j * NX + i; idx.set([q, q + NX, q + 1, q + 1, q + NX, q + NX + 1], m); m += 6; }
+      return terrainGeo(pos, idx, 60);
+    })();
+    // the far mesh: rings round the middle out to the horizon; under the fine mesh it is pushed down out of sight
+    const CX = 0, CZ = -7, NA = 720, NR = 200, RMIN = 12, RMAX = 4000;
+    const farGeo = (() => {
+      const pos = new Float32Array(NA * NR * 3), idx = new Uint32Array(NA * (NR - 1) * 6);
+      for (let j = 0; j < NR; j++) for (let i = 0; i < NA; i++) {
+        const rr = RMIN * Math.pow(RMAX / RMIN, j / (NR - 1)), an = 2 * Math.PI * i / NA, x = CX + rr * Math.sin(an), z = CZ - rr * Math.cos(an);
+        const inside = x > X0 + 0.3 && x < X1 - 0.3 && z > Z0 + 0.3 && z < Z1 - 0.3;
+        pos.set([x, G(x, z) - (inside ? 1.5 : 0), z], (j * NA + i) * 3);
+      }
+      let m = 0; for (let j = 0; j < NR - 1; j++) for (let i = 0; i < NA; i++) { const q = j * NA + i, q1 = j * NA + (i + 1) % NA; idx.set([q, q1, q + NA, q1, q1 + NA, q + NA], m); m += 6; }
+      return terrainGeo(pos, idx, 600);
+    })();
+
+    // the haze and the baked sunlight, added to the standard material
+    const fogK = { value: 0.0011 };
+    function marsify(mat, baked) {
+      mat.onBeforeCompile = sh => {
+        Object.assign(sh.uniforms, { sunD: { value: sun }, phoD: { value: phobos }, fogK });
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;' + (baked ? '\nattribute float sunlit; varying float vSun;' : ''))
+          .replace('#include <fog_vertex>', '#include <fog_vertex>\n{ vec4 wp = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\n wp = instanceMatrix * wp;\n#endif\n vWP = (modelMatrix * wp).xyz; }' + (baked ? '\nvSun = sunlit;' : ''));
+        sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP; uniform float fogK;' + (baked ? '\nvarying float vSun;' : '') + SKY)
+          .replace(/RE_Direct\( directLight, geometry, material, reflectedLight \);/g, (baked ? 'directLight.color *= vSun; ' : '') + 'RE_Direct( directLight, geometry, material, reflectedLight );')
+          .replace('#include <fog_fragment>', `{
+            vec3 dv = vWP - cameraPosition; float dist = length(dv);
+            vec3 hd = normalize(vec3(dv.x, max(dv.y, 0.0) * 0.3 + 0.004 * length(dv.xz), dv.z));
+            vec3 fc = skyCol(hd);
+            #ifdef TONE_MAPPING
+            fc = toneMapping(fc);
+            #endif
+            fc = linearToOutputTexel(vec4(fc, 1.0)).rgb;
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, fc, 1.0 - exp(-dist * fogK));
+          }`);
+      };
+      return mat;
+    }
+    const groundMat = marsify(new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: tex, bumpMap: tex, bumpScale: 0.02 }), true);
+    const near = new T.Mesh(nearGeo, groundMat), far = new T.Mesh(farGeo, groundMat);
+    near.receiveShadow = true; far.receiveShadow = false;
+    scene.add(near, far);
+
+    // rocks and boulders: a few shapes, hundreds of them (sizes from a power law), not on the path
+    const rockMat = marsify(new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, flatShading: true, map: tex }), false);
+    const shapes = [0, 1, 2].map(k => {
+      const g = new T.IcosahedronGeometry(1, 2), p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i), d = 1 + 0.35 * (vn(x * 1.6 + 10 * k, z * 1.6 + 3 * y + 5) - 0.5) + 0.15 * (vn(x * 4 + y * 3, z * 4 - 7 * k) - 0.5);
+        p.setXYZ(i, x * d, Math.max(y * d * (0.6 + 0.12 * k), -0.4), z * d * (1 + 0.15 * k));
+      }
+      g.computeVertexNormals(); return g;
+    });
+    const rng = (() => { let s = 12345; return () => { s = Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((s >>> 0) % 1e6) / 1e6; }; })();
+    const NROCK = 900, perShape = Math.ceil(NROCK / 3);
+    const rockMeshes = shapes.map(g => { const m = new T.InstancedMesh(g, rockMat, perShape); m.castShadow = m.receiveShadow = true; m.count = 0; scene.add(m); return m; });
+    const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), V = new T.Vector3(), SC = new T.Vector3(), Cc = new T.Color();
+    for (let k = 0; k < NROCK * 3 && rockMeshes.some(m => m.count < perShape); k++) {
+      const x = -15 + 30 * rng(), z = -23 + 32 * rng(), u = rng();
+      let s = Math.min(1.3, 0.035 / Math.pow(1 - 0.985 * u, 0.55));
+      if (Math.abs(x) < 0.9 + s && z > -6 && z < 9) continue;       // keep the path clear
+      if (pathMask(x, z) < 0.5 && s > 0.12) s *= 0.4;
+      const m = rockMeshes[k % 3]; if (m.count >= perShape) continue;
+      E.set(rng() * 0.5, rng() * 6.28, rng() * 0.5); Q.setFromEuler(E);
+      SC.set(s * (0.8 + 0.4 * rng()), s, s * (0.8 + 0.4 * rng()));
+      V.set(x, G(x, z) + s * 0.1, z); M4.compose(V, Q, SC); m.setMatrixAt(m.count, M4);
+      const l = lit(x, G(x, z) + s * 0.5, z, 60), v = 0.75 + 0.4 * rng();
+      Cc.setRGB(0.36 * v, 0.24 * v, 0.17 * v).convertSRGBToLinear().multiplyScalar(0.55 + 0.45 * l); m.setColorAt(m.count, Cc);
+      m.count++;
+    }
+    rockMeshes.forEach(m => { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+
+    // the light: the low Sun (its shadow map covers the walk and the rocks round it: the Sun is so low that this
+    // box reaches far along the ground), a dim brown sky and ground, a cool rim on the figure
+    const key = new T.DirectionalLight(0xfff0e0, 4.2);
+    key.position.copy(sun).multiplyScalar(80).add(new T.Vector3(0, 0, -5)); key.target.position.set(0, 0, -5);
+    key.castShadow = true; key.shadow.mapSize.set(4096, 4096); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 3;
+    Object.assign(key.shadow.camera, { left: -16, right: 16, top: 7, bottom: -7, near: 20, far: 160 });
+    scene.add(key, key.target);
+    scene.add(new T.HemisphereLight(0x8a7a78, 0x5a3424, 0.9));
+    a.rim.color.value.setRGB(0.35, 0.5, 0.75);
+    scene.environment = window.__astronautEnv(T, r.renderer, { warm: sun });
+
+    const cam = new T.PerspectiveCamera(36, 720 / 1280, 0.03, 12000);
+    S = { T, scene, a, cam, sky, key };
+  };
+
+  // ---------------- the camera ----------------
+  // (a first draft: low by the boots, alongside, behind on the crest, then up over the valley)
+  function shoot(t, a, cam) {
+    const p = a.group.position, T = S.T;
+    const keys = [
+      [0.0, [0.75, -0.95, 0.35], [0.05, -1.05, -0.35]],
+      [2.0, [0.9, -0.85, -0.2], [0.05, -0.95, -0.6]],
+      [3.4, [3.2, 0.1, 0.4], [0, -0.1, -0.3]],
+      [5.6, [3.0, 0.2, 0.9], [0, -0.05, -0.5]],
+      [7.2, [1.5, 0.35, 3.0], [-0.2, 0.0, -1.5]],
+      [9.5, [1.4, 2.0, 3.8], [-0.4, -0.2, -4.0]],
+    ];
+    let i = 0; while (i < keys.length - 2 && t > keys[i + 1][0]) i++;
+    const k0 = keys[i], k1 = keys[i + 1], u = smooth((t - k0[0]) / (k1[0] - k0[0]));
+    const L = (A, B) => A.map((v, j) => v + (B[j] - v) * u);
+    const o = L(k0[1], k1[1]), l = L(k0[2], k1[2]);
+    // the camera follows the pelvis along z, its height from the ground under it
+    const cx = o[0], cz = p.z + o[2], gy = G(cx, cz);
+    cam.position.set(cx, Math.max(gy + 0.12, p.y + o[1]), cz);
+    cam.lookAt(new T.Vector3(l[0], p.y + l[1], p.z + l[2]));
+  }
+
+  window.__recCam = () => {};
+  window.__recRender = () => {
+    const r = window.__rec, ren = r.renderer;
+    if (!S) { ren.render(r.scene, r.camera); return; }
+    const { T, scene, a, cam, sky } = S, t = window.__vt() - (window.__t0 || 0);
+    walk(a, t);
+    shoot(t, a, cam);
+    sky.position.copy(cam.position);
+    const tm = ren.toneMapping, te = ren.toneMappingExposure, sm = ren.shadowMap.enabled, st = ren.shadowMap.type;
+    ren.toneMapping = T.ACESFilmicToneMapping; ren.toneMappingExposure = 1.0; ren.shadowMap.enabled = true; ren.shadowMap.type = T.PCFSoftShadowMap;
+    ren.setRenderTarget(null); ren.render(scene, cam);
+    ren.toneMapping = tm; ren.toneMappingExposure = te; ren.shadowMap.enabled = sm; ren.shadowMap.type = st;
+  };
+})();
