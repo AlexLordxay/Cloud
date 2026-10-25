@@ -150,6 +150,33 @@
     a.joints['ankle' + side].rotation.set(clamp(p - psi, -0.55, 0.45), 0, -(side === 'L' ? -1 : 1) * 0.02);
   }
 
+  // The plant, after the last step: the right arm lifts the flag high, holds a beat, thrusts it down into the ground
+  // (leaning in, knees bending), holds, lets go and steps the arm back. Keys: [t, shoulder x, shoulder z, elbow, body
+  // lean (- forward), crouch, left shoulder, head]; the thrust accelerates, the rest ease in and out.
+  const T_LAST = PRINTS[PRINTS.length - 1][0];
+  const PLANT = [
+    [T_LAST - 0.15, 0.15, 0.3, 1.25, 0, 0, 0, 0],
+    [T_LAST + 0.55, 1.3, 0.38, 0.95, 0.05, -0.01, 0.15, 0.12],
+    [T_LAST + 0.85, 1.42, 0.38, 0.85, 0.07, 0, 0.2, 0.15],
+    [T_LAST + 1.12, 0.52, 0.3, 0.22, -0.27, 0.15, 0.4, -0.05],
+    [T_LAST + 1.75, 0.5, 0.3, 0.22, -0.26, 0.15, 0.4, -0.05],
+    [T_LAST + 2.5, 0.08, 0.27, 0.55, 0, 0, 0, 0],
+  ];
+  const T_HIT = T_LAST + 1.06, T_DOWN = T_LAST + 1.12, T_REL = T_LAST + 1.7;   // the spike touches; all the way in; let go
+  function plant(t) {
+    const K = PLANT; let i = 0;
+    if (t <= K[0][0]) i = -1; else while (i < K.length - 1 && K[i + 1][0] < t) i++;
+    const pick = (k, u) => { const A = K[Math.max(k, 0)], B = K[Math.min(k + 1, K.length - 1)]; return A.map((v, j) => v + (B[j] - v) * u); };
+    let r;
+    if (i < 0 || i >= K.length - 1) r = K[i < 0 ? 0 : K.length - 1];
+    else { const u = (t - K[i][0]) / (K[i + 1][0] - K[i][0]); r = pick(i, i === 2 ? u * u * (1.4 - 0.4 * u) : smooth(u)); }
+    return { shX: r[1], shZ: r[2], el: r[3], lean: r[4], crouch: r[5], shL: r[6], head: r[7] };
+  }
+  // the right fist round the pole (looser than 'grip': the pole is thick); the pole's axis along the fist (the wrist's
+  // local x), through the hollow of the curled fingers
+  const GRIP = { f: [[0.7, 0.95, 0.55], [0.7, 0.95, 0.55], [0.72, 0.95, 0.55], [0.75, 0.95, 0.55]], spread: 0.35, th: [0.45, 0, 0.35, 0.3] };
+  const GRIP_AT = [0, -0.108, -0.045];
+
   function walk(a, t) {
     const J = a.joints;
     a.pose(t, { glance: false });                            // breathing, fingers, the antenna
@@ -162,23 +189,28 @@
     const Li = li > 0 ? Math.abs(PRINTS[li][1] - PRINTS[li - 1][1]) : STEP, Ln = li < PRINTS.length - 1 ? Math.abs(PRINTS[li + 1][1] - PRINTS[li][1]) : Li;
     const dzs = ph < 0.5 ? (0.5 - ph) * Li : (ph - 0.5) * Ln;
     let gs = 0; for (let k = -2; k <= 2; k++) gs += G(0, hz + 0.2 * k) / 5;
-    const y = gs + ANKLE_UP + 0.13 + Math.sqrt(DMAX * DMAX - dzs * dzs) - 0.02;
+    const pk0 = plant(t);
+    const y = gs + ANKLE_UP + 0.13 + Math.sqrt(DMAX * DMAX - dzs * dzs) - 0.02 - pk0.crouch;
     const lead = (fr[2] - fl[2]) / -STEP;                    // + when the right foot is ahead
     const sway = 0.025 * Math.sin(Math.PI * clamp((t + 0.3) / PER, 0, 99)) * stride;
     a.group.position.set(sway, y, z);
     a.group.rotation.set(0, 0, 0);
-    const bx = -0.09 * stride - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * stride;   // leaning into the walk (- = forward)
+    const bx = -0.09 * stride - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * stride + pk0.lean;   // leaning into the walk (- = forward)
     J.body.rotation.set(bx, -0.07 * lead, 0.02 * lead);
     J.body.position.set(0, 0, 0);
     a.group.updateMatrixWorld(true);
     placeFoot(a, 'L', fl, bx); placeFoot(a, 'R', fr, bx);
-    // the arms swing against the legs, the elbows a little bent
-    for (const [s, L] of [[-1, 'L'], [1, 'R']]) {
-      const sw = -s * lead;                                  // the left arm forward when the right foot is ahead
-      J['shoulder' + L].rotation.set(0.08 + 0.32 * sw * stride, 0.05 * s, s * 0.27);
-      J['elbow' + L].rotation.set(0.55 + 0.25 * Math.max(0, sw) * stride, 0, 0);
-    }
-    J.head.rotation.set(-0.12 - bx, 0.05 * lead, 0);
+    // the left arm swings against the legs; the right one carries the flag (and plants it, see PLANT)
+    const sw = lead, pk = plant(t);
+    J.shoulderL.rotation.set(0.08 + 0.32 * sw * stride + pk.shL, -0.05, -0.27);
+    J.elbowL.rotation.set(0.55 + 0.25 * Math.max(0, sw) * stride + 0.3 * pk.shL, 0, 0);
+    J.shoulderR.rotation.set(pk.shX - 0.06 * sw * stride, 0.05, pk.shZ);
+    J.elbowR.rotation.set(pk.el, 0, 0);
+    J.wristR.rotation.set(0, Math.PI / 2, 0);
+    J.head.rotation.set(-0.12 - bx + pk.head, 0.05 * lead, 0);
+    const w = 1 - smooth((t - T_REL + 0.12) / 0.3);         // the fist round the pole, opening as it lets go
+    if (w > 0) a.hand('R', GRIP, w);
+    if (t > T_REL - 0.2) a.hand('R', 'open', 0.6 * Math.sin(Math.PI * clamp((t - T_REL + 0.2) / 0.8, 0, 1)));
   }
 
   // ---------------- the scene ----------------
@@ -328,6 +360,7 @@
             gl_FragColor.rgb = mix(gl_FragColor.rgb, fc, 1.0 - exp(-dist * fogK));
           }`);
       };
+      mat.customProgramCacheKey = () => 'mars' + baked;   // the two variants must not share a program
       return mat;
     }
     const groundMat = marsify(new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 1, metalness: 0, specularIntensity: 0.12, map: tex, bumpMap: tex, bumpScale: 0.008 }), true);   // dust: hardly any sheen
@@ -376,7 +409,150 @@
     scene.environment = window.__astronautEnv(T, r.renderer, { warm: sun });
 
     const cam = new T.PerspectiveCamera(36, 720 / 1280, 0.03, 12000);
-    S = { T, scene, a, cam, sky, key };
+
+    // ---- the flag: an aluminium pole with a spike, a cross bar at the top that holds the cloth spread (as on the
+    // Moon), the cloth deep blue with the emblem and НЕБОЗВІД. Local frame: +y up the pole (its foot at 0), cloth to +x.
+    try { const ff = new FontFace('Unbounded', 'url(/fonts/Unbounded.ttf)'); await ff.load(); document.fonts.add(ff); } catch (e) { console.log('[scene] no font', e.message); }
+    const emblem = await new Promise(ok => { const im = new Image(); im.onload = () => ok(im); im.onerror = () => ok(null); im.src = window.__astronautEmblem || ''; });
+    const fcv = document.createElement('canvas'); fcv.width = 1024; fcv.height = 690;
+    { const g = fcv.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 690);
+      gr.addColorStop(0, '#1a2d5e'); gr.addColorStop(1, '#0c1736'); g.fillStyle = gr; g.fillRect(0, 0, 1024, 690);
+      g.strokeStyle = '#c9a54a'; g.lineWidth = 10; g.strokeRect(22, 22, 980, 646);              // a thin gold border
+      if (emblem) g.drawImage(emblem, 512 - 200, 52, 400, 400);
+      g.fillStyle = '#f3f5f9'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.font = '700 96px Unbounded, sans-serif';
+      try { g.letterSpacing = '8px'; } catch (e) {}
+      g.fillText('НЕБОЗВІД', 512, 600); }
+    const ftex = new T.CanvasTexture(fcv); ftex.encoding = T.sRGBEncoding; ftex.anisotropy = 8;
+    const POLE = 1.75, CW = 0.66, CH = 0.445;
+    const flag = new T.Group(); scene.add(flag);
+    const alu = new T.MeshStandardMaterial({ color: 0xd4d8de, metalness: 0.85, roughness: 0.32 });
+    const add = (g, m, x, y, z) => { const o = new T.Mesh(g, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; flag.add(o); return o; };
+    add(new T.CylinderGeometry(0.015, 0.015, POLE, 20), alu, 0, POLE / 2, 0);
+    add(new T.ConeGeometry(0.015, 0.1, 20).rotateX(Math.PI), alu, 0, -0.05, 0);                  // the spike
+    add(new T.SphereGeometry(0.026, 20, 14), new T.MeshStandardMaterial({ color: 0xd8b25a, metalness: 1, roughness: 0.25 }), 0, POLE + 0.012, 0);
+    add(new T.CylinderGeometry(0.009, 0.009, CW + 0.03, 12).rotateZ(Math.PI / 2), alu, (CW + 0.03) / 2, POLE - 0.035, 0);   // the cross bar
+    const clothGeo = new T.PlaneGeometry(CW, CH, 33, 22).translate(CW / 2 + 0.015, POLE - 0.04 - CH / 2, 0);
+    const clothRest = clothGeo.attributes.position.array.slice();
+    const cloth = add(clothGeo, new T.MeshStandardMaterial({ map: ftex, side: T.DoubleSide, roughness: 0.8, metalness: 0,
+      emissive: 0xffffff, emissiveMap: ftex, emissiveIntensity: 0.18 }), 0, 0, 0);               // a little of the dusk shining through
+    // the cloth stirs in the thin wind, more while it is carried (amp: 0 at the pole, 1 at the free edge)
+    function stir(t, carried) {
+      const P = clothGeo.attributes.position;
+      for (let i = 0; i < P.count; i++) {
+        const x = clothRest[i * 3] - 0.015, y = clothRest[i * 3 + 1], u = Math.max(0, x) / CW, amp = Math.pow(u, 1.15);
+        const z = amp * ((0.026 + 0.03 * carried) * Math.sin(9 * x - 3.2 * t + 2.2 * y) + 0.012 * Math.sin(19 * x - 5.3 * t + 6 * y) + 0.04 * carried * Math.sin(2 * Math.PI * t / (2 * PER)));
+        P.setXYZ(i, clothRest[i * 3] - 0.03 * amp * amp * (0.4 + carried), y - 0.012 * amp * amp, z);
+      }
+      P.needsUpdate = true; clothGeo.computeVertexNormals();
+    }
+    // the flag in the hand: the wrist is turned so the pole stands along D (world), the cloth turned towards side
+    const QI = new T.Quaternion(), V1 = new T.Vector3(1, 0, 0);
+    function holdFlag(t) {
+      const W = a.joints.wristR; a.group.updateMatrixWorld(true);
+      const carry = 1 - smooth((t - T_LAST + 0.3) / 0.8);
+      const D = new T.Vector3(0.05 * Math.sin(Math.PI * t / PER) * carry, 1, -0.12 * carry - 0.04).normalize();
+      const q = W.getWorldQuaternion(new T.Quaternion()), R = new T.Quaternion().setFromUnitVectors(V1.clone().applyQuaternion(q), D);
+      W.quaternion.copy(W.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(R).multiply(q));
+      a.group.updateMatrixWorld(true);
+      const grip = W.localToWorld(new T.Vector3(...GRIP_AT));
+      const slide = S0 + (S1 - S0) * smooth((t - T_LAST - 0.05) / 0.5);
+      const side = new T.Vector3(0.45 + 0.55 * (1 - carry), 0, 1 - 0.4 * (1 - carry)), X = side.addScaledVector(D, -side.dot(D)).normalize();
+      const M = new T.Matrix4().makeBasis(X, D, new T.Vector3().crossVectors(X, D)).setPosition(grip.addScaledVector(D, -slide));
+      return M;
+    }
+    const S0 = 0.62, DEPTH = 0.2;
+    let S1 = S0;
+    walk(a, T_DOWN); { const M = holdFlag(T_DOWN), foot = new T.Vector3().setFromMatrixPosition(M), Dy = M.elements[5];
+      S1 = clamp(S0 + (foot.y - (G(foot.x, foot.z) - DEPTH)) / Dy, 0.4, 1.15); }
+    walk(a, T_REL); const PLANTED = holdFlag(T_REL);
+    const FOOT = new T.Vector3().setFromMatrixPosition(PLANTED);
+    function placeFlag(t) {
+      flag.matrixAutoUpdate = false;
+      flag.matrix.copy(t < T_REL ? holdFlag(t) : PLANTED); flag.matrixWorldNeedsUpdate = true;
+      stir(t, 1 - smooth((t - T_LAST + 0.3) / 0.8));
+    }
+
+    // ---- footprints: the sole's print pressed into the dust (darker, the lugs' grooves, a rim of pushed-up soil),
+    // laid over the ground where each foot lands, from the moment it lands
+    const pcv = document.createElement('canvas'); pcv.width = 128; pcv.height = 320;
+    const acv = document.createElement('canvas'); acv.width = 128; acv.height = 320;
+    { const sole = (g, grow) => { g.beginPath(); g.ellipse(64, 95, 50 + grow, 78 + grow, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(64, 240, 42 + grow, 62 + grow, 0, 0, 7); g.fill(); g.fillRect(24 - grow, 95, 80 + 2 * grow, 145); };
+      const g = pcv.getContext('2d'); g.fillStyle = 'rgb(235,235,235)'; sole(g, 7);                    // the rim
+      g.fillStyle = 'rgb(120,120,120)'; sole(g, 0);                                                     // the floor, pressed down
+      g.fillStyle = 'rgb(70,70,70)'; for (let y = 30; y < 300; y += 22) g.fillRect(20, y, 88, 9);       // the lugs' grooves
+      g.filter = 'blur(1.5px)'; g.drawImage(pcv, 0, 0); g.filter = 'none';
+      const h = acv.getContext('2d'); h.filter = 'blur(4px)'; h.fillStyle = '#fff'; sole(h, 9); }
+    const pTex = new T.CanvasTexture(pcv), aTex = new T.CanvasTexture(acv);
+    const pMat = marsify(new T.MeshPhysicalMaterial({ color: 0xffffff, map: pTex, alphaMap: aTex, bumpMap: pTex, bumpScale: 0.012, transparent: true, depthWrite: false,
+      roughness: 1, specularIntensity: 0.12, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), false);
+    const prints = PRINTS.map(([tl, z, side]) => {
+      const x = (side === 'L' ? -1 : 1) * FOOT_X, g = new T.PlaneGeometry(0.15, 0.37, 6, 12).rotateX(-Math.PI / 2), P = g.attributes.position, col = [];
+      for (let i = 0; i < P.count; i++) { const px = x + P.getX(i), pz = z - 0.085 + P.getZ(i); P.setXYZ(i, px, G(px, pz) + 0.004, pz); col.push(...colour(px, pz, 0, 1).map(v => v * 0.85)); }
+      g.setAttribute('color', new T.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
+      const m = new T.Mesh(g, pMat); m.material = pMat.clone(); m.material.vertexColors = true; m.material.onBeforeCompile = pMat.onBeforeCompile; m.receiveShadow = true; m.userData.t = tl; scene.add(m); return m;
+    });
+
+    // ---- dust: kicked up where a foot lands and where it pushes off, a puff where the spike goes in, and fine motes
+    // drifting in the air. Every grain moves by a formula of time (drag, slow settling, never below where it started),
+    // so the frames don't depend on each other; lit by the Sun, bright where it scatters towards the camera.
+    const DP = [], DV = [], DT = [], DL = [], DS = [], DK = [];
+    const drng = (() => { let s = 777; return () => { s = Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((s >>> 0) % 1e6) / 1e6; }; })();
+    const grain = (p, v, t0, life, size, k) => { DP.push(p[0], p[1], p[2]); DV.push(v[0], v[1], v[2]); DT.push(t0); DL.push(life); DS.push(size); DK.push(k); };
+    PRINTS.forEach(([tl, z, side], i) => {
+      if (i < 1) return;
+      const x = (side === 'L' ? -1 : 1) * FOOT_X, n = i >= PRINTS.length - 2 ? 20 : 46;
+      for (let k = 0; k < n; k++) {                            // the landing: out from under the sole, low and wide
+        const a0 = drng() * 6.283, r = Math.sqrt(drng()), px = x + 0.09 * r * Math.cos(a0), pz = z - 0.08 + 0.17 * r * Math.sin(a0), sp = 0.25 + 0.75 * drng();
+        grain([px, G(px, pz) + 0.01, pz], [Math.cos(a0) * sp, 0.12 + 0.45 * drng(), Math.sin(a0) * sp - 0.25], tl + 0.06 * drng(), 1.2 + 1.8 * drng(), 0.02 + 0.04 * drng(), 2.6);
+      }
+      const nx = PRINTS.find((q, j) => j > i && q[2] === side);
+      if (nx) { const t0 = PRINTS[PRINTS.indexOf(nx) - 1][0] + 0.1 * (nx[0] - PRINTS[PRINTS.indexOf(nx) - 1][0]);
+        for (let k = 0; k < 26; k++) {                         // the push-off: thrown back and up from the toe
+          const px = x + 0.08 * (drng() - 0.5), pz = z - 0.24 + 0.06 * drng();
+          grain([px, G(px, pz) + 0.01, pz], [0.3 * (drng() - 0.5), 0.35 + 0.7 * drng(), 0.4 + 0.8 * drng()], t0 + 0.12 * drng(), 1.0 + 1.6 * drng(), 0.015 + 0.03 * drng(), 2.2); } }
+    });
+    for (let k = 0; k < 170; k++) {                            // the spike goes in
+      const a0 = drng() * 6.283, sp = 0.3 + 1.1 * drng();
+      grain([FOOT.x + 0.04 * Math.cos(a0), G(FOOT.x, FOOT.z) + 0.01, FOOT.z + 0.04 * Math.sin(a0)], [Math.cos(a0) * sp, 0.2 + 0.9 * drng(), Math.sin(a0) * sp], T_HIT + 0.08 * drng(), 1.8 + 2.2 * drng(), 0.02 + 0.05 * drng(), 2.0);
+    }
+    for (let k = 0; k < 700; k++) {                            // motes in the air along the walk
+      const px = -5 + 10 * drng(), pz = -10 + 24 * drng();
+      grain([px, G(px, pz) + 0.1 + 2.6 * drng(), pz], [0.06 + 0.04 * drng(), 0.01 * (drng() - 0.5), 0.02 * (drng() - 0.5)], -5, 99, 0.004 + 0.008 * drng(), 0.02);
+    }
+    const dg = new T.BufferGeometry();
+    dg.setAttribute('position', new T.Float32BufferAttribute(DP, 3)); dg.setAttribute('v0', new T.Float32BufferAttribute(DV, 3));
+    dg.setAttribute('t0', new T.Float32BufferAttribute(DT, 1)); dg.setAttribute('life', new T.Float32BufferAttribute(DL, 1));
+    dg.setAttribute('sz', new T.Float32BufferAttribute(DS, 1)); dg.setAttribute('kd', new T.Float32BufferAttribute(DK, 1));
+    const dustU = { uT: { value: 0 }, sunD: { value: sun }, uScale: { value: 1280 / (2 * Math.tan(18 * Math.PI / 180)) } };
+    const dust = new T.Points(dg, new T.ShaderMaterial({
+      uniforms: dustU, transparent: true, depthWrite: false,
+      vertexShader: `uniform float uT; uniform vec3 sunD; uniform float uScale;
+        attribute vec3 v0; attribute float t0; attribute float life; attribute float sz; attribute float kd;
+        varying float vA; varying float vPh;
+        void main() {
+          float tau = uT - t0;
+          if (tau < 0.0 || tau > life) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); gl_PointSize = 0.0; vA = 0.0; return; }
+          vec3 p = position + v0 * (1.0 - exp(-kd * tau)) / kd;
+          p.y -= 0.05 * tau * tau / (1.0 + tau);                  // settling, slowly
+          p.y = max(p.y, position.y - 0.005);
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_Position = projectionMatrix * mv;
+          float g = tau / life;
+          gl_PointSize = max(1.0, sz * (1.0 + 2.5 * g) * uScale / -mv.z);
+          vA = pow(1.0 - g, 1.6) * smoothstep(0.0, 0.04, tau) * (kd < 0.1 ? 0.55 : 0.5 / (1.0 + 1.2 * g));
+          vPh = pow(max(dot(normalize(p - cameraPosition), sunD), 0.0), 6.0);
+        }`,
+      fragmentShader: `varying float vA; varying float vPh;
+        void main() {
+          vec2 q = gl_PointCoord * 2.0 - 1.0; float r = dot(q, q); if (r > 1.0) discard;
+          vec3 c = vec3(0.55, 0.36, 0.24) * (0.45 + 3.5 * vPh) + vec3(0.25, 0.4, 0.7) * 1.5 * vPh;
+          gl_FragColor = vec4(c, vA * exp(-r * 3.0));
+          #include <tonemapping_fragment>
+          #include <encodings_fragment>
+        }`,
+    }));
+    dust.frustumCulled = false; scene.add(dust);
+    S = { T, scene, a, cam, sky, key, placeFlag, prints, dustU };
   };
 
   // ---------------- the camera ----------------
@@ -390,8 +566,9 @@
     [7.2, [3.8, 0.5, -3.0], [0, -0.15, 0]],
     [9.8, [-2.6, 0.5, -4.4], [0, 0.0, 0.3]],
     [12.0, [-1.2, 0.6, 4.8], [0, -0.1, -2.0]],
-    [13.4, [2.0, 0.2, 2.8], [0.0, -0.1, -0.8]],
-    [15.8, [2.3, 0.4, 3.6], [-0.1, -0.1, -1.2]],
+    [13.4, [1.5, -0.55, 3.0], [-0.1, 0.05, -1.0]],
+    [14.8, [1.7, -0.45, 2.6], [-0.1, -0.05, -0.8]],
+    [16.6, [2.7, 0.05, 1.3], [0, 0.1, -0.3]],
     [21.0, [1.8, 3.2, 6.5], [-0.5, -0.6, -7.0]],
   ];
   function shoot(t, a, cam) {
@@ -413,7 +590,14 @@
     if (!S) { ren.render(r.scene, r.camera); return; }
     const { T, scene, a, cam, sky } = S, t = window.__vt() - (window.__t0 || 0);
     walk(a, t);
+    S.placeFlag(t);
+    // the end: it turns its head to the camera and gives a thumbs-up with the free hand
+    a.gestureAt(t, 'thumbsUp', { start: T_LAST + 2.9, end: T_LAST + 5.2, side: 'R' });
     shoot(t, a, cam);
+    if (t > T_LAST + 2.6) a.lookAt(cam.position, smooth((t - T_LAST - 2.6) / 0.8) * (1 - smooth((t - T_LAST - 5.3) / 0.8)));
+    a.group.updateMatrixWorld(true);
+    S.prints.forEach(m => { m.visible = t >= m.userData.t; });
+    S.dustU.uT.value = t;
     sky.position.copy(cam.position);
     const tm = ren.toneMapping, te = ren.toneMappingExposure, sm = ren.shadowMap.enabled, st = ren.shadowMap.type;
     ren.toneMapping = T.ACESFilmicToneMapping; ren.toneMappingExposure = 1.1; ren.shadowMap.enabled = true; ren.shadowMap.type = T.PCFSoftShadowMap;
