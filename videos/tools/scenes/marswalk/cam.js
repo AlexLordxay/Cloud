@@ -76,7 +76,7 @@
     lens.forEach((L, i) => { const [t, z, s] = P[P.length - 1]; P.push([t + durs[i], z - L, s === 'L' ? 'R' : 'L']); });
     return P;
   })();
-  const FOOT_X = 0.135, ANKLE_UP = 0.118;
+  const FOOT_X = 0.135, ANKLE_UP = 0.101;   // the sole's underside is 0.103 below the ankle pivot (sunk 2 mm)
   // where a foot would be at t if it stayed flat: [x, y, z, slope] of the ankle pivot (+ toe up); placeFoot rolls it
   function foot(side, t) {
     const own = PRINTS.map((p, i) => [p, i]).filter(([p]) => p[2] === side);
@@ -230,18 +230,22 @@
     scene.add(sky);
 
     // the regolith's fine texture (a multiplier near 1) and its bump
-    const cv = document.createElement('canvas'); cv.width = cv.height = 512;
-    { const g = cv.getContext('2d'), im = g.createImageData(512, 512);
-      for (let y = 0; y < 512; y++) for (let x = 0; x < 512; x++) {
-        const n = 0.5 * vn(x / 9, y / 9) + 0.3 * vn(x / 3.5 + 40, y / 3.5) + 0.2 * vn(x / 1.3 + 9, y / 1.3 + 3);
-        const v = clamp(175 + 80 * (n - 0.5) * 2, 0, 255), k = (y * 512 + x) * 4;
+    const cv = document.createElement('canvas'); cv.width = cv.height = 1024;
+    { const g = cv.getContext('2d'), im = g.createImageData(1024, 1024);
+      const vp = (x, y, P) => {                               // value noise that repeats every P cells (so the texture tiles)
+        const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = k => ((k % P) + P) % P;
+        const a = hash2(w(i), w(j)), b = hash2(w(i + 1), w(j)), c = hash2(w(i), w(j + 1)), d = hash2(w(i + 1), w(j + 1));
+        return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; };
+      for (let y = 0; y < 1024; y++) for (let x = 0; x < 1024; x++) {
+        const n = 0.42 * vp(x / 32, y / 32, 32) + 0.3 * vp(x / 16, y / 16, 64) + 0.18 * vp(x / 8, y / 8, 128) + 0.1 * vp(x / 4, y / 4, 256);
+        const v = clamp(175 + 80 * (n - 0.5) * 2, 0, 255), k = (y * 1024 + x) * 4;
         im.data[k] = im.data[k + 1] = im.data[k + 2] = v; im.data[k + 3] = 255;
       }
       g.putImageData(im, 0, 0);
       let sd = 7; const rr = () => { sd = Math.imul(sd ^ (sd >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((sd >>> 0) % 1e6) / 1e6; };
-      for (let i = 0; i < 1400; i++) {                                    // grit and pebbles (wrapped at the edges)
-        const x = rr() * 512, y = rr() * 512, r = 0.6 + 3.2 * rr() ** 4, sh = 70 + 90 * rr();
-        for (const ox of [-512, 0, 512]) for (const oy of [-512, 0, 512]) {
+      for (let i = 0; i < 2600; i++) {                                    // grit and pebbles (wrapped at the edges)
+        const x = rr() * 1024, y = rr() * 1024, r = 1.2 + 6 * rr() ** 4, sh = 70 + 90 * rr();
+        for (const ox of [-1024, 0, 1024]) for (const oy of [-1024, 0, 1024]) {
           g.fillStyle = `rgba(${sh},${sh},${sh},0.85)`; g.beginPath(); g.ellipse(x + ox, y + oy, r, r * (0.7 + 0.3 * rr()), rr() * 3, 0, 6.3); g.fill();
           g.fillStyle = 'rgba(235,235,235,0.5)'; g.beginPath(); g.arc(x + ox - r * 0.25, y + oy - r * 0.25, r * 0.45, 0, 6.3); g.fill(); }
       } }
@@ -326,7 +330,7 @@
       };
       return mat;
     }
-    const groundMat = marsify(new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: tex, bumpMap: tex, bumpScale: 0.02 }), true);
+    const groundMat = marsify(new T.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, map: tex, bumpMap: tex, bumpScale: 0.008 }), true);
     const near = new T.Mesh(nearGeo, groundMat), far = new T.Mesh(farGeo, groundMat);
     near.receiveShadow = true; far.receiveShadow = false;
     scene.add(near, far);
