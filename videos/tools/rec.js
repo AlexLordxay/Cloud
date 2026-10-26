@@ -99,7 +99,9 @@ function serve(page) {
     fs.mkdirSync(dir, { recursive: true });
     const t0 = a != null ? +a : 0, t1 = b != null ? +b : cfg.duration;
     const n0 = Math.round(t0 * FPS), n1 = Math.round(t1 * FPS);
-    for (let i = 0; i < n0; i++) await p.evaluate(dt => window.__step(dt), 1 / FPS);   // run up to t0 without saving
+    // JUMP=1 (scenes whose picture is a pure function of time): set the clock straight to t0; otherwise run up to it
+    if (process.env.JUMP) await p.evaluate(n => { window.__t0 = window.__vt() - n; }, n0 / FPS);
+    else for (let i = 0; i < n0; i++) await p.evaluate(dt => window.__step(dt), 1 / FPS);   // run up to t0 without saving
     const start = Date.now();
     for (let i = n0; i < n1; i++) {
       fs.writeFileSync(path.join(dir, `f_${String(i).padStart(5, '0')}.jpg`), await grab(1 / FPS));
