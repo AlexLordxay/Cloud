@@ -1035,7 +1035,7 @@
     // reach less ~3 mm); the hand's palm faces forward at rest (turn the wrist about y, s * 1.4, for palm-in).
     const FOOT_X = 0.135, ANKLE_UP = 0.101;   // the ankles' spread; the pivot over the ground (the sole is 0.103 below it, sunk 2 mm)
     const L1 = Math.hypot(0.48, 0.02), L2 = Math.hypot(0.56, 0.02), O1 = Math.atan2(0.02, 0.48), O2 = Math.atan2(0.02, 0.56);
-    const DMAX = L1 + L2 - 0.0035, TOE = [-ANKLE_UP, -0.16], HEEL = [-ANKLE_UP, 0.09], AX_UP = 0.25, HEEL_UP = 0.15, TOE_OFF = 0.75;
+    const DMAX = L1 + L2 - 0.0035, TOE = [-ANKLE_UP, -0.16], HEEL = [-ANKLE_UP, 0.09], AX_UP = 0.25, HEEL_UP = 0.15, TOE_OFF = 1.0;
     const sm = x => sstep(0, 1, x), clampN = (x, a, b) => Math.min(b, Math.max(a, x));
     function walk(o = {}) {
       const ground = o.ground || (() => 0), from = o.from || [0, 0], hd = o.heading || 0, ch = Math.cos(hd), sh = Math.sin(hd);
@@ -1052,11 +1052,11 @@
       lens.forEach((L, i) => { const [t, z, sd] = P[P.length - 1]; P.push([t + durs[i], z - L, sd === 'L' ? 'R' : 'L']); });
       const KN = P.slice(1).map((p, i) => [p[0], (p[1] + P[i][1]) / 2]);   // the pelvis: midway between the feet as one lands
       function pelvisZ(t) {
-        const K = KN, n = K.length; if (n < 2 || t <= K[0][0]) return n < 2 ? K[0][1] : K[0][1] + (K[0][0] - t) * (K[1][1] - K[0][1]) / (K[1][0] - K[0][0]);
+        const K = KN, n = K.length; if (n < 2 || t <= K[0][0]) return n < 2 ? K[0][1] : K[0][1] + (t - K[0][0]) * (K[1][1] - K[0][1]) / (K[1][0] - K[0][0]);
         if (t >= K[n - 1][0]) return K[n - 1][1];
         let i = 0; while (K[i + 1][0] < t) i++;
         const p0 = K[Math.max(i - 1, 0)], p1 = K[i], p2 = K[i + 1], p3 = K[Math.min(i + 2, n - 1)], u = (t - p1[0]) / (p2[0] - p1[0]);
-        const m1 = (p2[1] - p0[1]) / (p2[0] - p0[0] || 1) * (p2[0] - p1[0]), m2 = (p3[1] - p1[1]) / (p3[0] - p1[0] || 1) * (p2[0] - p1[0]);
+        const m1 = (p2[1] - p0[1]) / (p2[0] - p0[0] || 1) * (p2[0] - p1[0]), m2 = i + 2 > n - 1 ? 0 : (p3[1] - p1[1]) / (p3[0] - p1[0] || 1) * (p2[0] - p1[0]);   // the last step eases into the stop
         return (2 * u ** 3 - 3 * u * u + 1) * p1[1] + (u ** 3 - 2 * u * u + u) * m1 + (-2 * u ** 3 + 3 * u * u) * p2[1] + (u ** 3 - u * u) * m2;
       }
       // where a foot would be if it stayed flat: [x, y, z, slope] of its ankle pivot, + the swing's progress (-1:
@@ -1068,13 +1068,14 @@
         const at = z => [x, G(x, z) + ANKLE_UP, z, slope(x, z), -1, 0, slope(x, z)];
         const stance = (A, ho, te, amp) => { A[6] = A[3] + HEEL_UP * (1 - sm((t - cur[0]) / 0.15)) * (t >= cur[0] ? 1 : 0); if (ho != null) A[6] -= amp * sm((t - ho) / (te - ho)); return A; };
         if (!next) return stance(at(cur[1]));
-        const prevOther = P[next[1] - 1], ts = prevOther[0] + 0.1 * (next[0][0] - prevOther[0]), te = next[0][0];
+        const prevOther = P[next[1] - 1], ts = prevOther[0] + 0.03 * (next[0][0] - prevOther[0]), te = next[0][0];
         const amp = TOE_OFF * clampN(Math.abs(next[0][1] - cur[1]) / (2 * step), 0, 1), ho = prevOther[0] - 0.34;
-        if (t < ts) return stance(at(cur[1]), ho, ts, amp);
+        const tr = ts + 0.18;                               // the toe keeps rolling a little past push-off
+        if (t < ts) return stance(at(cur[1]), ho, tr, amp);
         const u = clampN((t - ts) / (te - ts), 0, 1), e = u * u * (3 - 2 * u), a = at(cur[1]), b = at(next[0][1]);
-        const lift = 0.085 * Math.sin(Math.PI * Math.pow(u, 0.8)) * Math.min(1, (b[2] - a[2]) / -0.5 + 0.3);
+        const lift = 0.085 * Math.sin(Math.PI * Math.pow(u, 0.55)) * Math.min(1, Math.abs(b[2] - a[2]) / (2 * step)) ** 0.7;   // lower for short steps
         const w = sm((u - 0.05) / 0.8);                     // from toe-down at push-off to toe-up for the heel strike
-        return [x, a[1] + (b[1] - a[1]) * e + lift, a[2] + (b[2] - a[2]) * e, a[3] + (b[3] - a[3]) * e, u, lift, (a[3] - amp) * (1 - w) + (b[3] + HEEL_UP) * w];
+        return [x, a[1] + (b[1] - a[1]) * e + lift, a[2] + (b[2] - a[2]) * e, a[3] + (b[3] - a[3]) * e, u, lift, (a[3] - amp * sm((t - ho) / (tr - ho))) * (1 - w) + (b[3] + HEEL_UP) * w];
       }
       // 0 as a foot lands, 1 just before the next one; and how much of a stride is going on (0 once standing)
       function phase(t) {
@@ -1113,43 +1114,55 @@
         if (p - psi > AX_UP && p <= F[3]) { p = Math.min(p, psi + AX_UP); psi = legIK(side, rolled(F, p), bx); }   // never a deep bend at the ankle
         J['ankle' + side].rotation.set(clampN(p - psi, -0.6, 0.4), 0, -(side === 'L' ? -1 : 1) * 0.02);
       }
+      // how far the arms and the body have turned with the legs: the feet's lead, smoothed over 0.12 s (the arms ease
+      // through the ends of their swing) and, for the forearms, a little later (they trail)
+      const leadAt = tt => (foot('R', tt)[2] - foot('L', tt)[2]) / -step;
       function update(t, extra = {}) {
         const lean = extra.lean || 0, crouch = extra.crouch || 0;
         pose(t, { glance: !!o.glance });                    // breathing, fingers, the antenna (and glances, if asked)
         const head0 = J.head.rotation.clone();
-        const fl = foot('L', t), fr = foot('R', t), [ph, stride, li] = phase(t), z = pelvisZ(t), hz = z - 0.035;
+        const fl = foot('L', t), fr = foot('R', t), [ph, stride, li] = phase(t);
+        // how much walking is going on, from the pelvis's speed (smooth through the short last steps and the stop)
+        const sv = clampN((pelvisZ(t - 0.06) - pelvisZ(t + 0.06)) / 0.12 * per / step, 0, 1);
+        // a little faster while both feet are down, slower mid-stance (a constant speed reads as gliding)
+        const z = pelvisZ(t) - 0.009 * Math.sin(2 * Math.PI * ph) * sv, hz = z - 0.035;
         // the pelvis: near a landing over the ground smoothed along the walk, raised by the slope so the foot ahead
-        // (uphill: higher) is reached straight, the one behind rising on its toe; mid-stance right over the standing foot
+        // (uphill: higher) is reached straight, the one behind rising on its toe; mid-stance right over the standing
+        // foot. The compass's corner at each landing is rounded off (it jolted the pelvis up as a heel struck).
         const Li = li > 0 ? Math.abs(P[li][1] - P[li - 1][1]) : step, Ln = li < P.length - 1 ? Math.abs(P[li + 1][1] - P[li][1]) : Li;
-        const dzs = stride > 0 ? (ph < 0.5 ? (0.5 - ph) * Li : (ph - 0.5) * Ln) : 0.5 * (li > 0 ? Math.abs(P[li][1] - P[li - 1][1]) : 0);   // standing: half the feet's stagger
+        const mq = Math.min(ph, 1 - ph), q = 1 - 2 * (Math.hypot(mq, 0.06) - 0.06);
+        const dzs = stride > 0 ? 0.5 * q * (ph < 0.5 ? Li : Ln) : 0.5 * (li > 0 ? Math.abs(P[li][1] - P[li - 1][1]) : 0);   // standing: half the feet's stagger
         let gs = 0; for (let k = -2; k <= 2; k++) gs += G(0, hz + 0.2 * k) / 5;
         const rise = Math.max(0, (G(0, hz - 0.4) - G(0, hz + 0.4)) / 0.8);
         const yA = gs + rise * dzs + ANKLE_UP + 0.13 + Math.sqrt(DMAX * DMAX - dzs * dzs);
         const sf = P[li][2] === 'L' ? fl : fr, yS = sf[1] - sf[5] + 0.13 + Math.sqrt(DMAX * DMAX - Math.min(Math.abs(sf[2] - hz), 0.9) ** 2);
-        const y = yA + (yS - yA) * Math.sin(Math.PI * ph) ** 2 * stride - crouch;
-        const lead = (fr[2] - fl[2]) / -step;               // + when the right foot is ahead
-        const sway = 0.025 * Math.sin(Math.PI * Math.max(0, (t - t0 + per) / per)) * stride;
+        // after the last step it settles: a small dip of the pelvis, the body and the arms swinging out and back
+        const st = Math.max(0, t - P[P.length - 1][0]), d = st > 0 ? Math.exp(-st / 0.3) * Math.sin(2 * Math.PI * st / 0.9) : 0;
+        const y = yA + (yS - yA) * Math.sin(Math.PI * ph) ** 2 * stride - crouch - 0.01 * Math.sin(Math.PI * Math.min(st / 0.4, 1));
+        let la = 0, le = 0; for (let k = 0; k < 5; k++) { la += leadAt(t - 0.03 * k) / 5; le += leadAt(t - 0.06 - 0.03 * k) / 5; }   // + when the right foot leads
+        const side = P[li][2] === 'L' ? -1 : 1;              // the standing foot's side
+        const sway = 0.025 * side * Math.sin(Math.PI * ph) * sv;   // over the standing foot
         const wp = world(sway, z);
         group.position.set(wp[0], y, wp[1]);
         group.rotation.set(0, hd, 0);
-        const bx = -0.09 * stride - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * stride + 0.008 * breath(t) * (1 - stride) + lean;   // leaning into the walk (- forward)
-        J.body.rotation.set(bx, -0.07 * lead, 0.02 * lead);
+        const bx = -0.09 * sv - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * sv + 0.008 * breath(t) * (1 - sv) - 0.025 * d + lean;   // leaning into the walk (- forward)
+        J.body.rotation.set(bx, -0.07 * la, -0.02 * side * Math.sin(Math.PI * ph) * sv);   // turning with the legs, leaning over the standing leg
         J.body.position.set(0, 0, 0);
         group.updateMatrixWorld(true);
         placeFoot('L', fl, bx); placeFoot('R', fr, bx);
         // the arms hang at the sides, the elbows a little bent, the palms to the thighs (the wrist turns the palm in:
-        // at rest it faces forward), swinging against the legs
-        for (const [sd, s, sw] of [['L', -1, lead], ['R', 1, -lead]]) {
+        // at rest it faces forward), swinging against the legs, the forearms trailing
+        for (const [sd, s, sa, se] of [['L', -1, la, le], ['R', 1, -la, -le]]) {
           if (!arms[sd]) continue;
-          J['shoulder' + sd].rotation.set(0.04 + 0.3 * sw * stride, s * 0.05, s * 0.17);
-          J['elbow' + sd].rotation.set(0.25 + 0.2 * Math.max(0, sw) * stride, 0, 0);
+          J['shoulder' + sd].rotation.set(0.04 + 0.3 * sa * sv + 0.08 * d, s * 0.05, s * 0.17);
+          J['elbow' + sd].rotation.set(0.3 + 0.12 * se * sv, 0, 0);
           J['wrist' + sd].rotation.set(0.05, s * 1.4, s * 0.04);
         }
         // the head: steady, looking a little down the way ahead; standing, its glances (if asked) come back in
-        const g = o.glance ? 1 - stride : 0;
-        J.head.rotation.set((-0.12 - bx) * (1 - g) + head0.x * g, 0.05 * lead * (1 - g) + head0.y * g, head0.z * g);
+        const g = o.glance ? 1 - sv : 0;
+        J.head.rotation.set((-0.12 - bx) * (1 - g) + head0.x * g, 0.05 * la * (1 - g) + head0.y * g, head0.z * g);
         group.updateMatrixWorld(true);
-        return { phase: ph, stride, lead };
+        return { phase: ph, stride: sv, lead: la };
       }
       const prints = P.map(([t, z, sd]) => { const x = (sd === 'L' ? -1 : 1) * FOOT_X, w = world(x, z); return { t, x: w[0], y: ground(w[0], w[1]), z: w[1], side: sd }; });
       return { update, prints, end: P[P.length - 1][0], local, world, ground };
