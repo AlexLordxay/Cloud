@@ -312,8 +312,8 @@
           vec3 c = mix(texture2D(gal, vUv).rgb, texture2D(hole, vUv).rgb, k) * exposure;
           c = 1.0 - exp(-c);
           if (ehtK > 0.0) {
-            vec2 u = (vUv - ehtC) * vec2(aspect, 1.0) / ehtS + 0.5;
-            float m = smoothstep(0.5, 0.4, length(u - 0.5));
+            vec2 u = (vUv - ehtC) * vec2(aspect, 1.0) / ehtS + vec2(0.504, 0.513);   // the ring's centre in the photo
+            float m = smoothstep(0.48, 0.36, length(u - 0.5));
             c = mix(c, texture2D(eht, clamp(u, 0.0, 1.0)).rgb, ehtK * m);
           }
           vec2 q = (vUv - 0.5) * vec2(aspect, 1.0);
@@ -580,7 +580,7 @@
     cu.ehtK.value = G.eht ? S.eht : 0;
     if (G.eht && S.eht > 0) {                  // the photo over the hole, its ring on the shadow's edge
       const p = new THREE.Vector3(0, 0, 0).project(cam); cu.eht.value = G.eht; cu.ehtC.value.set(p.x * 0.5 + 0.5, p.y * 0.5 + 0.5);
-      cu.ehtS.value = 2.9 * 2.6 / (dist * Math.tan(cam.fov * D / 2)) * 0.5;
+      cu.ehtS.value = 2.6 / (2 * dist * Math.tan(cam.fov * D / 2)) / 0.178;   // its bright ring (0.178 of the photo) on the shadow's edge
     }
     ren.setRenderTarget(null); ren.clear(); ren.render(G.comp.scene, G.comp.cam);
     // over it: the astronaut (filmic, soft shadows), his ghost, the dots
