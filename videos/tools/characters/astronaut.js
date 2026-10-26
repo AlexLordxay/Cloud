@@ -16,6 +16,9 @@
 //
 // Joints are bones of one skeleton (a.joints.shoulderL, elbowL, wristL, hipL, kneeL, ankleL, … head, body): the arms and
 // legs are each one skinned sleeve that bends smoothly at the joints, with bellows folding on the inside of a bend.
+//
+// The approved look (the author, 26.10.2026): git tag astronaut-v1, reference pictures in characters/reference/ —
+// change the look or the walk only with the author's go-ahead, and compare against those pictures afterwards.
 (() => {
   window.__makeAstronaut = (THREE) => {
     const mats = [];
