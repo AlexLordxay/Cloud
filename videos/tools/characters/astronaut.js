@@ -751,8 +751,8 @@
     const thighR = y => { const u = clamp01((HY - y) / 0.48); return (0.12 - 0.016 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
     const shinR = (y, ph) => { const u = clamp01((KY - y) / 0.5); return (0.105 - 0.02 * u) * (1 + 0.1 * Math.sin(Math.PI * u)) * (1 + 0.06 * Math.max(0, Math.cos(ph))); };
     // The lower torso is its own garment, the briefs: wider than the waist and full, down to a seam at YB where each
-    // leg comes out of it, a size narrower (a step you can see). Below the seam: the thigh, knee, shin.
-    const YB = -0.305;
+    // leg comes out of it, a little narrower (a small step at the seam). Below the seam: the thigh, knee, shin.
+    const YB = -0.26;   // short (lower and with a wider step at the seam they read as a skirt over the striding thigh)
     const legR = (s, y, ph) => {
       const dx = Math.sin(ph), dz = Math.cos(ph), cx = s * 0.105, cz = -0.035;
       // the distance from the thigh's centre to the edge of the briefs' half (the ellipse, or the middle plane x = 0);
@@ -760,8 +760,8 @@
       const A = (1.26 + 0.1 * sstep(0.02, -0.16, y)) * rb(y), Bz = (0.9 + 0.08 * sstep(0.02, -0.16, y)) * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
       let E = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
       if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
-      const d = y - KY, mb = sstep(-0.1 - 0.13 * Math.max(0, dz), -0.27 - 0.03 * Math.max(0, dz), y), t = sstep(YB + 0.003, YB - 0.007, y), m = Math.max(mb, t);   // at the back the halves part only low down (high up they read as buttocks)
-      const brief = E + (0.14 - E) * mb;                                                       // the briefs round out to their leg opening
+      const d = y - KY, mb = sstep(-0.1, -0.27, y), t = sstep(YB + 0.003, YB - 0.007, y), m = Math.max(mb, t);
+      const brief = E + (0.127 - E) * mb;                                                      // the briefs round out to their leg opening, close round the thigh
       const leg = (thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2)));   // a full knee
       let r = brief + (leg - brief) * t;
       // the crotch: the briefs' halves meet at the middle, below the seam a narrow gap opens between the thighs and widens
