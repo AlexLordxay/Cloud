@@ -83,7 +83,7 @@
       [T_LAST + 0.85, 1.42, 0.38, 0.85, 0.07, 0, 0.2, 0.15],
       [T_LAST + 1.12, 0.52, 0.3, 0.22, -0.27, 0.15, 0.4, -0.05],
       [T_LAST + 2.15, 0.5, 0.3, 0.22, -0.26, 0.15, 0.4, -0.05],     // holding still until the fingers are open
-      [T_LAST + 2.65, 0.44, 0.46, 0.42, -0.12, 0.07, 0.2, 0.0],     // then the open hand comes off: out (away from the pole) and back
+      [T_LAST + 2.65, 0.26, 0.36, 0.3, -0.12, 0.07, 0.2, 0.0],      // then the open hand comes off: back (the pole is in front of the palm) and a little out
       [T_LAST + 3.4, 0.04, 0.17, 0.3, 0, 0, 0, 0],                  // the arm at its side (as the walker hangs it)
     ];
     T_HIT = T_LAST + 1.06; T_DOWN = T_LAST + 1.12; T_REL = T_LAST + 1.8;   // the spike touches; all the way in; let go
