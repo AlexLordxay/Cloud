@@ -53,7 +53,7 @@ function serve(page) {
   if (!fs.existsSync(THREE_DIR)) { console.log('run "npm install" in videos/tools first'); process.exit(1); }
   fs.mkdirSync(WORK, { recursive: true });
   const srv = await serve(recPage());
-  const br = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'] });
+  const br = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--disable-gpu-watchdog'] });
   const p = await br.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   p.on('pageerror', e => console.log('pageerror:', e.message));
   p.on('console', m => { if (m.type() === 'error' || m.text().startsWith('[scene]')) console.log(m.text().slice(0, 300)); });

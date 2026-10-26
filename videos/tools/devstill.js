@@ -43,9 +43,10 @@ const serve = page => new Promise(res => {
 (async () => {
   fs.mkdirSync(WORK, { recursive: true });
   const srv = await serve(recPage());
-  const br = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'] });
+  const br = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--disable-gpu-watchdog'] });
   const p = await br.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   p.on('pageerror', e => log('pageerror: ' + e.message));
+  p.on('crash', () => log('page crashed')); br.on('disconnected', () => log('browser disconnected'));
   p.on('console', m => { if (m.type() === 'error' || m.text().startsWith('[scene]')) log(m.text().slice(0, 300)); });
   await p.route('**/cdn.jsdelivr.net/npm/three@0.147.0/**', r => r.fulfill({ path: path.join(THREE_DIR, r.request().url().split('three@0.147.0/')[1]), contentType: 'application/javascript' }));
   await p.route('**/fonts.g*/**', r => r.abort());

@@ -254,7 +254,7 @@
           vec3 col = vec3(0.0); float alpha = 0.0;
           vec3 hc = cross(p, v); float h2 = dot(hc, hc);
           bool captured = false;
-          for (int i = 0; i < 320; i++) {
+          for (int i = 0; i < 260; i++) {
             float rr = length(p);
             if (rr < 1.0) { captured = true; break; }
             if (rr > 61.0 && dot(p, v) > 0.0) break;
@@ -520,10 +520,10 @@
       O.flare.visible = true; O.flare.position.copy(L); O.flare.scale.set(fl, fl, 1); O.flare.material.opacity = S.astro && S.astro.op != null ? S.astro.op : 1;
     }
     if (S.orbit > 0) {
-      const { A, B } = S.orb;
+      const { A, B } = S.orb, RO = S.orb.R || 1.5;
       for (let j = 0; j < 7; j++) for (let i = 0; i < 160; i++) {
         const al = 2.6 * t + j / 7 * 2 * Math.PI - i * 0.006, w = Math.pow(1 - i / 160, 1.5) * S.orbit;
-        const q = A.clone().multiplyScalar(1.5 * Math.cos(al)).addScaledVector(B, 1.5 * Math.sin(al));
+        const q = A.clone().multiplyScalar(RO * Math.cos(al)).addScaledVector(B, RO * Math.sin(al));
         d.add(q.x, q.y, q.z, 1.4 * w, 1.25 * w, 0.95 * w, i === 0 ? 10 : 7 - 4.5 * i / 160);
       }
     }
@@ -548,7 +548,11 @@
       u.camPos.value.copy(cam.position); u.camRot.value.setFromMatrix4(cam.matrixWorld);
       u.tanHalf.value = Math.tan(cam.fov * D / 2); u.aspect.value = cam.aspect; u.time.value = t * 6;
       u.discK.value = S.discK; u.discTint.value.set(...S.discTint); u.discHot.value = S.discHot; u.merc.value = S.merc; u.blue.value = S.blue;
-      ren.setRenderTarget(G.rtHole); ren.render(G.hole.scene, G.hole.cam);
+      // in strips, each its own draw (a long single draw can stall the software GPU)
+      ren.setRenderTarget(G.rtHole); ren.setScissorTest(true);
+      const NS = 16, gl = ren.getContext();
+      for (let k = 0; k < NS; k++) { const y0 = Math.floor(H * k / NS), y1 = Math.floor(H * (k + 1) / NS); ren.setScissor(0, y0, W, y1 - y0); ren.render(G.hole.scene, G.hole.cam); gl.flush(); }
+      ren.setScissorTest(false);
     }
     if (kHole < 1) {
       const gc = G.cam, q = G.Q;

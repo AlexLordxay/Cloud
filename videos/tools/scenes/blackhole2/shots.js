@@ -89,10 +89,14 @@ window.__bhShots = (H) => {
     const P = rad.clone().multiplyScalar(R), far = 1 + 1.6 * (1 - sm(50.6, 53.6, t));
     const pos = P.clone().addScaledVector(tan, -1.3 * far).addScaledVector(rad, 0.1 * far).addScaledVector(N, 0.35 * far);
     const look = P.clone().addScaledVector(tan, 2.5).addScaledVector(rad, 0.35 - 0.6 * (far - 1)).addScaledVector(N, -0.1);
-    const gph = ph + 1.25, gp = A.clone().multiplyScalar(Math.cos(gph)).addScaledVector(B, Math.sin(gph)).multiplyScalar(1.6);
-    return { cam: { pos, look, up: rad.clone(), fov: 50 }, orbit: sm(52.6, 53.6, t), orb: { A, B, N },
+    // his own back, seen ahead just under the bright ring (placed in the view: in front, a little up and to the side)
+    const f = look.clone().sub(pos).normalize(), rg = f.clone().cross(rad).normalize(), uv = rg.clone().cross(f);
+    const gp = pos.clone().addScaledVector(f, 2.2).addScaledVector(uv, 0.26).addScaledVector(rg, 0.42);
+    // light circling the hole through that point, across the view
+    const oA = gp.clone().normalize(), oB = f.clone().sub(oA.clone().multiplyScalar(f.dot(oA))).normalize();
+    return { cam: { pos, look, up: rad.clone(), fov: 50 }, orbit: sm(52.6, 53.6, t), orb: { A: oA, B: oB, R: gp.length() },
       astro: { pos: P, fwd: tan.clone(), up: rad.clone(), s: 0.3, env: 'fall', warm: rad.clone().negate(), lookCam: sm(55.4, 56.4, t) * (1 - sm(58.6, 59.3, t)),
-        ghost: { k: sm(56.2, 57.2, t), pos: gp, fwd: gp.clone().sub(pos).normalize(), up: gp.clone().normalize() } } };
+        ghost: { k: sm(56.2, 57.2, t), pos: gp, fwd: f.clone(), up: uv.clone() } } };
   }
   // 59.3–62.6: a small black hole (~10 Suns) would stretch him like spaghetti
   function s8a(t) {
