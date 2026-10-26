@@ -34,13 +34,15 @@
 - 404 і sitemap.xml уже є. Автор перевірив на iPhone → **опубліковано в main 7.10**. Лишилось: перевірка на Android/ПК.
 
 ## 26 жовтня 2026 — ЕТАЛОН КОСМОНАВТА (автор: «Ну це уже щось. Збережи його, щоб він був таким»)
-- **Вигляд і хода космонавта затверджено.** Git-тег **`astronaut-v1`** (космонавт `characters/astronaut.js`, сцена
+- **Вигляд і хода космонавта затверджено.** На GitHub — гілка-закладка **`astronaut-v1`** = коміт `e6fddcc` (теги шлюз
+  середовища не пропускає; локальний тег теж є). Там: космонавт `characters/astronaut.js`, сцена
   `scenes/marswalk`, відео `videos/marswalk.mp4` v5, 30 с). Еталонні знімки: `videos/tools/characters/reference/astronaut_v1_*.jpg`
   (стоячи й у невагомості з 4 боків, рукавиці, лікті/коліна, три кадри з Марса).
 - **Правило:** будь-які зміни вигляду чи ходи космонавта — лише з дозволу автора; після змін порівнювати з еталонними
   знімками (`node characters/preview.js out.jpg 0 <pose.json> full|hands|limbs`; поза стоячи — як у `reference`,
   для ходи — `node characters/walklab.js <тека>`).
-- **Відновити еталон:** `git checkout astronaut-v1 -- videos/tools/characters/astronaut.js` (і за потреби `videos/tools/scenes/marswalk`).
+- **Відновити еталон:** `git fetch origin astronaut-v1 && git checkout origin/astronaut-v1 -- videos/tools/characters/astronaut.js`
+  (і за потреби `videos/tools/scenes/marswalk`). Гілку `astronaut-v1` не змінювати.
 - Нові сцени на ґрунті — через `a.walk` / `a.stand` (див. нижче); у космосі — `a.pose(t)`.
 - Не зроблено (лише за згодою автора): товщі пальці рукавиць, візор ширше на боки шолома, товща підошва, новий чохол рюкзака.
 
