@@ -8,6 +8,7 @@
 //   const a = window.__makeAstronaut(THREE);         // a.group: ~1.9 units tall, pelvis at the origin, facing -z
 //   await a.ready;                                    // the emblem picture has loaded
 //   a.pose(t);                                        // the free-fall idle at time t (s): limbs drift slowly
+//   const w = a.walk({ ground, from, heading, steps }); w.update(t)   // on the ground: walking (see walk), or a.stand(…)
 //   a.setTint(r, g, b); a.setOpacity(x);              // colour and fade for the whole figure
 //   a.rim.color.value.set(…)                          // rim light on the edges (light from behind the figure)
 //   const env = window.__astronautEnv(THREE, renderer, { warm: dirVector });   // reflections: dark space, a warm glow
@@ -15,6 +16,9 @@
 //
 // Joints are bones of one skeleton (a.joints.shoulderL, elbowL, wristL, hipL, kneeL, ankleL, … head, body): the arms and
 // legs are each one skinned sleeve that bends smoothly at the joints, with bellows folding on the inside of a bend.
+//
+// The approved look (the author, 26.10.2026): branch astronaut-v1 (commit e6fddcc), pictures in characters/reference/ —
+// change the look or the walk only with the author's go-ahead, and compare against those pictures afterwards.
 (() => {
   window.__makeAstronaut = (THREE) => {
     const mats = [];
@@ -39,25 +43,28 @@
     }
     // Cloth texture, drawn once on a canvas: a fine weave, faint blotches of wear, and seams with stitches running along
     // the limbs (on lathe-made parts u goes round the limb and v along it, so a seam is a vertical line on the canvas).
-    // The same picture, greyed, is the bump map: the weave and the seams catch the light.
+    // The bump map: the wear, the seams and the stitches (not the weave: at this scale it read as terry cloth).
     function clothTexture(seams, quilt = 0) {
       const N = 1024, cv = document.createElement('canvas'); cv.width = cv.height = N;
-      const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+      const g0 = cv.getContext('2d'), g = g0, img = g.createImageData(N, N), d = img.data;
+      const bcv = document.createElement('canvas'); bcv.width = bcv.height = N; const bgc = bcv.getContext('2d'), bimg = bgc.createImageData(N, N), bd = bimg.data;
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-        const weave = ((x >> 1) + (y >> 1)) % 2 ? 6 : -6, grain = (vh(x, y, 1) - 0.5) * 14;
-        const wear = (vnoise(x / 90, y / 90, 3) - 0.5) * 22 + (vnoise(x / 23, y / 23, 7) - 0.5) * 8;
+        const weave = ((x >> 1) + (y >> 1)) % 2 ? 3 : -3, grain = (vh(x, y, 1) - 0.5) * 6;
+        const wx = x / N, wy = y / N, wf = (X, Y) => (vnoise(X / 90, Y / 90, 3) - 0.5) * 12 + (vnoise(X / 23, Y / 23, 7) - 0.5) * 5;   // tiles: blended across the edges
+        const wear = quilt ? 0 : wf(x, y) * (1 - wx) * (1 - wy) + wf(x - N, y) * wx * (1 - wy) + wf(x, y - N) * (1 - wx) * wy + wf(x - N, y - N) * wx * wy;
         const v = 236 + weave + grain + wear, i = (y * N + x) * 4;
         d[i] = v; d[i + 1] = v - 3; d[i + 2] = v - 9; d[i + 3] = 255;
+        bd[i] = bd[i + 1] = bd[i + 2] = 200 + 1.5 * wear; bd[i + 3] = 255;   // the bump: the wear only (no weave: it read as terry cloth)
       }
-      g.putImageData(img, 0, 0);
-      for (const u of seams) {
+      g.putImageData(img, 0, 0); bgc.putImageData(bimg, 0, 0);
+      for (const g of [g0, bgc]) for (const u of seams) {
         const x = u * N;
         g.fillStyle = 'rgba(120,115,105,0.55)'; g.fillRect(x - 2, 0, 4, N);                         // the seam groove
         g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x + 2, 0, 2, N);                         // its raised edge
         g.fillStyle = 'rgba(95,90,82,0.35)';
         for (let y = 0; y < N; y += 14) { g.fillRect(x - 9, y, 2, 7); g.fillRect(x + 8, y + 5, 2, 7); }   // stitches
       }
-      if (quilt) {   // quilting: puffed diamonds with stitched lines between them
+      if (quilt) for (const g of [g0, bgc]) {   // quilting: puffed diamonds with stitched lines between them
         for (let cy = 0; cy < N; cy += quilt) for (let cx = 0; cx < N; cx += quilt) {
           const gr = g.createRadialGradient(cx + quilt / 2, cy + quilt / 2, 0, cx + quilt / 2, cy + quilt / 2, quilt * 0.7);
           gr.addColorStop(0, 'rgba(255,255,255,0.08)'); gr.addColorStop(1, 'rgba(0,0,0,0.07)'); g.fillStyle = gr; g.fillRect(cx, cy, quilt, quilt); }
@@ -66,18 +73,18 @@
         g.setLineDash([]);
       }
       const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.encoding = THREE.sRGBEncoding;
-      const bc = document.createElement('canvas'); bc.width = bc.height = N; const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(cv, 0, 0);
+      const bc = document.createElement('canvas'); bc.width = bc.height = N; const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) bg.drawImage(bcv, ox, oy);   // blurred across the tile's edges too
       const b = new THREE.CanvasTexture(bc); b.wrapS = b.wrapT = THREE.RepeatWrapping; b.anisotropy = 8;
       return [t, b];
     }
     const [clothMap, clothBump] = clothTexture([0.25, 0.75]);
     const [plainMap, plainBump] = clothTexture([]);
-    const fabric = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05 });
-    const fabric2 = M({ color: 0xdedad0, roughness: 0.95, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.07 });      // a shade darker: bellows, gaskets
-    const torsoCloth = M({ color: 0xf2eee6, roughness: 0.93, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.035 });   // the cloth over the hard torso: the same as the sleeves
-    const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.04 });        // the cloth cover over the backpack
-    const [quiltMap, quiltBump] = clothTexture([], 170);
-    const quilted = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: quiltMap, bumpMap: quiltBump, bumpScale: 0.08 });   // its quilted thermal cover
+    const fabric = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.02 });
+    const fabric2 = M({ color: 0xdedad0, roughness: 0.95, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.03 });      // a shade darker: bellows, gaskets
+    const torsoCloth = M({ color: 0xf2eee6, roughness: 0.93, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02 });   // the cloth over the hard torso: the same as the sleeves
+    const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02 });        // the cloth cover over the backpack
+    const [quiltMap, quiltBump] = clothTexture([], 256);
+    const quilted = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: quiltMap, bumpMap: quiltBump, bumpScale: 0.035 });   // its quilted thermal cover
     const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 });          // hard parts
     const helmetMat = M({ color: 0xeeece6, roughness: 0.35, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.2 }, THREE.MeshPhysicalMaterial);   // the helmet: a lacquered shell
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
@@ -91,8 +98,8 @@
     const blue = M({ color: 0x0057b7, roughness: 0.85 }), yellow = M({ color: 0xffd500, roughness: 0.85 }), white = M({ color: 0xf4f2ec, roughness: 0.85 });
     // the colour details (after the Apollo-era suits): silver-grey gloves with blue rubber fingertips, beige straps,
     // blue and red wrist stripes, striped hoses
-    const glove = M({ color: 0xa3acba, roughness: 0.72, metalness: 0.08, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
-    const rubber = M({ color: 0x1d3f86, roughness: 0.5 }), strap = M({ color: 0xb4955f, roughness: 0.85 });
+    const glove = M({ color: 0xbcc0c6, roughness: 0.72, metalness: 0.08, map: plainMap, bumpMap: plainBump, bumpScale: 0.015 });
+    const rubber = M({ color: 0x3a5480, roughness: 0.6 }), strap = M({ color: 0xb4955f, roughness: 0.85 });
     const connBlue = M({ color: 0x1f4c9e, roughness: 0.4, metalness: 0.3 }), connRed = M({ color: 0xb02a22, roughness: 0.4, metalness: 0.3 });
     const hoseMat = (() => {
       const cv = document.createElement('canvas'); cv.width = 64; cv.height = 8; const g = cv.getContext('2d');
@@ -179,15 +186,15 @@
     const ridgeS = (d, B) => Math.abs(d) < B ? (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2 * Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
     // the cloth's own unevenness on the skinned sleeves (a radius offset at a rest-pose point): soft lumps and shallow
     // creases across the limb; calm (0..1) quiets it in the bends, where the bellows are
-    const fold = (x, y, z, calm) => (1 - 0.6 * calm) * (0.0055 * ((vnoise(x * 14 + 3.1, y * 30, z * 14) - 0.5) * 1.4 + (vnoise(x * 36, y * 70 + 5.3, z * 36) - 0.5) * 0.6)
+    const fold = (x, y, z, calm) => (1 - 0.6 * calm) * (0.0032 * ((vnoise(x * 14 + 3.1, y * 30, z * 14) - 0.5) * 1.4 + (vnoise(x * 36, y * 70 + 5.3, z * 36) - 0.5) * 0.25)
       - 0.0045 * Math.abs(Math.sin(y * 31 + 4 * x + 3 * z)) ** 6);
     const bandEnv = (d, B) => Math.abs(d) < B ? Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
     // compression rings: the cloth bunched in soft rings just beyond a bend's bellows (|d| from B to B + 0.12), deepest on
     // the inside of the bend (cin = cos of the angle from the inner side)
     const rings = (x, y, z, d, B, cin) => { const a = Math.abs(d); if (a <= B * 0.8 || a > B + 0.12) return 0;
-      return 0.004 * Math.sin(2 * Math.PI * y / 0.05 + 2.5 * vnoise(x * 9, y * 9, z * 9)) * sstep(B * 0.8, B + 0.02, a) * (1 - sstep(B + 0.05, B + 0.12, a)) * (0.5 + 0.5 * cin); };
+      return 0.0025 * Math.sin(2 * Math.PI * y / 0.05 + 2.5 * vnoise(x * 9, y * 9, z * 9)) * sstep(B * 0.8, B + 0.02, a) * (1 - sstep(B + 0.05, B + 0.12, a)) * (0.5 + 0.5 * cin); };
     // the sleeves' cloth: the seamed fabric, shaded per vertex (darker in the bellows' valleys and on the pads)
-    const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05, vertexColors: true });
+    const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.02, vertexColors: true });
     // the row heights of a tube: spans [from, to, step] laid end to end
     const span = (...sp) => { const out = []; sp.forEach(([a, b, st], i) => { const n = Math.max(1, Math.round((a - b) / st)); for (let k = 0; k < n; k++) out.push(a + (b - a) * k / n); if (i === sp.length - 1) out.push(b); }); return out; };
     // A skinned tube in body space, built at rest (every limb hanging straight down, so a row is a horizontal slice).
@@ -247,7 +254,8 @@
     latches(body, 0.182, 0.06, [0.5, -0.5, Math.PI - 0.6, Math.PI + 0.6], 1.26, 0.9);
     // chest control box with two hoses to the backpack
     const dcmMat = M({ color: 0x41464e, roughness: 0.45, metalness: 0.35 });                      // dark anthracite, so it reads as a device
-    const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), dcmMat, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
+    const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), dcmMat, 0, 0.33, -0.243); dcm.rotation.x = 0.1; body.add(dcm);
+    dcm.add(mesh(rbox(0.2, 0.07, 0.04, 0.01), grey, 0, 0, 0.06));                               // its mount on the chest
     // its display: oxygen and suit pressure in small green digits on a dark screen (a canvas, self-lit)
     const screenTex = (() => {
       const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const g = cv.getContext('2d');
@@ -407,7 +415,6 @@
       const bo = joint(head, sd * 0.188, 0.165, -0.02); bo.rotation.z = Math.PI / 2;
       bo.add(mesh(new THREE.CylinderGeometry(0.035, 0.037, 0.016, 40), helmetMat, 0, sd * 0.008, 0), mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.004, 6), machined, 0, sd * 0.017, 0));
     }
-    const brow = mesh(new THREE.SphereGeometry(0.2, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.13, Math.PI * 0.06), helmetMat, 0, 0.16, 0);   // the eyeshade ridge over the visor brow.scale.set(1, 1.03, 1.06); head.add(brow);
     // Left of the helmet: a lamp — a cylinder on a bracket, a glowing lens with a soft halo, a row of small LEDs under it.
     // Right: a sensor/camera pod — a dark body, a big glass lens in a metal ring, a red indicator, a thin antenna.
     const glows = []; let glowK = 1;
@@ -444,8 +451,8 @@
     const bendTo = (g, R) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - p.getX(i) ** 2 / (2 * R)); return smoothNormals(g); };   // wrap round a limb of radius R
     function pocket(parent, x, y, z, rotY, w, h, tilt = 0, R = 0.11) {
       const pk = joint(parent, x, y, z); pk.rotation.set(tilt, rotY, 0);
-      pk.add(mesh(bendTo(lumpy(rbox(w, h, 0.022, 0.012), 0.002, 20), R), fabric2));
-      pk.add(mesh(bendTo(rbox(w + 0.006, h * 0.34, 0.026, 0.01), R), cover, 0, h * 0.4, 0.006));   // the flap overhangs a little
+      pk.add(mesh(boxUV(bendTo(lumpy(rbox(w, h, 0.022, 0.012), 0.002, 20), R), 0.5), fabric2));   // box UVs: no tile edge across the pocket
+      pk.add(mesh(boxUV(bendTo(rbox(w + 0.006, h * 0.34, 0.026, 0.01), R), 0.5), cover, 0, h * 0.4, 0.006));   // the flap overhangs a little
       pk.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 12), metal, 0, h * 0.37, 0.02).rotateX(Math.PI / 2));
       return pk;
     }
@@ -455,9 +462,10 @@
     // shoulder band (cubic over the torso, two helpers and the shoulder) lets the arm swing out of it with no edge, and the
     // elbow band bends round with bellows on the inside and a pad over the back. The forearm ends in a gauntlet and the
     // hand turns below its lip at the wrist pivot.
-    const EY = 0.05, EB = 0.09, ER = 0.082;   // the elbow pivot's height in the torso, the bend band's half-length, the radius
-    const upperR = y => { const u = (0.47 - y) / 0.42; return 0.082 + 0.02 * Math.exp(-(((u - 0.2) / 0.18) ** 2)); };   // full where it leaves the torso
-    const foreR = y => { const u = clamp01((EY - y) / 0.3); return (0.078 - 0.016 * u) * (1 + 0.05 * Math.sin(Math.PI * u)); };
+    const UA = 0.38, FA = 0.33;   // the upper arm (shoulder to elbow) and the forearm (elbow to the palm's base): short and thick, as in a pressurised suit
+    const EY = 0.47 - UA, EB = 0.09, ER = 0.092;   // the elbow pivot's height in the torso, the bend band's half-length, the radius
+    const upperR = y => { const u = (0.47 - y) / UA; return 0.092 + 0.022 * Math.exp(-(((u - 0.2) / 0.18) ** 2)); };   // full where it leaves the torso
+    const foreR = y => { const u = clamp01((EY - y) / (FA - 0.06)); return (0.088 - 0.022 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
     const armR = (s, y, ph) => {
       const d = y - EY, prof = upperR(y) + (foreR(y) - upperR(y)) * sstep(EB, -EB, d);
       const pm = Math.abs(d) < EB ? sstep(0.3, 0.75, Math.cos(ph)) * Math.exp(-((d / 0.06) ** 2)) : 0;   // the elbow pad, +z
@@ -469,7 +477,7 @@
     const bendCol = (d, B, pm) => { if (Math.abs(d) >= B) return 1; const env = Math.sin(Math.PI * (d + B) / (2 * B)), sh = (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2;
       const c = 1 - env * (0.05 + 0.07 * (1 - sh)); return c + (0.92 - c) * pm * env; };
     // the corrective shape of a bend (morph 0, grows with the angle): cloth bunches on the inside, the outside stays full
-    const bendMorph = (d, B, R, inside, ins, outs) => { const g = Math.exp(-((d / (0.9 * B)) ** 2)); return R * g * (0.22 * ins * ins + 0.1 * outs) + R * 0.035 * ridgeS(d, B) * ins; };
+    const bendMorph = (d, B, R, inside, ins, outs, rk = 0.035) => { const g = Math.exp(-((d / (0.9 * B)) ** 2)); return R * g * (0.22 * ins * ins + 0.1 * outs) + R * rk * ridgeS(d, B) * ins; };   // rk: how much the bellows deepen in the bend
     const quad = t => [(1 - t) ** 2, 2 * t * (1 - t), t * t];
     const spread = (bs, ws) => bs.map((b, i) => [b, ws[i]]);
     // a flat patch bent round a limb of radius r (its local +z points out of the limb)
@@ -504,7 +512,7 @@
       const tip = phalanx(R[2], R[3], 0, yt, 0, 0, [glove, rubber], 18, 0.05), g = tip.geometry, p = g.attributes.position, ix = g.index.array, gl = [], rb = [];
       for (let i = 0; i < ix.length; i += 3) {
         let y = 0, z = 0; for (let k = 0; k < 3; k++) { y += p.getY(ix[i + k]) / 3; z += p.getZ(ix[i + k]) / 3; }
-        (y - yt < 0.004 - 0.75 * z ? rb : gl).push(ix[i], ix[i + 1], ix[i + 2]);
+        (y - yt < 0.009 - 0.4 * z ? rb : gl).push(ix[i], ix[i + 1], ix[i + 2]);
       }
       g.setIndex(gl.concat(rb)); g.clearGroups(); g.addGroup(0, gl.length, 0); g.addGroup(gl.length, rb.length, 1);
       bs[2].add(tip);
@@ -607,21 +615,21 @@
     const HANDS = {};
     for (const s of [-1, 1]) {
       const L = s < 0 ? 'L' : 'R';
-      const sh = bone(body, s * 0.25, 0.47, 0), el = bone(sh, 0, -0.42, 0), wr = bone(el, 0, -0.36, 0);
+      const sh = bone(body, s * 0.25, 0.47, 0), el = bone(sh, 0, -UA, 0), wr = bone(el, 0, -FA, 0);
       let arm = null;
       const elH1 = helper(el, 1 / 3, src => { if (arm) arm.morphTargetInfluences[0] = sstep(0, 2.1, src.rotation.x); }), elH2 = helper(el, 2 / 3);
       // The shoulder is a ball joint: the sleeve turns with the arm as a whole, its open top (a ring round the pivot)
       // always inside a round shoulder cap of the suit, and it leaves the cap through a soft bearing ring.
-      const rows = span([0.47, EY + EB, 0.007], [EY + EB, EY - EB, 0.0025], [EY - EB, -0.25, 0.008]).map(y => {
+      const rows = span([0.47, EY + EB, 0.007], [EY + EB, EY - EB, 0.0025], [EY - EB, EY - FA + 0.06, 0.008]).map(y => {
         const w = y > EY + EB ? [[sh, 1]] : y > EY - EB ? spread([sh, elH1, elH2, el], cubic((EY + EB - y) / (2 * EB))) : [[el, 1]];
-        return { y, cx: s * 0.25, cz: 0, r: ph => armR(s, y, ph).r, w: () => w, col: ph => bendCol(y - EY, EB, armR(s, y, ph).pm) * (1 - 0.1 * sstep(-0.23, -0.25, y)) };   // shadowed going into the wrist ring
+        return { y, cx: s * 0.25, cz: 0, r: ph => armR(s, y, ph).r, w: () => w, col: ph => bendCol(y - EY, EB, armR(s, y, ph).pm) * (1 - 0.1 * sstep(EY - FA + 0.08, EY - FA + 0.06, y)) };   // shadowed going into the wrist ring
       });
-      const cap = mesh(new THREE.SphereGeometry(0.112, 56, 40), torsoCloth, s * 0.25, 0.47, 0); body.add(cap);
-      sh.add(at(ringY(0.097, 0.011, fabric2), 0, -0.058, 0));
+      const cap = mesh(new THREE.SphereGeometry(0.122, 56, 40), torsoCloth, s * 0.25, 0.47, 0); body.add(cap);
+      sh.add(at(ringY(0.107, 0.012, fabric2), 0, -0.06, 0));
       arm = skinTube(rows, 48, (rw, ph, nx, ny, nz) => bendMorph(rw.y - EY, EB, ER, 1, Math.max(0, -nz), Math.max(0, nz)));
-      proxy(sh, 0.2, 0.42, 0.2, -0.21); proxy(el, 0.16, 0.32, 0.16, -0.16);
+      proxy(sh, 0.22, UA, 0.22, -UA / 2); proxy(el, 0.18, FA - 0.04, 0.18, -(FA - 0.04) / 2);
       if (s < 0) {   // the flag on the outside of the left upper arm, bent round the sleeve
-        const r = armR(s, 0.47 - 0.265, 1.5 * Math.PI).base + 0.005, f = joint(sh, -(r + 0.002), -0.265, 0); f.rotation.y = -Math.PI / 2;
+        const r = armR(s, 0.47 - 0.24, 1.5 * Math.PI).base + 0.005, f = joint(sh, -(r + 0.002), -0.24, 0); f.rotation.y = -Math.PI / 2;
         const tex = (() => { const cv = document.createElement('canvas'); cv.width = 220; cv.height = 150; const g = cv.getContext('2d');
           g.fillStyle = '#e9e6de'; g.fillRect(0, 0, 220, 150); g.fillStyle = '#0057b7'; g.fillRect(8, 8, 204, 67); g.fillStyle = '#ffd500'; g.fillRect(8, 75, 204, 67);
           g.strokeStyle = 'rgba(80,76,70,0.8)'; g.lineWidth = 2; g.setLineDash([6, 5]); g.strokeRect(4, 4, 212, 142);   // the stitched edge
@@ -629,7 +637,7 @@
         f.add(mesh(wrapPlane(0.11, 0.075, r + 0.001), M({ map: tex, roughness: 0.85 }), 0, 0, 0));
       }
       if (s < 0) {   // the cuff checklist on the left forearm: a little book of cards on a strap
-        const ck = joint(el, 0, -0.19, -(armR(s, EY - 0.19, Math.PI).base + 0.012)); ck.rotation.y = Math.PI;
+        const ck = joint(el, 0, -0.165, -(armR(s, EY - 0.165, Math.PI).base + 0.010)); ck.rotation.y = Math.PI;
         ck.add(mesh(rbox(0.085, 0.062, 0.018, 0.006), grey));
         for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
       }
@@ -637,7 +645,8 @@
       const armStrap = (y, W = 0.018) => { const pts = []; for (let k = 0; k <= 40; k++) { const a = 2 * Math.PI * k / 40; const r = armR(s, EY + y, a).r + 0.002; pts.push(new THREE.Vector3(r * Math.sin(a), y, r * Math.cos(a))); }
         el.add(webbing(pts, W, 0.003, new THREE.Vector3(0, y, 0), dark, 80)); };
       if (s < 0) {   // a chronograph strapped over the left cuff, on the back of the wrist (as astronauts wear them)
-        const y = -0.262, r = armR(s, EY + y, 0).base + 0.006; armStrap(y);
+        armStrap(-0.165, 0.016);                                                                 // the checklist's strap
+        const y = -FA + 0.098, r = armR(s, EY + y, 0).base + 0.006; armStrap(y);
         const wt = joint(el, 0, y, r + 0.004); wt.rotation.x = Math.PI / 2;
         wt.add(mesh(new THREE.CylinderGeometry(0.017, 0.018, 0.009, 36), metal), mesh(new THREE.TorusGeometry(0.0165, 0.0025, 8, 36), dark, 0, 0.0048, 0).rotateX(Math.PI / 2));
         const dial = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
@@ -649,17 +658,22 @@
         wt.add(mesh(new THREE.CircleGeometry(0.0145, 36), M({ map: dial, roughness: 0.25 }), 0, 0.0047, 0).rotateX(-Math.PI / 2));
         wt.add(mesh(new THREE.CylinderGeometry(0.0025, 0.0025, 0.005, 10), metal, 0.019, 0, 0).rotateZ(Math.PI / 2));   // the crown
       } else {   // the wrist mirror on the right forearm: to see the controls on the chest box
-        const y = -0.215, r = armR(s, EY + y, Math.PI / 2).base; armStrap(y, 0.022);
+        const y = -FA + 0.14, r = armR(s, EY + y, Math.PI / 2).base; armStrap(y, 0.022);
         const mr = joint(el, r + 0.008, y, 0); mr.rotation.set(0, Math.PI / 2, 0.25);
         mr.add(mesh(rbox(0.062, 0.046, 0.006, 0.006), grey), mesh(new THREE.PlaneGeometry(0.054, 0.038), M({ color: 0xdfe6ee, metalness: 1, roughness: 0.04 }), 0, 0, 0.0032));
         mr.add(mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.05, 10), metal, 0, 0, -0.006).rotateZ(Math.PI / 2));   // its hinge
       }
       // the wrist disconnect: a dark ring with a coloured stripe (blue on the left, red on the right, as on real suits)
-      el.add(at(band(0.069, 0.024, 0.009), 0, -0.293, 0));                                   // a slim wrist ring, the sleeve's own width
-      el.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -0.306, 0));
+      el.add(at(band(0.069, 0.024, 0.009), 0, -FA + 0.067, 0));                                   // a slim wrist ring, the sleeve's own width
+      el.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -FA + 0.054, 0));
       // the gauntlet: a flared cuff, open below, with a rolled lip; the hand turns under it
-      el.add(mesh(lathe([[0.052, -0.349], [0.056, -0.345], [0.066, -0.334], [0.072, -0.318], [0.068, -0.303], [0.058, -0.29]], 48), glove));
-      el.add(at(ringY(0.052, 0.0035, glove), 0, -0.349, 0));
+      { const g = lathe([[0.052, 0.011], [0.056, 0.015], [0.066, 0.026], [0.072, 0.042], [0.068, 0.057], [0.058, 0.07]].map(([r, y]) => [r, y - FA]), 48), uv = g.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.42 / TEX, uv.getY(i) * 0.075 / TEX);   // the weave at its real size
+        el.add(mesh(g, glove)); }
+      el.add(at(ringY(0.052, 0.0035, glove), 0, -FA + 0.011, 0));
+      { const liner = M({ color: 0x2c2e33, roughness: 0.9, side: THREE.DoubleSide });            // dark inside the cuff: no seeing through the wrist
+        el.add(mesh(new THREE.CylinderGeometry(0.056, 0.049, 0.06, 32, 1, true), liner, 0, -FA + 0.04, 0));
+        el.add(mesh(new THREE.CircleGeometry(0.06, 32).rotateX(Math.PI / 2), liner, 0, -FA + 0.07, 0)); }
       // the glove (see phalanx, finger, gloveGeo): the wrist bone is the palm's base, every finger and the thumb have three bones
       const F = FING.map(([name, mx, my, fan, Lf, Rf]) => {
         const root = joint(wr, s * mx, my + 0.004, -0.002); root.rotation.z = s * fan;      // its spread
@@ -707,17 +721,17 @@
       d = sMax(d, -(y - BY), 0.012);                                                    // flat underneath
       return d + 0.0012 * (vnoise(x * 55, y * 55, z * 55) - 0.5) * 2;                   // the cloth, a little uneven
     };
-    const bootShell = M({ color: 0xeceae3, roughness: 0.4, metalness: 0 });
-    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.05, vertexColors: true });
+    const bootShell = M({ color: 0xbfc3c8, roughness: 0.6, metalness: 0 });   // the toe cap: grey, so it reads
+    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02, vertexColors: true });
     const bootGeo = (() => {
       const { P, N, idx } = surfaceNets(bootSD, -0.12, -0.1, -0.31, 0.24, 0.25, 0.46, 0.0032), cloth = [], cap = [];
       for (let i = 0; i < idx.length; i += 3) {   // the toe cap (a slanted edge, higher at the front, above the rubber): lacquered
         let y = 0, z = 0; for (let k = 0; k < 3; k++) { y += P[3 * idx[i + k] + 1] / 3; z += P[3 * idx[i + k] + 2] / 3; }
-        const yb = y - spring(z) - BY; (z < -0.175 - 0.35 * yb && yb > 0.016 ? cap : cloth).push(idx[i], idx[i + 1], idx[i + 2]);
+        const yb = y - spring(z) - BY; (z < -0.175 - 0.35 * yb && yb > 0.03 ? cap : cloth).push(idx[i], idx[i + 1], idx[i + 2]);
       }
-      // the sole's rubber wraps up the boot's lower edge (a cupsole): the cloth turns dark rubber below 1.5 cm, a soft edge
+      // the sole's rubber wraps up the boot's lower edge (a cupsole): the cloth turns dark rubber below 3 cm, a soft edge
       const col = new Float32Array(P.length), R = [0.023, 0.024, 0.027];
-      for (let q = 0; q < P.length / 3; q++) { const yb = P[3 * q + 1] - spring(P[3 * q + 2]) - BY, k = sstep(0.0175, 0.0135, yb); for (let c = 0; c < 3; c++) col[3 * q + c] = 1 + (R[c] - 1) * k; }
+      for (let q = 0; q < P.length / 3; q++) { const yb = P[3 * q + 1] - spring(P[3 * q + 2]) - BY, k = sstep(0.032, 0.028, yb); for (let c = 0; c < 3; c++) col[3 * q + c] = 1 + (R[c] - 1) * k; }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       g.setIndex(cloth.concat(cap)); g.addGroup(0, cloth.length, 0); g.addGroup(cloth.length, cap.length, 1); return boxUV(g, 0.5);
@@ -727,7 +741,7 @@
     const bootHit = (c, dir, max = 0.25) => { const p = c.clone(); for (let t = 0; t < max; t += 0.0005) { p.copy(c).addScaledVector(dir, t); if (bootSD(p.x, p.y, p.z) > 0) return p; } return p; };
     const soleMat = (() => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64; const g = cv.getContext('2d');   // lugs across the sole
       g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#000'; for (let y = 0; y < 64; y += 16) g.fillRect(0, y, 64, 7);
-      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5); return M({ color: 0x2a2b2e, roughness: 0.85, bumpMap: t, bumpScale: 0.8 }); })();
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5); return M({ color: 0x45474b, roughness: 0.85, bumpMap: t, bumpScale: 0.8 }); })();
     const soleGeo = (() => {   // the footprint: the boot's outline seen from below (its widest over the lower 7 cm), a welt wider; then bent up with the toe
       const zs = [], hw = [], Ys = []; for (let y = BY + 0.004; y < BY + 0.07; y += 0.005) Ys.push(y);
       let zH = 0, zT = 0; for (const y of Ys) { for (let z = 0; z < 0.2; z += 0.001) if (bootSD(0, y, z) < 0) zH = Math.max(zH, z); for (let z = 0; z > -0.35; z -= 0.001) if (bootSD(0, y + spring(z), z) < 0) zT = Math.min(zT, z); }
@@ -744,19 +758,29 @@
     const briefP = [[0.08, -0.27], [0.13, -0.255], [0.162, -0.22], [0.182, -0.16], [0.19, -0.08], [0.183, 0.0], [0.173, 0.06], [0.16, 0.12]];
     const rb = y => { y = Math.max(y, -0.2); for (let i = 1; i < briefP.length; i++) if (y <= briefP[i][1]) { const [r0, y0] = briefP[i - 1], [r1, y1] = briefP[i]; return r0 + (r1 - r0) * (y - y0) / (y1 - y0); } return briefP[briefP.length - 1][0]; };
     const HY = -0.13, KY = -0.61, KB = 0.11, KR = 0.1, AY = -1.17;   // a short thigh: the suit sits low and sturdy
-    const thighR = y => { const u = clamp01((HY - y) / 0.48); return (0.128 - 0.02 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
+    const thighR = y => { const u = clamp01((HY - y) / 0.48); return (0.12 - 0.016 * u) * (1 + 0.06 * Math.sin(Math.PI * u)); };
     const shinR = (y, ph) => { const u = clamp01((KY - y) / 0.5); return (0.105 - 0.02 * u) * (1 + 0.1 * Math.sin(Math.PI * u)) * (1 + 0.06 * Math.max(0, Math.cos(ph))); };
+    // The lower torso is its own garment, the briefs: wider than the waist and full, down to a seam at YB where each
+    // leg comes out of it, a little narrower (a small step at the seam). Below the seam: the thigh, knee, shin.
+    const YB = -0.26;   // short (lower and with a wider step at the seam they read as a skirt over the striding thigh)
     const legR = (s, y, ph) => {
       const dx = Math.sin(ph), dz = Math.cos(ph), cx = s * 0.105, cz = -0.035;
-      // the distance from the thigh's centre to the edge of the briefs' half (the ellipse, or the middle plane x = 0)
-      const A = 1.26 * rb(y), Bz = 0.9 * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
+      // the distance from the thigh's centre to the edge of the briefs' half (the ellipse, or the middle plane x = 0);
+      // the hips fill out below the waist
+      const back = sstep(-0.3, 0.3, dz);   // towards the back: a flatter seat whose halves part only low down (else it reads as buttocks)
+      const A = (1.26 + 0.1 * sstep(0.02, -0.16, y)) * rb(y), Bz = (0.9 + (0.08 - 0.14 * back) * sstep(0.02, -0.16, y)) * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
       let E = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
       if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
-      const m = sstep(-0.14, -0.36, y), d = y - KY;
-      let r = E + ((thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2))) - E) * m;   // a full knee
-      if (s * dx < -1e-6) r = Math.min(r, (0.105 - 0.004 * m) / -(s * dx));   // the thighs press together, never through
+      const d = y - KY, mb = sstep(-0.1 - 0.09 * back, -0.265, y), t = sstep(YB + 0.003, YB - 0.007, y), m = Math.max(mb, t);
+      const brief = E + (0.127 - E) * mb;                                                      // the briefs round out to their leg opening, close round the thigh
+      const leg = (thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.07 * Math.exp(-((d / 0.085) ** 2)));   // a full knee
+      let r = brief + (leg - brief) * t;
+      // the crotch: the briefs' halves meet at the middle, below the seam a narrow gap opens between the thighs and widens
+      // a little downward (the inner side rounded off softly, not cut flat)
+      if (s * dx < -1e-6) { const g = 0.002 * m + 0.011 * sstep(YB, YB - 0.12, y), c = (0.105 - g) / -(s * dx), k = 0.03 * m, h = Math.max(k - Math.abs(r - c), 0) / (k || 1);
+        r = Math.min(r, c) - h * h * k * 0.25; }
       const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.08) ** 2)) : 0;   // the knee pad, -z
-      const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.3 * pm;
+      const base = r * (1 + 0.05 * ridgeS(d, KB) * (1 - pm)) + KR * 0.18 * pm;
       return { r: base + fold(cx + base * dx, y, cz + base * dz, Math.max(bandEnv(d, KB), 1 - sstep(-0.05, -0.2, y))) + rings(cx + base * dx, y, cz + base * dz, d, KB, Math.cos(ph)) * m, base, pm, m };
     };
     for (const s of [-1, 1]) {
@@ -767,11 +791,11 @@
       const knH1 = helper(kn, 1 / 3, src => { if (leg) leg.morphTargetInfluences[0] = sstep(0, 2.2, -src.rotation.x); }), knH2 = helper(kn, 2 / 3);
       const anH = helper(an, 0.5);
       // the commander's red stripe round the thigh, woven into the cloth's colour (a sharp edge: a pair of rows at each edge)
-      const ST = [HY - 0.169, HY - 0.201], RED = [0.5, 0.032, 0.024];
+      const ST = [HY - 0.345, HY - 0.377], RED = [0.5, 0.032, 0.024];
       const ys = span([0.07, -0.1, 0.008], [-0.1, -0.3, 0.0025], [-0.3, KY + KB, 0.008], [KY + KB, KY - KB, 0.0025], [KY - KB, AY + 0.24, 0.008], [AY + 0.24, AY + 0.14, 0.004], [AY + 0.14, AY + 0.09, 0.008])
-        .filter(y => ST.every(e => Math.abs(y - e) > 0.002)).concat(ST.flatMap(e => [e + 0.0004, e - 0.0004])).sort((p, q) => q - p);
+        .filter(y => ST.every(e => Math.abs(y - e) > 0.002) && Math.abs(y - YB) > 0.011).concat(ST.flatMap(e => [e + 0.0004, e - 0.0004]), [5, 3, 1, -1, -3, -5, -7, -9].map(k => YB + k * 0.001)).sort((p, q) => q - p);
       const rows = ys.map(y => ({
-        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => y < ST[0] && y > ST[1] ? RED : bendCol(y - KY, KB, legR(s, y, ph).pm) * (1 - 0.08 * legR(s, y, ph).pm) * (1 - 0.1 * sstep(0.03, 0.06, y)) * (1 - 0.1 * sstep(AY + 0.13, AY + 0.1, y)),   // soiled knee pads; shadowed under the waist ring and into the boot
+        y, cx: s * 0.105, cz: -0.035, r: ph => legR(s, y, ph).r, col: ph => y < ST[0] && y > ST[1] ? RED : Math.abs(y - YB) < 0.0045 ? 0.62 : bendCol(y - KY, KB, legR(s, y, ph).pm) * (1 - 0.08 * legR(s, y, ph).pm) * (1 - 0.1 * sstep(0.03, 0.06, y)) * (1 - 0.1 * sstep(AY + 0.13, AY + 0.1, y)),   // soiled knee pads; shadowed under the waist ring and into the boot
         w: (ph, r) => {
           if (y > -0.1) return [[body, 1]];
           if (y > -0.3) {   // the hip: the middle seam is pinned to the torso until the leg is round
@@ -780,28 +804,42 @@
           }
           if (y > KY + KB) return [[hp, 1]];
           if (y > KY - KB) return spread([hp, knH1, knH2, kn], cubic((KY + KB - y) / (2 * KB)));
-          if (y > AY + 0.24) return [[kn, 1]];
-          if (y > AY + 0.14) return spread([kn, anH, an], quad((AY + 0.24 - y) / 0.1));
-          return [[an, 1]];
+          if (y > AY + 0.26) return [[kn, 1]];
+          if (y > AY + 0.13) { const u = sstep(AY + 0.26, AY + 0.13, y); return [[kn, 1 - u], [anH, u]]; }   // into the boot's collar
+          return [[anH, 1]];                                                                                  // inside it: with the collar
         },
       }));
-      leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz)));
+      leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz) * 0.4, 0.07));   // the knee's bellows deepen as it bends
       proxy(hp, 0.25, 0.48, 0.25, -0.24); proxy(kn, 0.21, 0.5, 0.21, -0.27);
       pocket(hp, s * (legR(s, HY - 0.26, s * Math.PI / 2).base + 0.008), -0.26, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
       pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1, 0, 0.095);              // and a smaller one on each shin
-      // the boot: the ankle pivot sits inside it, 0.127 above the sole
-      an.add(at(band(0.104, 0.03, 0.011), 0, 0.14, 0));                                           // the ankle bearing on the boot's collar
-      an.add(mesh(bootGeo, [bootCloth, bootShell]));                                              // the boot
+      // The boot: the ankle pivot sits inside it, 0.103 above the sole. The ankle bends inside the boot, as in a real
+      // one: the foot turns with the ankle, the boot's column (and the sleeve inside it) only half way (anH), the upper
+      // creasing over the instep between them; the sleeve above the collar bends the other half, so a foot turned far
+      // never breaks the shin. Boot, straps and buckles are skinned alike (they stay on the boot); the sole is rigid.
+      const parts = new THREE.Group();
+      anH.add(at(band(0.104, 0.03, 0.011), 0, 0.14, 0));                                          // the ankle bearing on the boot's collar
+      parts.add(mesh(bootGeo, [bootCloth, bootShell]));                                           // the boot
       an.add(mesh(soleGeo, soleMat));                                                             // its sole
       // two straps lying on the boot, buckled on the outside: over the instep and round the ankle
       { const c = new THREE.Vector3(0, -0.06, -0.095), pts = [];
         for (let k = 0; k <= 24; k++) { const a = Math.PI * k / 24, h = bootHit(c, new THREE.Vector3(Math.cos(a), Math.sin(a), 0)); pts.push(h.addScaledVector(bootN(h), 0.0035)); }
-        an.add(webbing(pts, 0.026, 0.003, c, strap, 48, bootN));
-        const e = pts[s < 0 ? 24 : 0]; an.add(mesh(rbox(0.007, 0.03, 0.03, 0.002), machined, e.x + s * 0.003, e.y + 0.012, e.z)); }
+        parts.add(webbing(pts, 0.026, 0.003, c, strap, 48, bootN));
+        const e = pts[s < 0 ? 24 : 0]; parts.add(mesh(rbox(0.007, 0.03, 0.03, 0.002), machined, e.x + s * 0.003, e.y + 0.012, e.z)); }
       { const c = new THREE.Vector3(0, 0.07, 0.005), pts = [];
         for (let k = 0; k <= 48; k++) { const a = 2 * Math.PI * k / 48, d = new THREE.Vector3(Math.sin(a), 0, Math.cos(a)), h = bootHit(c, d); pts.push(h.addScaledVector(bootN(h), 0.0035)); }
-        an.add(webbing(pts, 0.024, 0.003, c, strap, 96, bootN));
-        const e = bootHit(c, new THREE.Vector3(s, 0, 0)); an.add(mesh(rbox(0.007, 0.03, 0.028, 0.002), machined, e.x + s * 0.005, 0.07, e.z)); }
+        parts.add(webbing(pts, 0.024, 0.003, c, strap, 96, bootN));
+        const e = bootHit(c, new THREE.Vector3(s, 0, 0)); parts.add(mesh(rbox(0.007, 0.03, 0.028, 0.002), machined, e.x + s * 0.005, 0.07, e.z)); }
+      { const rest = hp.position.clone().add(kn.position).add(an.position), ia = bones.indexOf(an), ih = bones.indexOf(anH);
+        parts.updateMatrixWorld(true);
+        parts.traverse(o => { if (!o.isMesh) return;
+          const g = o.geometry.clone().applyMatrix4(o.matrixWorld), P = g.attributes.position, si = [], sw = [];
+          for (let i = 0; i < P.count; i++) { const w = sstep(-0.01, 0.075, P.getY(i)) * sstep(-0.24, -0.12, P.getZ(i)); si.push(ih, ia, 0, 0); sw.push(w, 1 - w, 0, 0); }
+          g.translate(rest.x, rest.y, rest.z);
+          g.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4)); g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
+          g.boundingBox = new THREE.Box3(new THREE.Vector3(-0.01, -0.01, -0.01), new THREE.Vector3(0.01, 0.01, 0.01));   // as the sleeves (see skinTube)
+          const m = new THREE.SkinnedMesh(g, o.material); m.frustumCulled = false; body.add(m); skinned.push(m); }); }
+      proxy(an, 0.2, 0.24, 0.43, 0.02, -0.085);                                                   // the boot's box, for placing on the ground
       J['hip' + L] = hp; J['knee' + L] = kn; J['ankle' + L] = an;
     }
     proxy(body, 0.48, 0.4, 0.34, -0.07);   // the briefs
@@ -839,7 +877,7 @@
       const tag = joint(body, tx, 0.5, tz - 0.004); tag.rotation.set(-0.08, Math.PI - ts, 0, 'YXZ');   // a name tag on the right of the chest
       tag.add(mesh(rbox(0.1, 0.032, 0.006, 0.004), grey)); tag.add(mesh(new THREE.PlaneGeometry(0.084, 0.012), white, 0, 0, 0.0035)); }
     const back = mesh(patch(0.085, 0.32), emblemMat, 0, 0.03, 0.137); pack.add(back);
-    { const r = armR(1, 0.47 - 0.265, Math.PI / 2).base + 0.006, ap = mesh(patch(0.038, 1 / (2 * r)), emblemMat, r, -0.265, 0); ap.rotation.y = Math.PI / 2; J.shoulderR.add(ap); }   // and on the right sleeve                                                // on the backpack flap
+    { const r = armR(1, 0.47 - 0.24, Math.PI / 2).base + 0.006, ap = mesh(patch(0.038, 1 / (2 * r)), emblemMat, r, -0.24, 0); ap.rotation.y = Math.PI / 2; J.shoulderR.add(ap); }   // and on the right sleeve                                                // on the backpack flap
 
     // bind the sleeves to the skeleton at rest (every bone made, nothing turned yet)
     group.updateMatrixWorld(true);
@@ -989,6 +1027,162 @@
       const p = Math.min(1.6, 0.03 + 1.55 * c), o = SHAPES.open.th, fi = SHAPES.fist.th;
       hand(side, { f: [0, 1, 2, 3].map(() => [0.02 + 1.35 * c, p, 0.6 * p]), spread, th: o.map((v, i) => v + (fi[i] - v) * tc) }, k);
     }
+
+    // ---- On the ground: walking and standing ----
+    // a.walk(opts) -> a walker: the figure walks over a ground along a straight line, each foot planted on a footprint
+    // laid out in time. The legs are solved by two-bone IK in the side plane; the pelvis rides on nearly straight legs
+    // (like a compass: lowest as a foot lands, highest over the standing foot); a foot lands on its heel, goes flat,
+    // lifts its heel before the other foot lands and pushes off steeply from the toe, and in the air hangs nearly in line
+    // with the shin; the arms hang at the sides, palms to the thighs, and swing against the legs.
+    //   opts: ground(x, z) -> y (world); from [x, z]: the pelvis's spot as the first counted foot lands (at `start`);
+    //   heading: the walk's direction (0 = towards -z, + turns to the left, as rotation.y); steps: how many full steps,
+    //   or [their lengths]; step 0.8 (a full step), period 0.76 s (per step); start 0 (the first footfall);
+    //   stop true (end with three short steps, the feet side by side); arms { L: true, R: true } (false: the scene
+    //   moves that arm itself, e.g. to carry something); glance false (look about while standing).
+    //   w.update(t, { lean, crouch }) poses everything at time t (group, body, legs, arms, head; it calls pose(t) first
+    //   for the breathing, the fingers and the antenna); lean: added to the body's pitch (- forward), crouch: lowers the
+    //   pelvis (the knees bend). w.prints: [{ t, x, y, z, side }] the footprints (world, y = the ground);
+    //   w.end: the last footfall; w.local(x, z) / w.world(lx, lz): between world and the walk's own frame;
+    //   w.track(t) -> [x, z]: the walk's smooth line, without the pelvis's bob and sway (a camera can follow it calmly).
+    // a.stand(opts) is a walk of no steps: standing at `from`, the feet side by side, legs straight, arms at the sides.
+    // Lessons (see HANDOFF): near a straight leg a few mm of reach make a big knee bend (keep the pelvis at the full
+    // reach less ~3 mm); the hand's palm faces forward at rest (turn the wrist about y, s * 1.4, for palm-in).
+    const FOOT_X = 0.135, ANKLE_UP = 0.101;   // the ankles' spread; the pivot over the ground (the sole is 0.103 below it, sunk 2 mm)
+    const L1 = Math.hypot(0.48, 0.02), L2 = Math.hypot(0.56, 0.02), O1 = Math.atan2(0.02, 0.48), O2 = Math.atan2(0.02, 0.56);
+    const DMAX = L1 + L2 - 0.0035, TOE = [-ANKLE_UP, -0.16], HEEL = [-ANKLE_UP, 0.09], AX_UP = 0.25, HEEL_UP = 0.15, TOE_OFF = 1.0;
+    const sm = x => sstep(0, 1, x), clampN = (x, a, b) => Math.min(b, Math.max(a, x));
+    function walk(o = {}) {
+      const ground = o.ground || (() => 0), from = o.from || [0, 0], hd = o.heading || 0, ch = Math.cos(hd), sh = Math.sin(hd);
+      const step = o.step || 0.8, per = o.period || 0.76, arms = Object.assign({ L: true, R: true }, o.arms);
+      const world = (lx, lz) => [from[0] + lx * ch + lz * sh, from[1] - lx * sh + lz * ch];
+      const local = (x, z) => { const dx = x - from[0], dz = z - from[1]; return [dx * ch - dz * sh, dx * sh + dz * ch]; };
+      const G = (lx, lz) => { const w = world(lx, lz); return ground(w[0], w[1]); };
+      const slope = (lx, lz) => Math.atan((G(lx, lz - 0.15) - G(lx, lz + 0.15)) / 0.3);   // + where it rises ahead
+      // footprints in the walk's frame: [time it lands, z of the ankle, side]
+      const lens = Array.isArray(o.steps) ? o.steps.slice() : Array(o.steps || 0).fill(step), durs = lens.map(() => per);
+      if (o.stop !== false && lens.length) { lens.push(0.55 * step / 0.8, 0.32 * step / 0.8, 0.15); durs.push(per * 0.947, per * 0.868, per * 0.79); }
+      const t0 = o.start != null ? o.start : lens.length ? 0 : -100;
+      const P = lens.length ? [[t0 - per, step / 2, 'R'], [t0, -step / 2, 'L']] : [[t0 - 1, 0, 'R'], [t0, 0, 'L']];
+      lens.forEach((L, i) => { const [t, z, sd] = P[P.length - 1]; P.push([t + durs[i], z - L, sd === 'L' ? 'R' : 'L']); });
+      const KN = P.slice(1).map((p, i) => [p[0], (p[1] + P[i][1]) / 2]);   // the pelvis: midway between the feet as one lands
+      function pelvisZ(t) {
+        const K = KN, n = K.length; if (n < 2 || t <= K[0][0]) return n < 2 ? K[0][1] : K[0][1] + (t - K[0][0]) * (K[1][1] - K[0][1]) / (K[1][0] - K[0][0]);
+        if (t >= K[n - 1][0]) return K[n - 1][1];
+        let i = 0; while (K[i + 1][0] < t) i++;
+        const p0 = K[Math.max(i - 1, 0)], p1 = K[i], p2 = K[i + 1], p3 = K[Math.min(i + 2, n - 1)], u = (t - p1[0]) / (p2[0] - p1[0]);
+        const m1 = (p2[1] - p0[1]) / (p2[0] - p0[0] || 1) * (p2[0] - p1[0]), m2 = i + 2 > n - 1 ? 0 : (p3[1] - p1[1]) / (p3[0] - p1[0] || 1) * (p2[0] - p1[0]);   // the last step eases into the stop
+        return (2 * u ** 3 - 3 * u * u + 1) * p1[1] + (u ** 3 - 2 * u * u + u) * m1 + (-2 * u ** 3 + 3 * u * u) * p2[1] + (u ** 3 - u * u) * m2;
+      }
+      // where a foot would be if it stayed flat: [x, y, z, slope] of its ankle pivot, + the swing's progress (-1:
+      // standing), the lift, and the foot's pitch (+ toe up; placeFoot rolls the foot to it about the toe or heel)
+      function foot(side, t) {
+        const own = P.map((p, i) => [p, i]).filter(([p]) => p[2] === side);
+        let k = own.length - 1; while (k > 0 && own[k][0][0] > t) k--;
+        const [cur] = own[k], next = own[k + 1], x = (side === 'L' ? -1 : 1) * FOOT_X;
+        const at = z => [x, G(x, z) + ANKLE_UP, z, slope(x, z), -1, 0, slope(x, z)];
+        const stance = (A, ho, te, amp) => { A[6] = A[3] + HEEL_UP * (1 - sm((t - cur[0]) / 0.15)) * (t >= cur[0] ? 1 : 0); if (ho != null) A[6] -= amp * sm((t - ho) / (te - ho)); return A; };
+        if (!next) return stance(at(cur[1]));
+        const prevOther = P[next[1] - 1], ts = prevOther[0] + 0.03 * (next[0][0] - prevOther[0]), te = next[0][0];
+        const amp = TOE_OFF * clampN(Math.abs(next[0][1] - cur[1]) / (2 * step), 0, 1), ho = prevOther[0] - 0.34;
+        const tr = ts + 0.18;                               // the toe keeps rolling a little past push-off
+        if (t < ts) return stance(at(cur[1]), ho, tr, amp);
+        const u = clampN((t - ts) / (te - ts), 0, 1), e = u * u * (3 - 2 * u), a = at(cur[1]), b = at(next[0][1]);
+        const lift = 0.085 * Math.sin(Math.PI * Math.pow(u, 0.55)) * Math.min(1, Math.abs(b[2] - a[2]) / (2 * step)) ** 0.7;   // lower for short steps
+        const w = sm((u - 0.05) / 0.8);                     // from toe-down at push-off to toe-up for the heel strike
+        return [x, a[1] + (b[1] - a[1]) * e + lift, a[2] + (b[2] - a[2]) * e, a[3] + (b[3] - a[3]) * e, u, lift, (a[3] - amp * sm((t - ho) / (tr - ho))) * (1 - w) + (b[3] + HEEL_UP) * w];
+      }
+      // 0 as a foot lands, 1 just before the next one; and how much of a stride is going on (0 once standing)
+      function phase(t) {
+        let i = 0; while (i < P.length - 1 && P[i + 1][0] <= t) i++;
+        if (i >= P.length - 1) return [0, 0, i];
+        return [(t - P[i][0]) / (P[i + 1][0] - P[i][0]), clampN(Math.abs(P[i + 1][1] - P[i][1]) / step, 0, 1), i];
+      }
+      const hipLocal = side => { const w = J['hip' + side].getWorldPosition(new THREE.Vector3()), l = local(w.x, w.z); return [l[0], w.y, l[1]]; };
+      // two-bone IK in the side (y, z) plane of the walk: forward angle 0 = straight down, + = forward (-z)
+      function legIK(side, A, bx) {
+        const hp = hipLocal(side);
+        let dy = A[1] - hp[1], dz = A[2] - hp[2], D = Math.hypot(dy, dz); const Dm = L1 + L2 - 0.0015;
+        if (D > Dm) { dy *= Dm / D; dz *= Dm / D; D = Dm; }
+        const phi = Math.atan2(-dz, -dy), al = Math.acos(clampN((L1 * L1 + D * D - L2 * L2) / (2 * L1 * D), -1, 1));
+        const th1 = phi + al, ky = hp[1] - L1 * Math.cos(th1), kz = hp[2] - L1 * Math.sin(th1);
+        const th2 = Math.atan2(-(hp[2] + dz - kz), -(hp[1] + dy - ky)), hx = th1 + O1 - bx, kx = th2 - O2 - (bx + hx), s = side === 'L' ? -1 : 1;
+        J['hip' + side].rotation.set(hx, 0, s * Math.atan2(Math.abs(A[0]) - 0.105, 1.0));
+        J['knee' + side].rotation.set(kx, 0, 0);
+        return bx + hx + kx;                                // the shin's forward angle
+      }
+      const rot = (p, y, z) => [y * Math.cos(p) - z * Math.sin(p), y * Math.sin(p) + z * Math.cos(p)];
+      function rolled(F, p) {                               // the ankle when the foot is pitched to p about its toe or heel
+        const d = p - F[3]; if (Math.abs(d) < 1e-6) return F;
+        const pv = d < 0 ? TOE : HEEL, w = rot(F[3], pv[0], pv[1]), r = rot(p, pv[0], pv[1]);
+        return [F[0], F[1] + w[0] - r[0], F[2] + w[1] - r[1], p];
+      }
+      function placeFoot(side, F, bx) {
+        const hp = hipLocal(side), over = p => { const A = rolled(F, p); return Math.hypot(A[1] - hp[1], A[2] - hp[2]) - DMAX; };
+        let p = F[6];
+        if (over(p) > 0) {                                  // out of reach: roll just enough more
+          let lo = p, hi = p + (F[2] > hp[2] ? -0.8 : 0.6);
+          if (over(hi) > 0) p = hi; else { for (let i = 0; i < 24; i++) { const mid = (lo + hi) / 2; if (over(mid) > 0) lo = mid; else hi = mid; } p = hi; }
+        }
+        let psi = legIK(side, rolled(F, p), bx);
+        if (F[4] >= 0) { const m = 0.85 * Math.sin(Math.PI * F[4]); for (let i = 0; i < 2; i++) { p = F[6] + (psi + 0.05 - F[6]) * m; psi = legIK(side, rolled(F, p), bx); } }
+        if (p - psi > AX_UP && p <= F[3]) { p = Math.min(p, psi + AX_UP); psi = legIK(side, rolled(F, p), bx); }   // never a deep bend at the ankle
+        J['ankle' + side].rotation.set(clampN(p - psi, -0.6, 0.4), 0, -(side === 'L' ? -1 : 1) * 0.02);
+      }
+      // how far the arms and the body have turned with the legs: the feet's lead, smoothed over 0.12 s (the arms ease
+      // through the ends of their swing) and, for the forearms, a little later (they trail)
+      const leadAt = tt => (foot('R', tt)[2] - foot('L', tt)[2]) / -step;
+      function update(t, extra = {}) {
+        const lean = extra.lean || 0, crouch = extra.crouch || 0;
+        pose(t, { glance: !!o.glance });                    // breathing, fingers, the antenna (and glances, if asked)
+        const head0 = J.head.rotation.clone();
+        const fl = foot('L', t), fr = foot('R', t), [ph, stride, li] = phase(t);
+        // how much walking is going on, from the pelvis's speed (smooth through the short last steps and the stop)
+        const sv = clampN((pelvisZ(t - 0.06) - pelvisZ(t + 0.06)) / 0.12 * per / step, 0, 1);
+        // a little faster while both feet are down, slower mid-stance (a constant speed reads as gliding)
+        const z = pelvisZ(t) - 0.009 * Math.sin(2 * Math.PI * ph) * sv, hz = z - 0.035;
+        // the pelvis: near a landing over the ground smoothed along the walk, raised by the slope so the foot ahead
+        // (uphill: higher) is reached straight, the one behind rising on its toe; mid-stance right over the standing
+        // foot. The compass's corner at each landing is rounded off (it jolted the pelvis up as a heel struck).
+        const Li = li > 0 ? Math.abs(P[li][1] - P[li - 1][1]) : step, Ln = li < P.length - 1 ? Math.abs(P[li + 1][1] - P[li][1]) : Li;
+        const mq = Math.min(ph, 1 - ph), q = 1 - 2 * (Math.hypot(mq, 0.06) - 0.06);
+        const dzs = stride > 0 ? 0.5 * q * (ph < 0.5 ? Li : Ln) : 0.5 * (li > 0 ? Math.abs(P[li][1] - P[li - 1][1]) : 0);   // standing: half the feet's stagger
+        let gs = 0; for (let k = -2; k <= 2; k++) gs += G(0, hz + 0.2 * k) / 5;
+        const rise = Math.max(0, (G(0, hz - 0.4) - G(0, hz + 0.4)) / 0.8);
+        const yA = gs + rise * dzs + ANKLE_UP + 0.13 + Math.sqrt(DMAX * DMAX - dzs * dzs);
+        const sf = P[li][2] === 'L' ? fl : fr, yS = sf[1] - sf[5] + 0.13 + Math.sqrt(DMAX * DMAX - Math.min(Math.abs(sf[2] - hz), 0.9) ** 2);
+        // after the last step it settles: a small dip of the pelvis, the body and the arms swinging out and back
+        const st = Math.max(0, t - P[P.length - 1][0]), d = st > 0 ? Math.exp(-st / 0.3) * Math.sin(2 * Math.PI * st / 0.9) : 0;
+        const y = yA + (yS - yA) * Math.sin(Math.PI * ph) ** 2 * stride - crouch - 0.01 * Math.sin(Math.PI * Math.min(st / 0.4, 1));
+        let la = 0, le = 0; for (let k = 0; k < 5; k++) { la += leadAt(t - 0.03 * k) / 5; le += leadAt(t - 0.06 - 0.03 * k) / 5; }   // + when the right foot leads
+        const side = P[li][2] === 'L' ? -1 : 1;              // the standing foot's side
+        const sway = 0.025 * side * Math.sin(Math.PI * ph) * sv;   // over the standing foot
+        const wp = world(sway, z);
+        group.position.set(wp[0], y, wp[1]);
+        group.rotation.set(0, hd, 0);
+        const bx = -0.09 * sv - 0.02 - 0.03 * Math.sin(2 * Math.PI * ph) * sv + 0.008 * breath(t) * (1 - sv) - 0.025 * d + lean;   // leaning into the walk (- forward)
+        J.body.rotation.set(bx, -0.07 * la, -0.02 * side * Math.sin(Math.PI * ph) * sv);   // turning with the legs, leaning over the standing leg
+        J.body.position.set(0, 0, 0);
+        group.updateMatrixWorld(true);
+        placeFoot('L', fl, bx); placeFoot('R', fr, bx);
+        // the arms hang at the sides, the elbows a little bent, the palms to the thighs (the wrist turns the palm in:
+        // at rest it faces forward), swinging against the legs, the forearms trailing
+        for (const [sd, s, sa, se] of [['L', -1, la, le], ['R', 1, -la, -le]]) {
+          if (!arms[sd]) continue;
+          J['shoulder' + sd].rotation.set(0.04 + 0.3 * sa * sv + 0.08 * d, s * 0.05, s * 0.17);
+          J['elbow' + sd].rotation.set(0.3 + 0.12 * se * sv, 0, 0);
+          J['wrist' + sd].rotation.set(0.05, s * 1.4, s * 0.04);
+        }
+        // the head: steady, looking a little down the way ahead; standing, its glances (if asked) come back in
+        const g = o.glance ? 1 - sv : 0;
+        J.head.rotation.set((-0.12 - bx) * (1 - g) + head0.x * g, 0.05 * la * (1 - g) + head0.y * g, head0.z * g);
+        group.updateMatrixWorld(true);
+        return { phase: ph, stride: sv, lead: la };
+      }
+      const prints = P.map(([t, z, sd]) => { const x = (sd === 'L' ? -1 : 1) * FOOT_X, w = world(x, z); return { t, x: w[0], y: ground(w[0], w[1]), z: w[1], side: sd }; });
+      return { update, prints, end: P[P.length - 1][0], local, world, ground, track: t => world(0, pelvisZ(t)) };   // track: the walk's smooth line (no bob or sway), e.g. for a camera
+    }
+    const stand = (o = {}) => walk(Object.assign({}, o, { steps: 0, stop: false }));
+
     pose(0);
 
     // shadow-casting lights that follow the figure (each keeps it inside its shadow camera): a.light(color, k, dir)
@@ -1008,24 +1202,30 @@
     }
     return {
       group, joints: J, materials: mats, pose, rim, light, aim, lights, ready, hand, handCurl, hands: HANDS, shapes: SHAPES, visor: VIS,
-      wave, point, pointDir, thumbsUp, lookAt, gesture, gestureAt,
+      wave, point, pointDir, thumbsUp, lookAt, gesture, gestureAt, walk, stand,
       setTint(r, g, b) { const c = new THREE.Color(r, g, b); for (const m of mats) m.color.copy(m.userData.base).multiply(c); },
       // opaque until it fades: a transparent material lets the parts behind show through
       setOpacity(x) { glowK = x; for (const g of glows) g.material.opacity = 0.85 * x; const tr = x < 0.999; for (const m of mats) { if (m.transparent !== tr) { m.transparent = tr; m.needsUpdate = true; } m.opacity = x; m.depthWrite = !tr; } },
     };
   };
 
-  // An environment for reflections: dark space and a warm glow (e.g. a hot disc) from `warm`.
+  // An environment for reflections: dark space and a warm glow (e.g. a hot disc) from `warm`; { mars: true }: Mars at
+  // dusk instead (a dim sky, a blue-white glow round the Sun at `warm`, the rusty ground below a hazy horizon).
   window.__astronautEnv = (THREE, renderer, opts = {}) => {
     const warm = (opts.warm || new THREE.Vector3(0, 0.15, -1)).clone().normalize();
     const sc = new THREE.Scene();
     sc.add(new THREE.Mesh(new THREE.SphereGeometry(10, 64, 32), new THREE.ShaderMaterial({
-      uniforms: { w: { value: warm } }, side: THREE.BackSide,
+      uniforms: { w: { value: warm }, mars: { value: opts.mars ? 1 : 0 } }, side: THREE.BackSide,
       vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: `uniform vec3 w; varying vec3 vD;
+      fragmentShader: `uniform vec3 w; uniform float mars; varying vec3 vD;
         void main(){ float m = max(dot(vD, w), 0.0);
-          vec3 c = vec3(0.012, 0.014, 0.022) + vec3(1.0, 0.62, 0.3) * (pow(m, 6.0) * 1.2 + pow(m, 40.0) * 4.0)
+          vec3 c = mix(vec3(0.012, 0.014, 0.022), vec3(0.11, 0.09, 0.10), mars) + mix(vec3(1.0, 0.62, 0.3), vec3(0.6, 0.78, 1.0), mars) * (pow(m, 6.0) * 1.2 + pow(m, 40.0) * 4.0)
                  + vec3(0.06, 0.07, 0.1) * max(vD.y, 0.0);
+          if (mars > 0.5) {
+            float mh = max(dot(normalize(vec3(vD.x, 0.0, vD.z) + 1e-5), normalize(vec3(w.x, 0.0, w.z))), 0.0);
+            c = mix(c, vec3(0.30, 0.14, 0.07) * (0.5 + 0.8 * mh), smoothstep(0.02, -0.06, vD.y));
+            c += vec3(0.25, 0.17, 0.13) * exp(-abs(vD.y) / 0.05);
+          }
           gl_FragColor = vec4(c, 1.0); }`,
     })));
     const pm = new THREE.PMREMGenerator(renderer);

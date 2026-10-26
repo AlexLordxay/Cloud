@@ -41,7 +41,8 @@ function serve(page) {
       if (u === '/' || u === '/rec.html') { rsp.writeHead(200, { 'Content-Type': 'text/html' }); return rsp.end(page); }
       if (u.startsWith('/textures/')) file = path.join(SITE, u);
       if (u.startsWith('/scene/')) file = path.join(SCENE, u.slice(7));   // the scene's own pictures (e.g. the galaxy)
-      if (!file || !(file.startsWith(SITE) || file.startsWith(SCENE)) || !fs.existsSync(file)) { rsp.writeHead(404); return rsp.end(); }
+      if (u.startsWith('/fonts/')) file = path.join(TOOLS, u);              // the video fonts (e.g. for text drawn in a scene)
+      if (!file || !(file.startsWith(SITE) || file.startsWith(SCENE) || file.startsWith(path.join(TOOLS, 'fonts'))) || !fs.existsSync(file)) { rsp.writeHead(404); return rsp.end(); }
       rsp.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] || 'application/octet-stream' });
       fs.createReadStream(file).pipe(rsp);
     }).listen(0, '127.0.0.1', () => res(srv));
@@ -52,7 +53,7 @@ function serve(page) {
   if (!fs.existsSync(THREE_DIR)) { console.log('run "npm install" in videos/tools first'); process.exit(1); }
   fs.mkdirSync(WORK, { recursive: true });
   const srv = await serve(recPage());
-  const br = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'] });
+  const br = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader', '--disable-gpu-watchdog'] });
   const p = await br.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   p.on('pageerror', e => console.log('pageerror:', e.message));
   p.on('console', m => { if (m.type() === 'error' || m.text().startsWith('[scene]')) console.log(m.text().slice(0, 300)); });
@@ -98,7 +99,9 @@ function serve(page) {
     fs.mkdirSync(dir, { recursive: true });
     const t0 = a != null ? +a : 0, t1 = b != null ? +b : cfg.duration;
     const n0 = Math.round(t0 * FPS), n1 = Math.round(t1 * FPS);
-    for (let i = 0; i < n0; i++) await p.evaluate(dt => window.__step(dt), 1 / FPS);   // run up to t0 without saving
+    // JUMP=1 (scenes whose picture is a pure function of time): set the clock straight to t0; otherwise run up to it
+    if (process.env.JUMP) await p.evaluate(n => { window.__t0 = window.__vt() - n; }, n0 / FPS);
+    else for (let i = 0; i < n0; i++) await p.evaluate(dt => window.__step(dt), 1 / FPS);   // run up to t0 without saving
     const start = Date.now();
     for (let i = n0; i < n1; i++) {
       fs.writeFileSync(path.join(dir, `f_${String(i).padStart(5, '0')}.jpg`), await grab(1 / FPS));
