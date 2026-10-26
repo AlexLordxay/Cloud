@@ -220,6 +220,9 @@ def frame(sc, i, src):
         # a quiet second line under the name (e.g. the mass)
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
         if al > 0: draw_block(img, text, f_end3, 412, al, fill=(200, 208, 224))
+    # DRAW in captions.py: a scene's own drawing over the frame (img, t, these helpers), under the captions
+    draw = getattr(sc, 'DRAW', None)
+    if draw: draw(img, t, globals())
     for a, b, kind, text in sc.CAPTIONS:
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
         if al <= 0: continue
