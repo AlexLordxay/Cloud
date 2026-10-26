@@ -47,7 +47,8 @@
       const bcv = document.createElement('canvas'); bcv.width = bcv.height = N; const bgc = bcv.getContext('2d'), bimg = bgc.createImageData(N, N), bd = bimg.data;
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
         const weave = ((x >> 1) + (y >> 1)) % 2 ? 3 : -3, grain = (vh(x, y, 1) - 0.5) * 6;
-        const wear = (vnoise(x / 90, y / 90, 3) - 0.5) * 12 + (vnoise(x / 23, y / 23, 7) - 0.5) * 5;
+        const wx = x / N, wy = y / N, wf = (X, Y) => (vnoise(X / 90, Y / 90, 3) - 0.5) * 12 + (vnoise(X / 23, Y / 23, 7) - 0.5) * 5;   // tiles: blended across the edges
+        const wear = quilt ? 0 : wf(x, y) * (1 - wx) * (1 - wy) + wf(x - N, y) * wx * (1 - wy) + wf(x, y - N) * (1 - wx) * wy + wf(x - N, y - N) * wx * wy;
         const v = 236 + weave + grain + wear, i = (y * N + x) * 4;
         d[i] = v; d[i + 1] = v - 3; d[i + 2] = v - 9; d[i + 3] = 255;
         bd[i] = bd[i + 1] = bd[i + 2] = 200 + 1.5 * wear; bd[i + 3] = 255;   // the bump: the wear only (no weave: it read as terry cloth)
@@ -69,7 +70,7 @@
         g.setLineDash([]);
       }
       const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.encoding = THREE.sRGBEncoding;
-      const bc = document.createElement('canvas'); bc.width = bc.height = N; const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(bcv, 0, 0);
+      const bc = document.createElement('canvas'); bc.width = bc.height = N; const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) bg.drawImage(bcv, ox, oy);   // blurred across the tile's edges too
       const b = new THREE.CanvasTexture(bc); b.wrapS = b.wrapT = THREE.RepeatWrapping; b.anisotropy = 8;
       return [t, b];
     }
@@ -79,8 +80,8 @@
     const fabric2 = M({ color: 0xdedad0, roughness: 0.95, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.03 });      // a shade darker: bellows, gaskets
     const torsoCloth = M({ color: 0xf2eee6, roughness: 0.93, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02 });   // the cloth over the hard torso: the same as the sleeves
     const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02 });        // the cloth cover over the backpack
-    const [quiltMap, quiltBump] = clothTexture([], 170);
-    const quilted = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: quiltMap, bumpMap: quiltBump, bumpScale: 0.08 });   // its quilted thermal cover
+    const [quiltMap, quiltBump] = clothTexture([], 256);
+    const quilted = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: quiltMap, bumpMap: quiltBump, bumpScale: 0.035 });   // its quilted thermal cover
     const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 });          // hard parts
     const helmetMat = M({ color: 0xeeece6, roughness: 0.35, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.2 }, THREE.MeshPhysicalMaterial);   // the helmet: a lacquered shell
     const metal = M({ color: 0xc3c7cc, roughness: 0.28, metalness: 0.85 });          // bearings, valves
@@ -188,7 +189,7 @@
     // compression rings: the cloth bunched in soft rings just beyond a bend's bellows (|d| from B to B + 0.12), deepest on
     // the inside of the bend (cin = cos of the angle from the inner side)
     const rings = (x, y, z, d, B, cin) => { const a = Math.abs(d); if (a <= B * 0.8 || a > B + 0.12) return 0;
-      return 0.004 * Math.sin(2 * Math.PI * y / 0.05 + 2.5 * vnoise(x * 9, y * 9, z * 9)) * sstep(B * 0.8, B + 0.02, a) * (1 - sstep(B + 0.05, B + 0.12, a)) * (0.5 + 0.5 * cin); };
+      return 0.0025 * Math.sin(2 * Math.PI * y / 0.05 + 2.5 * vnoise(x * 9, y * 9, z * 9)) * sstep(B * 0.8, B + 0.02, a) * (1 - sstep(B + 0.05, B + 0.12, a)) * (0.5 + 0.5 * cin); };
     // the sleeves' cloth: the seamed fabric, shaded per vertex (darker in the bellows' valleys and on the pads)
     const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.02, vertexColors: true });
     // the row heights of a tube: spans [from, to, step] laid end to end
@@ -250,7 +251,8 @@
     latches(body, 0.182, 0.06, [0.5, -0.5, Math.PI - 0.6, Math.PI + 0.6], 1.26, 0.9);
     // chest control box with two hoses to the backpack
     const dcmMat = M({ color: 0x41464e, roughness: 0.45, metalness: 0.35 });                      // dark anthracite, so it reads as a device
-    const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), dcmMat, 0, 0.33, -0.25); dcm.rotation.x = 0.2; body.add(dcm);
+    const dcm = mesh(rbox(0.3, 0.12, 0.11, 0.025), dcmMat, 0, 0.33, -0.243); dcm.rotation.x = 0.1; body.add(dcm);
+    dcm.add(mesh(rbox(0.2, 0.07, 0.04, 0.01), grey, 0, 0, 0.06));                               // its mount on the chest
     // its display: oxygen and suit pressure in small green digits on a dark screen (a canvas, self-lit)
     const screenTex = (() => {
       const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const g = cv.getContext('2d');
@@ -410,7 +412,6 @@
       const bo = joint(head, sd * 0.188, 0.165, -0.02); bo.rotation.z = Math.PI / 2;
       bo.add(mesh(new THREE.CylinderGeometry(0.035, 0.037, 0.016, 40), helmetMat, 0, sd * 0.008, 0), mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.004, 6), machined, 0, sd * 0.017, 0));
     }
-    const brow = mesh(new THREE.SphereGeometry(0.2, 56, 20, Math.PI * 1.1, Math.PI * 0.8, Math.PI * 0.13, Math.PI * 0.06), helmetMat, 0, 0.16, 0);   // the eyeshade ridge over the visor brow.scale.set(1, 1.03, 1.06); head.add(brow);
     // Left of the helmet: a lamp — a cylinder on a bracket, a glowing lens with a soft halo, a row of small LEDs under it.
     // Right: a sensor/camera pod — a dark body, a big glass lens in a metal ring, a red indicator, a thin antenna.
     const glows = []; let glowK = 1;
@@ -447,8 +448,8 @@
     const bendTo = (g, R) => { const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - p.getX(i) ** 2 / (2 * R)); return smoothNormals(g); };   // wrap round a limb of radius R
     function pocket(parent, x, y, z, rotY, w, h, tilt = 0, R = 0.11) {
       const pk = joint(parent, x, y, z); pk.rotation.set(tilt, rotY, 0);
-      pk.add(mesh(bendTo(lumpy(rbox(w, h, 0.022, 0.012), 0.002, 20), R), fabric2));
-      pk.add(mesh(bendTo(rbox(w + 0.006, h * 0.34, 0.026, 0.01), R), cover, 0, h * 0.4, 0.006));   // the flap overhangs a little
+      pk.add(mesh(boxUV(bendTo(lumpy(rbox(w, h, 0.022, 0.012), 0.002, 20), R), 0.5), fabric2));   // box UVs: no tile edge across the pocket
+      pk.add(mesh(boxUV(bendTo(rbox(w + 0.006, h * 0.34, 0.026, 0.01), R), 0.5), cover, 0, h * 0.4, 0.006));   // the flap overhangs a little
       pk.add(mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.008, 12), metal, 0, h * 0.37, 0.02).rotateX(Math.PI / 2));
       return pk;
     }
@@ -473,7 +474,7 @@
     const bendCol = (d, B, pm) => { if (Math.abs(d) >= B) return 1; const env = Math.sin(Math.PI * (d + B) / (2 * B)), sh = (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2;
       const c = 1 - env * (0.05 + 0.07 * (1 - sh)); return c + (0.92 - c) * pm * env; };
     // the corrective shape of a bend (morph 0, grows with the angle): cloth bunches on the inside, the outside stays full
-    const bendMorph = (d, B, R, inside, ins, outs) => { const g = Math.exp(-((d / (0.9 * B)) ** 2)); return R * g * (0.22 * ins * ins + 0.1 * outs) + R * 0.035 * ridgeS(d, B) * ins; };
+    const bendMorph = (d, B, R, inside, ins, outs, rk = 0.035) => { const g = Math.exp(-((d / (0.9 * B)) ** 2)); return R * g * (0.22 * ins * ins + 0.1 * outs) + R * rk * ridgeS(d, B) * ins; };   // rk: how much the bellows deepen in the bend
     const quad = t => [(1 - t) ** 2, 2 * t * (1 - t), t * t];
     const spread = (bs, ws) => bs.map((b, i) => [b, ws[i]]);
     // a flat patch bent round a limb of radius r (its local +z points out of the limb)
@@ -508,7 +509,7 @@
       const tip = phalanx(R[2], R[3], 0, yt, 0, 0, [glove, rubber], 18, 0.05), g = tip.geometry, p = g.attributes.position, ix = g.index.array, gl = [], rb = [];
       for (let i = 0; i < ix.length; i += 3) {
         let y = 0, z = 0; for (let k = 0; k < 3; k++) { y += p.getY(ix[i + k]) / 3; z += p.getZ(ix[i + k]) / 3; }
-        (y - yt < 0.004 - 0.75 * z ? rb : gl).push(ix[i], ix[i + 1], ix[i + 2]);
+        (y - yt < 0.009 - 0.4 * z ? rb : gl).push(ix[i], ix[i + 1], ix[i + 2]);
       }
       g.setIndex(gl.concat(rb)); g.clearGroups(); g.addGroup(0, gl.length, 0); g.addGroup(gl.length, rb.length, 1);
       bs[2].add(tip);
@@ -633,7 +634,7 @@
         f.add(mesh(wrapPlane(0.11, 0.075, r + 0.001), M({ map: tex, roughness: 0.85 }), 0, 0, 0));
       }
       if (s < 0) {   // the cuff checklist on the left forearm: a little book of cards on a strap
-        const ck = joint(el, 0, -0.165, -(armR(s, EY - 0.165, Math.PI).base + 0.012)); ck.rotation.y = Math.PI;
+        const ck = joint(el, 0, -0.165, -(armR(s, EY - 0.165, Math.PI).base + 0.010)); ck.rotation.y = Math.PI;
         ck.add(mesh(rbox(0.085, 0.062, 0.018, 0.006), grey));
         for (let k = 0; k < 3; k++) ck.add(mesh(new THREE.BoxGeometry(0.075, 0.052, 0.002), white, 0, 0, 0.011 + k * 0.0025));
       }
@@ -641,6 +642,7 @@
       const armStrap = (y, W = 0.018) => { const pts = []; for (let k = 0; k <= 40; k++) { const a = 2 * Math.PI * k / 40; const r = armR(s, EY + y, a).r + 0.002; pts.push(new THREE.Vector3(r * Math.sin(a), y, r * Math.cos(a))); }
         el.add(webbing(pts, W, 0.003, new THREE.Vector3(0, y, 0), dark, 80)); };
       if (s < 0) {   // a chronograph strapped over the left cuff, on the back of the wrist (as astronauts wear them)
+        armStrap(-0.165, 0.016);                                                                 // the checklist's strap
         const y = -FA + 0.098, r = armR(s, EY + y, 0).base + 0.006; armStrap(y);
         const wt = joint(el, 0, y, r + 0.004); wt.rotation.x = Math.PI / 2;
         wt.add(mesh(new THREE.CylinderGeometry(0.017, 0.018, 0.009, 36), metal), mesh(new THREE.TorusGeometry(0.0165, 0.0025, 8, 36), dark, 0, 0.0048, 0).rotateX(Math.PI / 2));
@@ -662,8 +664,13 @@
       el.add(at(band(0.069, 0.024, 0.009), 0, -FA + 0.067, 0));                                   // a slim wrist ring, the sleeve's own width
       el.add(at(ringY(0.0655, 0.0042, s < 0 ? connBlue : connRed), 0, -FA + 0.054, 0));
       // the gauntlet: a flared cuff, open below, with a rolled lip; the hand turns under it
-      el.add(mesh(lathe([[0.052, 0.011], [0.056, 0.015], [0.066, 0.026], [0.072, 0.042], [0.068, 0.057], [0.058, 0.07]].map(([r, y]) => [r, y - FA]), 48), glove));
+      { const g = lathe([[0.052, 0.011], [0.056, 0.015], [0.066, 0.026], [0.072, 0.042], [0.068, 0.057], [0.058, 0.07]].map(([r, y]) => [r, y - FA]), 48), uv = g.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.42 / TEX, uv.getY(i) * 0.075 / TEX);   // the weave at its real size
+        el.add(mesh(g, glove)); }
       el.add(at(ringY(0.052, 0.0035, glove), 0, -FA + 0.011, 0));
+      { const liner = M({ color: 0x2c2e33, roughness: 0.9, side: THREE.DoubleSide });            // dark inside the cuff: no seeing through the wrist
+        el.add(mesh(new THREE.CylinderGeometry(0.056, 0.049, 0.06, 32, 1, true), liner, 0, -FA + 0.04, 0));
+        el.add(mesh(new THREE.CircleGeometry(0.06, 32).rotateX(Math.PI / 2), liner, 0, -FA + 0.07, 0)); }
       // the glove (see phalanx, finger, gloveGeo): the wrist bone is the palm's base, every finger and the thumb have three bones
       const F = FING.map(([name, mx, my, fan, Lf, Rf]) => {
         const root = joint(wr, s * mx, my + 0.004, -0.002); root.rotation.z = s * fan;      // its spread
@@ -711,17 +718,17 @@
       d = sMax(d, -(y - BY), 0.012);                                                    // flat underneath
       return d + 0.0012 * (vnoise(x * 55, y * 55, z * 55) - 0.5) * 2;                   // the cloth, a little uneven
     };
-    const bootShell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0 });
+    const bootShell = M({ color: 0xbfc3c8, roughness: 0.6, metalness: 0 });   // the toe cap: grey, so it reads
     const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02, vertexColors: true });
     const bootGeo = (() => {
       const { P, N, idx } = surfaceNets(bootSD, -0.12, -0.1, -0.31, 0.24, 0.25, 0.46, 0.0032), cloth = [], cap = [];
       for (let i = 0; i < idx.length; i += 3) {   // the toe cap (a slanted edge, higher at the front, above the rubber): lacquered
         let y = 0, z = 0; for (let k = 0; k < 3; k++) { y += P[3 * idx[i + k] + 1] / 3; z += P[3 * idx[i + k] + 2] / 3; }
-        const yb = y - spring(z) - BY; (z < -0.175 - 0.35 * yb && yb > 0.016 ? cap : cloth).push(idx[i], idx[i + 1], idx[i + 2]);
+        const yb = y - spring(z) - BY; (z < -0.175 - 0.35 * yb && yb > 0.03 ? cap : cloth).push(idx[i], idx[i + 1], idx[i + 2]);
       }
-      // the sole's rubber wraps up the boot's lower edge (a cupsole): the cloth turns dark rubber below 1.5 cm, a soft edge
+      // the sole's rubber wraps up the boot's lower edge (a cupsole): the cloth turns dark rubber below 3 cm, a soft edge
       const col = new Float32Array(P.length), R = [0.023, 0.024, 0.027];
-      for (let q = 0; q < P.length / 3; q++) { const yb = P[3 * q + 1] - spring(P[3 * q + 2]) - BY, k = sstep(0.0175, 0.0135, yb); for (let c = 0; c < 3; c++) col[3 * q + c] = 1 + (R[c] - 1) * k; }
+      for (let q = 0; q < P.length / 3; q++) { const yb = P[3 * q + 1] - spring(P[3 * q + 2]) - BY, k = sstep(0.032, 0.028, yb); for (let c = 0; c < 3; c++) col[3 * q + c] = 1 + (R[c] - 1) * k; }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       g.setIndex(cloth.concat(cap)); g.addGroup(0, cloth.length, 0); g.addGroup(cloth.length, cap.length, 1); return boxUV(g, 0.5);
@@ -757,19 +764,20 @@
       const dx = Math.sin(ph), dz = Math.cos(ph), cx = s * 0.105, cz = -0.035;
       // the distance from the thigh's centre to the edge of the briefs' half (the ellipse, or the middle plane x = 0);
       // the hips fill out below the waist
-      const A = (1.26 + 0.1 * sstep(0.02, -0.16, y)) * rb(y), Bz = (0.9 + 0.08 * sstep(0.02, -0.16, y)) * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
+      const back = sstep(-0.3, 0.3, dz);   // towards the back: a flatter seat whose halves part only low down (else it reads as buttocks)
+      const A = (1.26 + 0.1 * sstep(0.02, -0.16, y)) * rb(y), Bz = (0.9 + (0.08 - 0.14 * back) * sstep(0.02, -0.16, y)) * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
       let E = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
       if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
-      const d = y - KY, mb = sstep(-0.1, -0.27, y), t = sstep(YB + 0.003, YB - 0.007, y), m = Math.max(mb, t);
+      const d = y - KY, mb = sstep(-0.1 - 0.09 * back, -0.265, y), t = sstep(YB + 0.003, YB - 0.007, y), m = Math.max(mb, t);
       const brief = E + (0.127 - E) * mb;                                                      // the briefs round out to their leg opening, close round the thigh
-      const leg = (thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2)));   // a full knee
+      const leg = (thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.07 * Math.exp(-((d / 0.085) ** 2)));   // a full knee
       let r = brief + (leg - brief) * t;
       // the crotch: the briefs' halves meet at the middle, below the seam a narrow gap opens between the thighs and widens
       // a little downward (the inner side rounded off softly, not cut flat)
       if (s * dx < -1e-6) { const g = 0.002 * m + 0.011 * sstep(YB, YB - 0.12, y), c = (0.105 - g) / -(s * dx), k = 0.03 * m, h = Math.max(k - Math.abs(r - c), 0) / (k || 1);
         r = Math.min(r, c) - h * h * k * 0.25; }
       const pm = Math.abs(d) < KB ? sstep(0.3, 0.75, -Math.cos(ph)) * Math.exp(-((d / 0.08) ** 2)) : 0;   // the knee pad, -z
-      const base = r * (1 + 0.1 * ridgeS(d, KB) * (1 - pm)) + KR * 0.3 * pm;
+      const base = r * (1 + 0.05 * ridgeS(d, KB) * (1 - pm)) + KR * 0.18 * pm;
       return { r: base + fold(cx + base * dx, y, cz + base * dz, Math.max(bandEnv(d, KB), 1 - sstep(-0.05, -0.2, y))) + rings(cx + base * dx, y, cz + base * dz, d, KB, Math.cos(ph)) * m, base, pm, m };
     };
     for (const s of [-1, 1]) {
@@ -798,7 +806,7 @@
           return [[anH, 1]];                                                                                  // inside it: with the collar
         },
       }));
-      leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz)));
+      leg = skinTube(rows, 56, (rw, ph, nx, ny, nz) => bendMorph(rw.y - KY, KB, KR, 1, Math.max(0, nz), Math.max(0, -nz) * 0.4, 0.07));   // the knee's bellows deepen as it bends
       proxy(hp, 0.25, 0.48, 0.25, -0.24); proxy(kn, 0.21, 0.5, 0.21, -0.27);
       pocket(hp, s * (legR(s, HY - 0.26, s * Math.PI / 2).base + 0.008), -0.26, 0, s * Math.PI / 2, s < 0 ? 0.1 : 0.12, 0.12, 0);   // thigh pockets (the right one wider)
       pocket(kn, s * (legR(s, KY - 0.2, s * Math.PI / 2).base + 0.008), -0.2, -0.02, s * Math.PI / 2, 0.075, 0.1, 0, 0.095);              // and a smaller one on each shin
