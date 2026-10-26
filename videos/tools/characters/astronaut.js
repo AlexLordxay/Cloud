@@ -40,25 +40,27 @@
     }
     // Cloth texture, drawn once on a canvas: a fine weave, faint blotches of wear, and seams with stitches running along
     // the limbs (on lathe-made parts u goes round the limb and v along it, so a seam is a vertical line on the canvas).
-    // The same picture, greyed, is the bump map: the weave and the seams catch the light.
+    // The bump map: the wear, the seams and the stitches (not the weave: at this scale it read as terry cloth).
     function clothTexture(seams, quilt = 0) {
       const N = 1024, cv = document.createElement('canvas'); cv.width = cv.height = N;
-      const g = cv.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+      const g0 = cv.getContext('2d'), g = g0, img = g.createImageData(N, N), d = img.data;
+      const bcv = document.createElement('canvas'); bcv.width = bcv.height = N; const bgc = bcv.getContext('2d'), bimg = bgc.createImageData(N, N), bd = bimg.data;
       for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-        const weave = ((x >> 1) + (y >> 1)) % 2 ? 6 : -6, grain = (vh(x, y, 1) - 0.5) * 14;
-        const wear = (vnoise(x / 90, y / 90, 3) - 0.5) * 22 + (vnoise(x / 23, y / 23, 7) - 0.5) * 8;
+        const weave = ((x >> 1) + (y >> 1)) % 2 ? 3 : -3, grain = (vh(x, y, 1) - 0.5) * 6;
+        const wear = (vnoise(x / 90, y / 90, 3) - 0.5) * 12 + (vnoise(x / 23, y / 23, 7) - 0.5) * 5;
         const v = 236 + weave + grain + wear, i = (y * N + x) * 4;
         d[i] = v; d[i + 1] = v - 3; d[i + 2] = v - 9; d[i + 3] = 255;
+        bd[i] = bd[i + 1] = bd[i + 2] = 200 + 1.5 * wear; bd[i + 3] = 255;   // the bump: the wear only (no weave: it read as terry cloth)
       }
-      g.putImageData(img, 0, 0);
-      for (const u of seams) {
+      g.putImageData(img, 0, 0); bgc.putImageData(bimg, 0, 0);
+      for (const g of [g0, bgc]) for (const u of seams) {
         const x = u * N;
         g.fillStyle = 'rgba(120,115,105,0.55)'; g.fillRect(x - 2, 0, 4, N);                         // the seam groove
         g.fillStyle = 'rgba(255,255,255,0.35)'; g.fillRect(x + 2, 0, 2, N);                         // its raised edge
         g.fillStyle = 'rgba(95,90,82,0.35)';
         for (let y = 0; y < N; y += 14) { g.fillRect(x - 9, y, 2, 7); g.fillRect(x + 8, y + 5, 2, 7); }   // stitches
       }
-      if (quilt) {   // quilting: puffed diamonds with stitched lines between them
+      if (quilt) for (const g of [g0, bgc]) {   // quilting: puffed diamonds with stitched lines between them
         for (let cy = 0; cy < N; cy += quilt) for (let cx = 0; cx < N; cx += quilt) {
           const gr = g.createRadialGradient(cx + quilt / 2, cy + quilt / 2, 0, cx + quilt / 2, cy + quilt / 2, quilt * 0.7);
           gr.addColorStop(0, 'rgba(255,255,255,0.08)'); gr.addColorStop(1, 'rgba(0,0,0,0.07)'); g.fillStyle = gr; g.fillRect(cx, cy, quilt, quilt); }
@@ -67,16 +69,16 @@
         g.setLineDash([]);
       }
       const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.encoding = THREE.sRGBEncoding;
-      const bc = document.createElement('canvas'); bc.width = bc.height = N; const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(cv, 0, 0);
+      const bc = document.createElement('canvas'); bc.width = bc.height = N; const bg = bc.getContext('2d'); bg.filter = 'blur(2px)'; bg.drawImage(bcv, 0, 0);
       const b = new THREE.CanvasTexture(bc); b.wrapS = b.wrapT = THREE.RepeatWrapping; b.anisotropy = 8;
       return [t, b];
     }
     const [clothMap, clothBump] = clothTexture([0.25, 0.75]);
     const [plainMap, plainBump] = clothTexture([]);
-    const fabric = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05 });
-    const fabric2 = M({ color: 0xdedad0, roughness: 0.95, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.07 });      // a shade darker: bellows, gaskets
-    const torsoCloth = M({ color: 0xf2eee6, roughness: 0.93, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.035 });   // the cloth over the hard torso: the same as the sleeves
-    const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.04 });        // the cloth cover over the backpack
+    const fabric = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.02 });
+    const fabric2 = M({ color: 0xdedad0, roughness: 0.95, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.03 });      // a shade darker: bellows, gaskets
+    const torsoCloth = M({ color: 0xf2eee6, roughness: 0.93, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02 });   // the cloth over the hard torso: the same as the sleeves
+    const cover = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02 });        // the cloth cover over the backpack
     const [quiltMap, quiltBump] = clothTexture([], 170);
     const quilted = M({ color: 0xece8de, roughness: 0.92, metalness: 0, map: quiltMap, bumpMap: quiltBump, bumpScale: 0.08 });   // its quilted thermal cover
     const shell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0.0 });          // hard parts
@@ -92,8 +94,8 @@
     const blue = M({ color: 0x0057b7, roughness: 0.85 }), yellow = M({ color: 0xffd500, roughness: 0.85 }), white = M({ color: 0xf4f2ec, roughness: 0.85 });
     // the colour details (after the Apollo-era suits): silver-grey gloves with blue rubber fingertips, beige straps,
     // blue and red wrist stripes, striped hoses
-    const glove = M({ color: 0xa3acba, roughness: 0.72, metalness: 0.08, map: plainMap, bumpMap: plainBump, bumpScale: 0.05 });
-    const rubber = M({ color: 0x1d3f86, roughness: 0.5 }), strap = M({ color: 0xb4955f, roughness: 0.85 });
+    const glove = M({ color: 0xbcc0c6, roughness: 0.72, metalness: 0.08, map: plainMap, bumpMap: plainBump, bumpScale: 0.015 });
+    const rubber = M({ color: 0x3a5480, roughness: 0.6 }), strap = M({ color: 0xb4955f, roughness: 0.85 });
     const connBlue = M({ color: 0x1f4c9e, roughness: 0.4, metalness: 0.3 }), connRed = M({ color: 0xb02a22, roughness: 0.4, metalness: 0.3 });
     const hoseMat = (() => {
       const cv = document.createElement('canvas'); cv.width = 64; cv.height = 8; const g = cv.getContext('2d');
@@ -180,7 +182,7 @@
     const ridgeS = (d, B) => Math.abs(d) < B ? (0.5 + 0.5 * Math.cos(4 * Math.PI * d / B)) ** 2 * Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
     // the cloth's own unevenness on the skinned sleeves (a radius offset at a rest-pose point): soft lumps and shallow
     // creases across the limb; calm (0..1) quiets it in the bends, where the bellows are
-    const fold = (x, y, z, calm) => (1 - 0.6 * calm) * (0.0055 * ((vnoise(x * 14 + 3.1, y * 30, z * 14) - 0.5) * 1.4 + (vnoise(x * 36, y * 70 + 5.3, z * 36) - 0.5) * 0.6)
+    const fold = (x, y, z, calm) => (1 - 0.6 * calm) * (0.0032 * ((vnoise(x * 14 + 3.1, y * 30, z * 14) - 0.5) * 1.4 + (vnoise(x * 36, y * 70 + 5.3, z * 36) - 0.5) * 0.25)
       - 0.0045 * Math.abs(Math.sin(y * 31 + 4 * x + 3 * z)) ** 6);
     const bandEnv = (d, B) => Math.abs(d) < B ? Math.sin(Math.PI * (d + B) / (2 * B)) : 0;
     // compression rings: the cloth bunched in soft rings just beyond a bend's bellows (|d| from B to B + 0.12), deepest on
@@ -188,7 +190,7 @@
     const rings = (x, y, z, d, B, cin) => { const a = Math.abs(d); if (a <= B * 0.8 || a > B + 0.12) return 0;
       return 0.004 * Math.sin(2 * Math.PI * y / 0.05 + 2.5 * vnoise(x * 9, y * 9, z * 9)) * sstep(B * 0.8, B + 0.02, a) * (1 - sstep(B + 0.05, B + 0.12, a)) * (0.5 + 0.5 * cin); };
     // the sleeves' cloth: the seamed fabric, shaded per vertex (darker in the bellows' valleys and on the pads)
-    const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.05, vertexColors: true });
+    const limbCloth = M({ color: 0xf2eee6, roughness: 0.95, metalness: 0, map: clothMap, bumpMap: clothBump, bumpScale: 0.02, vertexColors: true });
     // the row heights of a tube: spans [from, to, step] laid end to end
     const span = (...sp) => { const out = []; sp.forEach(([a, b, st], i) => { const n = Math.max(1, Math.round((a - b) / st)); for (let k = 0; k < n; k++) out.push(a + (b - a) * k / n); if (i === sp.length - 1) out.push(b); }); return out; };
     // A skinned tube in body space, built at rest (every limb hanging straight down, so a row is a horizontal slice).
@@ -709,8 +711,8 @@
       d = sMax(d, -(y - BY), 0.012);                                                    // flat underneath
       return d + 0.0012 * (vnoise(x * 55, y * 55, z * 55) - 0.5) * 2;                   // the cloth, a little uneven
     };
-    const bootShell = M({ color: 0xeceae3, roughness: 0.4, metalness: 0 });
-    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.05, vertexColors: true });
+    const bootShell = M({ color: 0xeceae3, roughness: 0.6, metalness: 0 });
+    const bootCloth = M({ color: 0xebe7de, roughness: 0.9, metalness: 0, map: plainMap, bumpMap: plainBump, bumpScale: 0.02, vertexColors: true });
     const bootGeo = (() => {
       const { P, N, idx } = surfaceNets(bootSD, -0.12, -0.1, -0.31, 0.24, 0.25, 0.46, 0.0032), cloth = [], cap = [];
       for (let i = 0; i < idx.length; i += 3) {   // the toe cap (a slanted edge, higher at the front, above the rubber): lacquered
@@ -729,7 +731,7 @@
     const bootHit = (c, dir, max = 0.25) => { const p = c.clone(); for (let t = 0; t < max; t += 0.0005) { p.copy(c).addScaledVector(dir, t); if (bootSD(p.x, p.y, p.z) > 0) return p; } return p; };
     const soleMat = (() => { const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64; const g = cv.getContext('2d');   // lugs across the sole
       g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#000'; for (let y = 0; y < 64; y += 16) g.fillRect(0, y, 64, 7);
-      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5); return M({ color: 0x2a2b2e, roughness: 0.85, bumpMap: t, bumpScale: 0.8 }); })();
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5); return M({ color: 0x45474b, roughness: 0.85, bumpMap: t, bumpScale: 0.8 }); })();
     const soleGeo = (() => {   // the footprint: the boot's outline seen from below (its widest over the lower 7 cm), a welt wider; then bent up with the toe
       const zs = [], hw = [], Ys = []; for (let y = BY + 0.004; y < BY + 0.07; y += 0.005) Ys.push(y);
       let zH = 0, zT = 0; for (const y of Ys) { for (let z = 0; z < 0.2; z += 0.001) if (bootSD(0, y, z) < 0) zH = Math.max(zH, z); for (let z = 0; z > -0.35; z -= 0.001) if (bootSD(0, y + spring(z), z) < 0) zT = Math.min(zT, z); }
@@ -758,8 +760,8 @@
       const A = (1.26 + 0.1 * sstep(0.02, -0.16, y)) * rb(y), Bz = (0.9 + 0.08 * sstep(0.02, -0.16, y)) * rb(y), qa = dx * dx / (A * A) + dz * dz / (Bz * Bz), qb = 2 * (cx * dx / (A * A) + cz * dz / (Bz * Bz)), qc = cx * cx / (A * A) + cz * cz / (Bz * Bz) - 1;
       let E = (-qb + Math.sqrt(Math.max(0, qb * qb - 4 * qa * qc))) / (2 * qa);
       if (s * dx < -1e-6) E = Math.min(E, 0.105 / -(s * dx));
-      const d = y - KY, mb = sstep(-0.1, -0.27, y), t = sstep(YB + 0.003, YB - 0.007, y), m = Math.max(mb, t);
-      const brief = E + (0.14 * (1 + 0.05 * Math.max(0, dz)) - E) * mb;                       // the briefs round out to their leg opening, the seat fuller
+      const d = y - KY, mb = sstep(-0.1 - 0.13 * Math.max(0, dz), -0.27 - 0.03 * Math.max(0, dz), y), t = sstep(YB + 0.003, YB - 0.007, y), m = Math.max(mb, t);   // at the back the halves part only low down (high up they read as buttocks)
+      const brief = E + (0.14 - E) * mb;                                                       // the briefs round out to their leg opening
       const leg = (thighR(y) + (shinR(y, ph) - thighR(y)) * sstep(KB, -KB, d)) * (1 + 0.13 * Math.exp(-((d / 0.085) ** 2)));   // a full knee
       let r = brief + (leg - brief) * t;
       // the crotch: the briefs' halves meet at the middle, below the seam a narrow gap opens between the thighs and widens
@@ -1196,17 +1198,23 @@
     };
   };
 
-  // An environment for reflections: dark space and a warm glow (e.g. a hot disc) from `warm`.
+  // An environment for reflections: dark space and a warm glow (e.g. a hot disc) from `warm`; { mars: true }: Mars at
+  // dusk instead (a dim sky, a blue-white glow round the Sun at `warm`, the rusty ground below a hazy horizon).
   window.__astronautEnv = (THREE, renderer, opts = {}) => {
     const warm = (opts.warm || new THREE.Vector3(0, 0.15, -1)).clone().normalize();
     const sc = new THREE.Scene();
     sc.add(new THREE.Mesh(new THREE.SphereGeometry(10, 64, 32), new THREE.ShaderMaterial({
-      uniforms: { w: { value: warm } }, side: THREE.BackSide,
+      uniforms: { w: { value: warm }, mars: { value: opts.mars ? 1 : 0 } }, side: THREE.BackSide,
       vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: `uniform vec3 w; varying vec3 vD;
+      fragmentShader: `uniform vec3 w; uniform float mars; varying vec3 vD;
         void main(){ float m = max(dot(vD, w), 0.0);
-          vec3 c = vec3(0.012, 0.014, 0.022) + vec3(1.0, 0.62, 0.3) * (pow(m, 6.0) * 1.2 + pow(m, 40.0) * 4.0)
+          vec3 c = mix(vec3(0.012, 0.014, 0.022), vec3(0.11, 0.09, 0.10), mars) + mix(vec3(1.0, 0.62, 0.3), vec3(0.6, 0.78, 1.0), mars) * (pow(m, 6.0) * 1.2 + pow(m, 40.0) * 4.0)
                  + vec3(0.06, 0.07, 0.1) * max(vD.y, 0.0);
+          if (mars > 0.5) {
+            float mh = max(dot(normalize(vec3(vD.x, 0.0, vD.z) + 1e-5), normalize(vec3(w.x, 0.0, w.z))), 0.0);
+            c = mix(c, vec3(0.30, 0.14, 0.07) * (0.5 + 0.8 * mh), smoothstep(0.02, -0.06, vD.y));
+            c += vec3(0.25, 0.17, 0.13) * exp(-abs(vD.y) / 0.05);
+          }
           gl_FragColor = vec4(c, 1.0); }`,
     })));
     const pm = new THREE.PMREMGenerator(renderer);

@@ -51,7 +51,7 @@
     h += (0.22 * smooth((rg - 0.5) / 0.14) + 0.07 * smooth((rg - 0.68) / 0.08)) * (0.25 + 0.75 * m);
     // dunes on the valley floor: long crests across the wind, a gentle back and a steeper lee face
     { const ph = (x * 0.3 + z * 0.95) / 7 + 2.5 * fbm(x * 0.04 + 9, z * 0.04, 2), f = ph - Math.floor(ph);
-      h += 0.8 * (f < 0.72 ? smooth(f / 0.72) : smooth((1 - f) / 0.28)) * smooth((-dz - 9) / 6) * (0.4 + vn(x * 0.04, z * 0.04)) * (1 - smooth((Math.hypot(x, z + 60) - 120) / 60)); }
+      h += 0.4 * (f < 0.72 ? smooth(f / 0.72) : smooth((1 - f) / 0.28)) * smooth((-dz - 9) / 6) * (0.4 + vn(x * 0.04, z * 0.04)) * (1 - smooth((Math.hypot(x, z + 60) - 120) / 60)); }
     h += craters(x, z, 3.2, 0.25, 0.8, 0.45, 11) * m + craters(x, z, 13, 1.2, 4.5, 0.5, 23) * (0.3 + 0.7 * m) + craters(x, z, 70, 8, 26, 0.6, 37);
     // fine rubble and sand ripples (ripples where the ground is low and calm)
     h += 0.05 * fbm(x * 0.9, z * 0.9, 3) * (0.35 + 0.65 * m);
@@ -59,7 +59,7 @@
     // far away: the valley floor, mesas, and the rim of a big crater all round (highest ahead, under the Sun)
     const R = Math.hypot(x, z + 60);
     h += 55 * smooth((R - 250) / 500) * (0.45 + ridged(x / 160, z / 160, 4)) * (0.8 + 0.2 * Math.sin(Math.atan2(x, -z - 60) * 3));
-    h += 7 * smooth((ridged(x / 45 + 7, z / 45, 2) - 0.58) / 0.16) * smooth((R - 60) / 60) * (1 - smooth((R - 400) / 100));
+    h += 7 * smooth((ridged(x / 45 + 7, z / 45, 2) - 0.45) / 0.3) * smooth((R - 60) / 60) * (1 - smooth((R - 400) / 100));
     return h;
   }
   const H0 = H(0, 0);
@@ -141,12 +141,12 @@
       uniform vec3 sunD; uniform vec3 phoD;
       vec3 skyCol(vec3 d) {
         float e = d.y;
-        vec3 c = mix(vec3(0.22, 0.165, 0.135), vec3(0.045, 0.045, 0.06), smoothstep(-0.02, 0.4, e));
+        vec3 c = mix(vec3(0.34, 0.24, 0.19), vec3(0.11, 0.09, 0.10), smoothstep(-0.02, 0.4, e));
         vec3 dh = normalize(vec3(d.x, d.y * 2.0, d.z));
         float a = acos(clamp(dot(dh, sunD), -1.0, 1.0));
         float toward = max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(sunD.x, 0.0, sunD.z))), 0.0);
         c += vec3(0.09, 0.15, 0.28) * exp(-a / 0.3) * 0.7 + vec3(0.2, 0.36, 0.66) * exp(-a / 0.11) * 0.95 + vec3(0.6, 0.8, 1.0) * exp(-a / 0.035) * 1.2;
-        c += vec3(0.2, 0.15, 0.13) * exp(-max(e, 0.0) / 0.04) * (0.25 + 0.45 * toward);   // the dusty band along the horizon
+        c += vec3(0.25, 0.17, 0.13) * exp(-max(e, 0.0) / 0.04) * (0.25 + 0.45 * toward);   // the dusty band along the horizon
         return pow(c, vec3(2.2)) * 1.5;
       }`;
     const sky = new T.Mesh(new T.SphereGeometry(8000, 64, 32), new T.ShaderMaterial({
@@ -176,6 +176,7 @@
 
     // the regolith's fine texture (a multiplier near 1) and its bump
     const cv = document.createElement('canvas'); cv.width = cv.height = 1024;
+    const bcv = document.createElement('canvas'); bcv.width = bcv.height = 1024; const bg = bcv.getContext('2d');
     { const g = cv.getContext('2d'), im = g.createImageData(1024, 1024);
       const vp = (x, y, P) => {                               // value noise that repeats every P cells (so the texture tiles)
         const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = k => ((k % P) + P) % P;
@@ -186,15 +187,17 @@
         const v = clamp(175 + 80 * (n - 0.5) * 2, 0, 255), k = (y * 1024 + x) * 4;
         im.data[k] = im.data[k + 1] = im.data[k + 2] = v; im.data[k + 3] = 255;
       }
-      g.putImageData(im, 0, 0);
+      g.putImageData(im, 0, 0); bg.filter = 'blur(1px)'; bg.drawImage(cv, 0, 0); bg.filter = 'none';   // the bump: the same noise, then the pebbles raised
       let sd = 7; const rr = () => { sd = Math.imul(sd ^ (sd >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((sd >>> 0) % 1e6) / 1e6; };
       for (let i = 0; i < 2600; i++) {                                    // grit and pebbles (wrapped at the edges)
         const x = rr() * 1024, y = rr() * 1024, r = 1.2 + 6 * rr() ** 4, sh = 70 + 90 * rr();
         for (const ox of [-1024, 0, 1024]) for (const oy of [-1024, 0, 1024]) {
-          g.fillStyle = `rgba(${sh},${sh},${sh},0.85)`; g.beginPath(); g.ellipse(x + ox, y + oy, r, r * (0.7 + 0.3 * rr()), rr() * 3, 0, 6.3); g.fill();
-          g.fillStyle = 'rgba(235,235,235,0.5)'; g.beginPath(); g.arc(x + ox - r * 0.25, y + oy - r * 0.25, r * 0.45, 0, 6.3); g.fill(); }
+          const e = r * (0.7 + 0.3 * rr()), rot = rr() * 3;
+          g.fillStyle = `rgba(${sh},${sh},${sh},0.85)`; g.beginPath(); g.ellipse(x + ox, y + oy, r, e, rot, 0, 6.3); g.fill();
+          bg.fillStyle = 'rgba(255,255,255,0.8)'; bg.beginPath(); bg.ellipse(x + ox, y + oy, r, e, rot, 0, 6.3); bg.fill(); }   // raised in the bump
       } }
     const tex = new T.CanvasTexture(cv); tex.wrapS = tex.wrapT = T.RepeatWrapping; tex.anisotropy = 8;
+    const btex = new T.CanvasTexture(bcv); btex.wrapS = btex.wrapT = T.RepeatWrapping; btex.anisotropy = 8;
 
     // baked sunlight on the ground: march towards the Sun; 1 = lit, 0 = in a shadow (a soft edge)
     const sunH = Math.hypot(sun.x, sun.z), tanE = sun.y / sunH, sx = sun.x / sunH, sz = sun.z / sunH;
@@ -227,7 +230,7 @@
         const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
         col.set(colour(x, z, y, N.getY(i)), i * 3);
         sh[i] = lit(x, y + 0.01, z, far);
-        uv[i * 2] = x * 0.4; uv[i * 2 + 1] = z * 0.4;
+        uv[i * 2] = x * 0.25; uv[i * 2 + 1] = z * 0.25;
       }
       g.setAttribute('color', new T.BufferAttribute(col, 3)); g.setAttribute('sunlit', new T.BufferAttribute(sh, 1)); g.setAttribute('uv', new T.BufferAttribute(uv, 2));
       return g;
@@ -241,7 +244,7 @@
       return terrainGeo(pos, idx, 60);
     })();
     // the far mesh: rings round the middle out to the horizon; under the fine mesh it is pushed down out of sight
-    const CX = 0, CZ = -4, NA = 720, NR = 200, RMIN = 12, RMAX = 4000;
+    const CX = 0, CZ = -4, NA = 720, NR = 360, RMIN = 12, RMAX = 4000;
     const farGeo = (() => {
       const pos = new Float32Array(NA * NR * 3), idx = new Uint32Array(NA * (NR - 1) * 6);
       for (let j = 0; j < NR; j++) for (let i = 0; i < NA; i++) {
@@ -254,7 +257,7 @@
     })();
 
     // the haze and the baked sunlight, added to the standard material
-    const fogK = { value: 0.0011 };
+    const fogK = { value: 0.003 };   // the haze: the valley's far side softens (too little and it looks like a model)
     function marsify(mat, baked) {
       mat.onBeforeCompile = sh => {
         Object.assign(sh.uniforms, { sunD: { value: sun }, phoD: { value: phobos }, fogK });
@@ -276,15 +279,15 @@
       mat.customProgramCacheKey = () => 'mars' + baked;   // the two variants must not share a program
       return mat;
     }
-    const groundMat = marsify(new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 1, metalness: 0, specularIntensity: 0.12, map: tex, bumpMap: tex, bumpScale: 0.008 }), true);   // dust: hardly any sheen
+    const groundMat = marsify(new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 1, metalness: 0, specularIntensity: 0.12, map: tex, bumpMap: btex, bumpScale: 0.008 }), true);   // dust: hardly any sheen
     const near = new T.Mesh(nearGeo, groundMat), far = new T.Mesh(farGeo, groundMat);
     near.receiveShadow = true; far.receiveShadow = false;
     scene.add(near, far);
 
     // rocks and boulders: a few shapes, hundreds of them (sizes from a power law), not on the path
-    const rockMat = marsify(new T.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, specularIntensity: 0.3, flatShading: true, map: tex }), false);
+    const rockMat = marsify(new T.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, specularIntensity: 0.3, map: tex }), false);
     const shapes = [0, 1, 2].map(k => {
-      const g = new T.IcosahedronGeometry(1, 2), p = g.attributes.position;
+      const g = new T.SphereGeometry(1, 22, 16), p = g.attributes.position;   // smooth (faceted ones looked like a game's)
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), y = p.getY(i), z = p.getZ(i), d = 1 + 0.35 * (vn(x * 1.6 + 10 * k, z * 1.6 + 3 * y + 5) - 0.5) + 0.15 * (vn(x * 4 + y * 3, z * 4 - 7 * k) - 0.5);
         p.setXYZ(i, x * d, Math.max(y * d * (0.6 + 0.12 * k), -0.4), z * d * (1 + 0.15 * k));
@@ -304,9 +307,9 @@
       const m = rockMeshes[k % 3]; if (m.count >= perShape) continue;
       E.set(rng() * 0.5, rng() * 6.28, rng() * 0.5); Q.setFromEuler(E);
       SC.set(s * (0.8 + 0.4 * rng()), s, s * (0.8 + 0.4 * rng()));
-      V.set(x, G(x, z) + s * 0.1, z); M4.compose(V, Q, SC); m.setMatrixAt(m.count, M4); ROCKS.push([x, G(x, z) + s * 0.1, z, s]);
+      V.set(x, G(x, z) - s * 0.15, z); M4.compose(V, Q, SC); m.setMatrixAt(m.count, M4); ROCKS.push([x, G(x, z) - s * 0.15, z, s]);   // sunk into the dust
       const l = lit(x, G(x, z) + s * 0.5, z, 60), v = 0.75 + 0.4 * rng();
-      Cc.setRGB(0.5 * v, 0.33 * v, 0.23 * v).convertSRGBToLinear().multiplyScalar(0.7 + 0.3 * l); m.setColorAt(m.count, Cc);
+      (rng() < 0.3 ? Cc.setRGB(0.32 * v, 0.24 * v, 0.2 * v) : Cc.setRGB(0.5 * v, 0.33 * v, 0.23 * v)).convertSRGBToLinear().multiplyScalar(0.7 + 0.3 * l); m.setColorAt(m.count, Cc);
       m.count++;
     }
     rockMeshes.forEach(m => { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
@@ -344,9 +347,9 @@
       const p = sunR.clone().multiplyScalar(snap(c.dot(sunR))).addScaledVector(sunU, snap(c.dot(sunU))).addScaledVector(sunF, c.dot(sunF));
       key.target.position.copy(p); key.position.copy(p).addScaledVector(sun, 80); key.target.updateMatrixWorld();
     }
-    scene.add(new T.HemisphereLight(0x6a7088, 0x4a2c1e, 0.38));
-    a.rim.color.value.setRGB(0.45, 0.65, 1.0);
-    scene.environment = window.__astronautEnv(T, r.renderer, { warm: sun });
+    scene.add(new T.HemisphereLight(0x7d6e6a, 0x6a4030, 0.55));
+    a.rim.power.value = 4.5;   // the rim's colour is set each frame, by how much the camera looks into the Sun
+    scene.environment = window.__astronautEnv(T, r.renderer, { warm: sun, mars: true });
 
     const cam = new T.PerspectiveCamera(36, 720 / 1280, 0.03, 12000);
 
@@ -377,7 +380,7 @@
     // dusk shines through
     const ftexB = ftex.clone(); ftexB.wrapS = T.RepeatWrapping; ftexB.repeat.x = -1; ftexB.offset.x = 1; ftexB.needsUpdate = true;
     for (const [side, tx] of [[T.FrontSide, ftex], [T.BackSide, ftexB]])
-      add(clothGeo, new T.MeshStandardMaterial({ map: tx, side, roughness: 0.8, metalness: 0, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: 0.18 }), 0, 0, 0);
+      add(clothGeo, new T.MeshStandardMaterial({ map: tx, side, roughness: 0.8, metalness: 0, emissive: 0xffffff, emissiveMap: tx, emissiveIntensity: 0.05 }), 0, 0, 0);
     // the cloth stirs in the thin wind, more while it is carried (amp: 0 at the pole, 1 at the free edge)
     function stir(t, carried) {
       const P = clothGeo.attributes.position;
@@ -422,17 +425,17 @@
     const pcv = document.createElement('canvas'); pcv.width = 128; pcv.height = 320;
     const acv = document.createElement('canvas'); acv.width = 128; acv.height = 320;
     { const sole = (g, grow) => { g.beginPath(); g.ellipse(64, 95, 50 + grow, 78 + grow, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(64, 240, 42 + grow, 62 + grow, 0, 0, 7); g.fill(); g.fillRect(24 - grow, 95, 80 + 2 * grow, 145); };
-      const g = pcv.getContext('2d'); g.fillStyle = 'rgb(235,235,235)'; sole(g, 7);                    // the rim
-      g.fillStyle = 'rgb(120,120,120)'; sole(g, 0);                                                     // the floor, pressed down
-      g.fillStyle = 'rgb(70,70,70)'; for (let y = 30; y < 300; y += 22) g.fillRect(20, y, 88, 9);       // the lugs' grooves
+      const g = pcv.getContext('2d'); g.fillStyle = 'rgb(245,245,245)'; sole(g, 7);                    // the rim
+      g.fillStyle = 'rgb(210,210,210)'; sole(g, 0);                                                     // the floor, pressed down
+      g.fillStyle = 'rgb(175,175,175)'; for (let y = 30; y < 300; y += 22) g.fillRect(20, y, 88, 9);       // the lugs' grooves
       g.filter = 'blur(1.5px)'; g.drawImage(pcv, 0, 0); g.filter = 'none';
       const h = acv.getContext('2d'); h.filter = 'blur(4px)'; h.fillStyle = '#fff'; sole(h, 9); }
     const pTex = new T.CanvasTexture(pcv), aTex = new T.CanvasTexture(acv);
-    const pMat = marsify(new T.MeshPhysicalMaterial({ color: 0xffffff, map: pTex, alphaMap: aTex, bumpMap: pTex, bumpScale: 0.012, transparent: true, depthWrite: false,
+    const pMat = marsify(new T.MeshPhysicalMaterial({ color: 0xffffff, map: pTex, alphaMap: aTex, bumpMap: pTex, bumpScale: 0.03, transparent: true, depthWrite: false,
       roughness: 1, specularIntensity: 0.12, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }), false);
     const prints = PRINTS.map(([tl, z, side, x]) => {
       const g = new T.PlaneGeometry(0.15, 0.37, 6, 12).rotateX(-Math.PI / 2), P = g.attributes.position, col = [];
-      for (let i = 0; i < P.count; i++) { const px = x + P.getX(i), pz = z - 0.085 + P.getZ(i); P.setXYZ(i, px, G(px, pz) + 0.004, pz); col.push(...colour(px, pz, 0, 1).map(v => v * 0.85)); }
+      for (let i = 0; i < P.count; i++) { const px = x + P.getX(i), pz = z - 0.085 + P.getZ(i); P.setXYZ(i, px, G(px, pz) + 0.004, pz); col.push(...colour(px, pz, 0, 1).map(v => v * 0.95)); }
       g.setAttribute('color', new T.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
       const m = new T.Mesh(g, pMat); m.material = pMat.clone(); m.material.vertexColors = true; m.material.onBeforeCompile = pMat.onBeforeCompile; m.receiveShadow = true; m.userData.t = tl; scene.add(m); return m;
     });
@@ -456,11 +459,11 @@
           const px = x + 0.08 * (drng() - 0.5), pz = z - 0.24 + 0.06 * drng();
           grain([px, G(px, pz) + 0.01, pz], [0.3 * (drng() - 0.5), 0.35 + 0.7 * drng(), 0.4 + 0.8 * drng()], t0 + 0.12 * drng(), 1.0 + 1.6 * drng(), 0.015 + 0.03 * drng(), 2.2); } }
     });
-    for (let k = 0; k < 400; k++) {                            // the spike goes in
+    for (let k = 0; k < 150; k++) {                            // the spike goes in
       const a0 = drng() * 6.283, sp = 0.3 + 1.1 * drng();
-      grain([FOOT.x + 0.04 * Math.cos(a0), G(FOOT.x, FOOT.z) + 0.01, FOOT.z + 0.04 * Math.sin(a0)], [Math.cos(a0) * sp, 0.2 + 0.9 * drng(), Math.sin(a0) * sp], T_HIT + 0.08 * drng(), 1.8 + 2.2 * drng(), 0.012 + 0.025 * drng(), 2.0);
+      grain([FOOT.x + 0.04 * Math.cos(a0), G(FOOT.x, FOOT.z) + 0.01, FOOT.z + 0.04 * Math.sin(a0)], [Math.cos(a0) * sp, 0.2 + 0.9 * drng(), Math.sin(a0) * sp], T_HIT + 0.08 * drng(), 1.8 + 2.2 * drng(), 0.03 + 0.05 * drng(), 2.0);
     }
-    for (let k = 0; k < 700; k++) {                            // motes in the air along the walk
+    for (let k = 0; k < 250; k++) {                            // motes in the air along the walk
       const px = -5 + 10 * drng(), pz = -10 + 24 * drng();
       grain([px, G(px, pz) + 0.1 + 2.6 * drng(), pz], [0.06 + 0.04 * drng(), 0.01 * (drng() - 0.5), 0.02 * (drng() - 0.5)], -5, 99, 0.004 + 0.008 * drng(), 0.02);
     }
@@ -490,14 +493,30 @@
       fragmentShader: `varying float vA; varying float vPh;
         void main() {
           vec2 q = gl_PointCoord * 2.0 - 1.0; float r = dot(q, q); if (r > 1.0) discard;
-          vec3 c = vec3(0.55, 0.36, 0.24) * (0.45 + 2.4 * vPh) + vec3(0.2, 0.3, 0.5) * 0.4 * vPh;
-          gl_FragColor = vec4(c, vA * exp(-r * 3.0));
+          vec3 c = vec3(0.36, 0.17, 0.08) * (0.6 + 1.2 * vPh);
+          gl_FragColor = vec4(c, vA * exp(-r * 2.0));
           #include <tonemapping_fragment>
           #include <encodings_fragment>
         }`,
     }));
     dust.frustumCulled = false; scene.add(dust);
-    S = { T, scene, a, cam, sky, key, placeFlag, prints, dustU, aimSun };
+    // a soft contact shadow under each boot (the Sun is so low that the real shadow falls far behind: without this a
+    // boot on the ground looks as if it floats); darker the nearer the sole is to the ground
+    const blobTex = (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 128; const g = c.getContext('2d');
+      const gr = g.createRadialGradient(32, 64, 4, 32, 64, 60); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.setTransform(0.5, 0, 0, 1, 16, 0); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new T.CanvasTexture(c); })();
+    const blobs = ['L', 'R'].map(sd => { const m = new T.Mesh(new T.PlaneGeometry(0.26, 0.48).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0x000000, alphaMap: blobTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }));
+      m.userData.side = sd; scene.add(m); return m; });
+    function placeBlobs() {
+      for (const m of blobs) {
+        const an = a.joints['ankle' + m.userData.side], c = an.localToWorld(new T.Vector3(0, -0.103, -0.085)), f = an.localToWorld(new T.Vector3(0, -0.103, -0.3)).sub(c);
+        const toe = an.localToWorld(new T.Vector3(0, -0.103, -0.16)), heel = an.localToWorld(new T.Vector3(0, -0.103, 0.09));
+        const h = Math.max(0, Math.min(toe.y - G(toe.x, toe.z), heel.y - G(heel.x, heel.z)));
+        m.position.set(c.x, G(c.x, c.z) + 0.006, c.z); m.rotation.set(0, Math.atan2(-f.x, -f.z), 0);
+        m.material.opacity = 0.35 * Math.max(0, 1 - h / 0.15);
+      }
+    }
+    S = { T, scene, a, cam, sky, key, placeFlag, prints, dustU, aimSun, placeBlobs };
   };
 
   // ---------------- the camera ----------------
@@ -567,6 +586,10 @@
     S.prints.forEach(m => { m.visible = t >= m.userData.t; });
     S.dustU.uT.value = t;
     S.aimSun(a.group.position.clone().add(new T.Vector3(0.2, -0.2, 0)));
+    S.placeBlobs();
+    // the cool rim light only where the light comes from behind the figure (as seen by the camera)
+    const camFwd = cam.getWorldDirection(new T.Vector3()), sunDir = new T.Vector3(-0.25, 0.14, -1).normalize();
+    a.rim.color.value.setRGB(0.45, 0.65, 1.0).multiplyScalar(0.1 + 0.9 * Math.max(0, camFwd.dot(sunDir)));
     sky.position.copy(cam.position);
     const tm = ren.toneMapping, te = ren.toneMappingExposure, sm = ren.shadowMap.enabled, st = ren.shadowMap.type;
     ren.toneMapping = T.ACESFilmicToneMapping; ren.toneMappingExposure = 1.1; ren.shadowMap.enabled = true; ren.shadowMap.type = T.PCFSoftShadowMap;
