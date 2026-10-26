@@ -50,7 +50,7 @@ window.__bhShots = (H) => {
   function s3(t) {
     const k = (t - 16.4) / 4.5;
     const dir = sph(lerp(34, 74, smooth((t - 16.4) / 3.2)), lerp(40, 70, k));
-    return { cam: { pos: dir.multiplyScalar(lerp(28, 25, k)), look: V(0, 0, 0), up: V(0, 1, 0), fov: 45 }, eht: sm(17.6, 18.6, t) * (1 - sm(20.0, 20.6, t)) };
+    return { cam: { pos: dir.multiplyScalar(lerp(28, 25, k)), look: V(0, 0, 0), up: V(0, 1, 0), fov: 45 } };
   }
   // 21.8–42: the event horizon. He hangs in the plane across the view through the hole and sinks towards it; his lamp
   // flashes, the light that gets away shrinks to a sliver, then nothing. The camera closes in on him.
@@ -146,7 +146,7 @@ window.__bhShots = (H) => {
     else if (t < 67.3) S = s8b(t);
     else if (t < 78.8) S = s9(t);
     else S = s11(t);
-    return Object.assign({ exposure: 1.25, discK: 1, discTint: [1, 1, 1], discHot: 1, merc: 0, blue: 0, flash: 0, shake: 0, grid: 0, you: 0, eht: 0 }, S);
+    return Object.assign({ exposure: 1.25, discK: 1, discTint: [1, 1, 1], discHot: 1, merc: 0, blue: 0, flash: 0, shake: 0, grid: 0, you: 0 }, S);
   }
 
   return { V, sph, slerpV, Qh, shotAt, r4, th4, plane4, lamp4, BURSTS };

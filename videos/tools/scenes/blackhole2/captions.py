@@ -1,7 +1,7 @@
 # «Що буде, якщо впасти в чорну діру?» v2: captions timed to the author's voice (scene.json narration), names, the
 # escape-speed counter and the friend's porthole with his clock (DRAW, called by compose.py for every frame).
-import math
-from PIL import Image, ImageDraw
+import math, os
+from PIL import Image, ImageDraw, ImageFilter
 
 DURATION = 86.5
 CAPTIONS = [
@@ -51,9 +51,45 @@ def _num(v):
 def _fade(t, a, b, d=0.35):
     return max(0.0, min(1.0, (t - a) / d, (b - t) / d))
 
+_EHT = {}
+def _eht(R):
+    # the real 2022 photo (EHT Collaboration / ESO, CC BY 4.0) in a round window with a thin gold rim
+    if R not in _EHT:
+        ph = Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'eht.jpg')).convert('RGB')
+        c, r = (int(0.504 * ph.width), int(0.487 * ph.height)), int(0.4 * ph.width)        # round the ring's centre
+        ph = ph.crop((c[0] - r, c[1] - r, c[0] + r, c[1] + r)).resize((2 * R, 2 * R), Image.LANCZOS).convert('RGBA')
+        m = Image.new('L', (2 * R, 2 * R), 0); ImageDraw.Draw(m).ellipse((0, 0, 2 * R - 1, 2 * R - 1), fill=255)
+        ph.putalpha(m)
+        lay = Image.new('RGBA', (2 * R + 40, 2 * R + 40), (0, 0, 0, 0))
+        sh = Image.new('L', lay.size, 0); ImageDraw.Draw(sh).ellipse((14, 18, 2 * R + 26, 2 * R + 30), fill=170)
+        lay.putalpha(sh.filter(ImageFilter.GaussianBlur(10)))
+        lay.alpha_composite(ph, (20, 20))
+        ImageDraw.Draw(lay).ellipse((18, 18, 2 * R + 22, 2 * R + 22), outline=(243, 185, 100, 255), width=4)
+        _EHT[R] = lay
+    return _EHT[R]
+
+def _text(img, xy, text, fnt, fill, al):
+    lay = Image.new('RGBA', img.size, (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
+    d.text((xy[0], xy[1] + 3), text, font=fnt, fill=(0, 0, 0, int(200 * al)), anchor='mm')
+    img.alpha_composite(lay.filter(ImageFilter.GaussianBlur(4)))
+    lay = Image.new('RGBA', img.size, (0, 0, 0, 0)); ImageDraw.Draw(lay).text(xy, text, font=fnt, fill=fill + (int(255 * al),), anchor='mm')
+    img.alpha_composite(lay)
+
 def DRAW(img, t, g):
     W, H = img.size
     block, f_tick, f_lab, SUN = g['draw_block'], g['f_tick'], g['f_end3'], g['SUN']
+    # "first photographed in 2022": the real photo in a window beside our picture — a blur, because from Earth the ring
+    # looks as big as a doughnut on the Moon
+    al = _fade(t, 17.2, 20.6, 0.45)
+    if al > 0:
+        k = min(1.0, (t - 17.2) / 0.45); pop = 1 + 0.12 * math.sin(math.pi * k) * (1 - k)
+        R = int(150 * pop); lay = _eht(R).copy()
+        lay.putalpha(lay.getchannel('A').point(lambda v: int(v * al)))
+        cx, cy = int(W * 0.75), 650
+        img.alpha_composite(lay, (cx - R - 20, cy - R - 20))
+        _text(img, (cx, cy + 190), 'справжнє фото', g['f_end2'], SUN, al)
+        _text(img, (cx, cy + 240), 'з Землі — як бублик', f_lab, (225, 230, 240), al)
+        _text(img, (cx, cy + 280), 'на Місяці', f_lab, (225, 230, 240), al)
     # escape speed: the Earth's, then right here (c·sqrt(r_s / r)), until it is the speed of light
     al = _fade(t, 23.7, 27.95, 0.3)
     if al > 0:
