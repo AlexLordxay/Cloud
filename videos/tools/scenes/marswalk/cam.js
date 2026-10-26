@@ -82,10 +82,11 @@
       [T_LAST + 0.55, 1.3, 0.38, 0.95, 0.05, -0.01, 0.15, 0.12],
       [T_LAST + 0.85, 1.42, 0.38, 0.85, 0.07, 0, 0.2, 0.15],
       [T_LAST + 1.12, 0.52, 0.3, 0.22, -0.27, 0.15, 0.4, -0.05],
-      [T_LAST + 1.75, 0.5, 0.3, 0.22, -0.26, 0.15, 0.4, -0.05],
-      [T_LAST + 2.5, 0.08, 0.27, 0.55, 0, 0, 0, 0],
+      [T_LAST + 1.85, 0.5, 0.3, 0.22, -0.26, 0.15, 0.4, -0.05],     // holding on while the fingers open
+      [T_LAST + 2.4, 0.42, 0.42, 0.45, -0.12, 0.07, 0.2, 0.0],      // the open hand comes off, back and out a little
+      [T_LAST + 3.2, 0.04, 0.17, 0.3, 0, 0, 0, 0],                  // the arm at its side (as the walker hangs it)
     ];
-    T_HIT = T_LAST + 1.06; T_DOWN = T_LAST + 1.12; T_REL = T_LAST + 1.7;   // the spike touches; all the way in; let go
+    T_HIT = T_LAST + 1.06; T_DOWN = T_LAST + 1.12; T_REL = T_LAST + 1.8;   // the spike touches; all the way in; let go
   }
   function plant(t) {
     const K = PLANT; let i = 0;
@@ -109,11 +110,15 @@
     J.shoulderL.rotation.x += pk.shL; J.elbowL.rotation.x += 0.3 * pk.shL;
     J.shoulderR.rotation.set(pk.shX - 0.06 * lead * stride, 0.05, pk.shZ);
     J.elbowR.rotation.set(pk.el, 0, 0);
-    J.wristR.rotation.set(0, Math.PI / 2, 0);
+    // the wrist: the fist's axis upright while it holds the pole (placeFlag fine-tunes it), then, the hand let go,
+    // turning to hang palm-in at the side
+    const r = smooth((t - T_REL - 0.3) / 0.9);
+    J.wristR.rotation.set(0.05 * r, Math.PI / 2 + (1.4 - Math.PI / 2) * r, 0.04 * r);
     J.head.rotation.x += pk.head;
-    const w = 1 - smooth((t - T_REL + 0.12) / 0.3);         // the fist round the pole, opening as it lets go
-    if (w > 0) a.hand('R', GRIP, w);
-    if (t > T_REL - 0.2) a.hand('R', 'open', 0.6 * Math.sin(Math.PI * clamp((t - T_REL + 0.2) / 0.8, 0, 1)));
+    // the fingers: round the pole; at the release they open wide (clearly letting go), then relax as the arm comes down
+    const g = 1 - smooth((t - T_REL) / 0.25), op = smooth((t - T_REL) / 0.25) * (1 - smooth((t - T_REL - 0.55) / 0.5));
+    if (g > 0) a.hand('R', GRIP, g);
+    if (op > 0) a.hand('R', 'open', op);
     a.group.updateMatrixWorld(true);
   }
 
@@ -385,11 +390,11 @@
     }
     // the flag in the hand: the wrist is turned so the pole stands along D (world), the cloth turned towards side
     const QI = new T.Quaternion(), V1 = new T.Vector3(1, 0, 0);
-    function holdFlag(t) {
+    function holdFlag(t, k = 1) {                          // k: how much of the wrist's turn to apply (eased out after the release)
       const W = a.joints.wristR; a.group.updateMatrixWorld(true);
       const carry = 1 - smooth((t - T_LAST + 0.3) / 0.8);
       const D = new T.Vector3(0.05 * Math.sin(Math.PI * t / PER) * carry, 1, -0.12 * carry - 0.04).normalize();
-      const q = W.getWorldQuaternion(new T.Quaternion()), R = new T.Quaternion().setFromUnitVectors(V1.clone().applyQuaternion(q), D);
+      const q = W.getWorldQuaternion(new T.Quaternion()), R = new T.Quaternion().slerp(new T.Quaternion().setFromUnitVectors(V1.clone().applyQuaternion(q), D), k);
       W.quaternion.copy(W.parent.getWorldQuaternion(new T.Quaternion()).invert().multiply(R).multiply(q));
       a.group.updateMatrixWorld(true);
       const grip = W.localToWorld(new T.Vector3(...GRIP_AT));
@@ -406,7 +411,9 @@
     const FOOT = new T.Vector3().setFromMatrixPosition(PLANTED);
     function placeFlag(t) {
       flag.matrixAutoUpdate = false;
-      flag.matrix.copy(t < T_REL ? holdFlag(t) : PLANTED); flag.matrixWorldNeedsUpdate = true;
+      if (t < T_REL) flag.matrix.copy(holdFlag(t));
+      else { holdFlag(t, 1 - smooth((t - T_REL) / 0.5)); flag.matrix.copy(PLANTED); }   // let go: the wrist's turn eases out, no jump
+      flag.matrixWorldNeedsUpdate = true;
       stir(t, 1 - smooth((t - T_LAST + 0.3) / 0.8));
     }
 
