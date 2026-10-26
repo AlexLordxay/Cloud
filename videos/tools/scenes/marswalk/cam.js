@@ -502,18 +502,23 @@
   const CAM = [
     [0.0, [0.9, -1.12, 2.9], [0.0, -0.8, -1.0]],
     [2.6, [1.5, -0.75, 3.4], [0.0, -0.4, -0.8]],
-    [4.8, [5.8, 0.35, 1.2], [0, 0.15, -0.2]],
-    [7.4, [4.8, 0.6, -3.4], [0, 0.2, 0]],
-    [10.0, [-3.6, 0.7, -5.2], [0, 0.25, 0.3]],
-    [12.0, [-1.4, 0.8, 5.6], [0, 0.25, -2.0]],
+    [5.0, [5.6, 0.35, 0.8], [0, 0.15, -0.3]],
+    [8.0, [4.4, 0.6, -3.6], [0, 0.2, 0]],
+    // back round its right side to behind it, for the flag
+    [10.4, [5.3, 0.6, 0.6], [0, 0.2, -0.4]],
+    [12.4, [2.6, 0.5, 4.8], [0, 0.25, -1.5]],
     [13.4, [1.7, -0.3, 4.6], [-0.15, 0.35, -1.0]],
     [14.8, [1.9, -0.3, 4.0], [-0.1, 0.1, -0.8]],
-    [16.4, [-2.8, 0.35, -3.2], [0.2, 0.1, 0.0]],
-    [18.0, [-2.6, 0.45, -2.9], [0.2, 0.1, 0.0]],
-    [19.8, [-3.6, 1.4, 0.6], [0.1, -0.1, -0.4]],
-    [20.9, [-2.4, 1.7, 3.4], [0.0, -0.1, -0.6]],
-    [22.4, [-0.6, 2.0, 6.0], [0.1, -0.2, -3.0]],
-    [26.5, [0.3, 3.3, 9.6], [0.2, -0.5, -6.0]],
+    // round its left side to the front (an orbit ~3.7 away), for the thumbs-up
+    [16.0, [-1.85, -0.1, 3.2], [0.0, 0.05, -0.3]],
+    [17.2, [-3.7, 0.15, 0.32], [0.1, 0.05, 0.0]],
+    [18.4, [-2.45, 0.35, -2.8], [0.2, 0.1, 0.0]],
+    [20.4, [-2.3, 0.45, -2.6], [0.2, 0.1, 0.0]],
+    // back round its left, up and behind, out over the valley
+    [21.8, [-4.0, 1.3, 0.3], [0.1, -0.1, -0.4]],
+    [23.0, [-2.4, 1.7, 3.6], [0.0, -0.1, -0.6]],
+    [24.4, [-0.6, 2.0, 6.0], [0.1, -0.2, -3.0]],
+    [30.0, [0.3, 3.4, 10.2], [0.2, -0.5, -6.0]],
   ];
   function key3(i, q) { return CAM[Math.max(0, Math.min(CAM.length - 1, i))][q]; }
   function spline(t, q) {
@@ -548,9 +553,9 @@
     walk(a, t);
     S.placeFlag(t);
     // the end: it turns its head to the camera and gives a thumbs-up with the left hand (the flag is on its right)
-    a.gestureAt(t, 'thumbsUp', { start: T_LAST + 3.4, end: T_LAST + 6.2, side: 'L' });
+    a.gestureAt(t, 'thumbsUp', { start: T_LAST + 5.9, end: T_LAST + 8.2, side: 'L' });
     shoot(t, a, cam);
-    if (t > T_LAST + 3.0) a.lookAt(cam.position, smooth((t - T_LAST - 3.0) / 0.8) * (1 - smooth((t - T_LAST - 6.4) / 0.8)));
+    if (t > T_LAST + 5.2) a.lookAt(cam.position, smooth((t - T_LAST - 5.2) / 0.8) * (1 - smooth((t - T_LAST - 8.4) / 0.8)));
     a.group.updateMatrixWorld(true);
     S.prints.forEach(m => { m.visible = t >= m.userData.t; });
     S.dustU.uT.value = t;

@@ -179,7 +179,7 @@ function createSceneMusic(ctx, dest) {
   function schedule() {
     // HIT: the spike goes into the ground (cam.js: T_HIT = the last footfall + 1.06); HUSH: the flag held high; CALM:
     // the camera rises, the music settles
-    const HIT_T = 13.38, HUSH = 12.85, CALM = 19.4, END = 26.5, E8 = BEAT / 2;
+    const HIT_T = 13.38, HUSH = 12.85, CALM = 21.6, END = 30.0, E8 = BEAT / 2;
     const FL = [[1, 1], [2, 0.35]];
     // a chord every 2.5 s (one bar): Am Am F F C, G under the raised flag | the flag in: A major | the end: Am
     const CH = { Am: [57, 60, 64], F: [53, 57, 60], C: [55, 60, 64], G: [55, 59, 62], A: [57, 61, 64] };
@@ -204,7 +204,7 @@ function createSceneMusic(ctx, dest) {
     riser(HUSH, HIT_T);
     hit(HIT_T);
     for (const m of [57, 61, 64, 69, 73, 76]) organ(HIT_T - 0.05, CALM + 0.6, m, REG_MID, 0.30, 3500, 0.3, 2.0);
-    play(HIT_T, CALM, t => 0.85 - 0.5 * Math.max(0, (t - 17.4) / 2));
+    play(HIT_T, CALM, t => 0.85 - 0.5 * Math.max(0, (t - 19.6) / 2));
     organ(HIT_T + 1.2, CALM, 85, FL, 0.16, 3000, 1.5, 1.0);
     play(CALM, END - 1.0, t => 0.25 * (1 - (t - CALM) / (END - CALM)));   // the end: the quiet figure, fading
     for (const m of CH.Am) organ(CALM, END, m + 12, FL, 0.12, 1500, 1.5, 1.0);
