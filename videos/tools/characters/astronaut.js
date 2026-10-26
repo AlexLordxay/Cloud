@@ -1029,7 +1029,8 @@
     //   w.update(t, { lean, crouch }) poses everything at time t (group, body, legs, arms, head; it calls pose(t) first
     //   for the breathing, the fingers and the antenna); lean: added to the body's pitch (- forward), crouch: lowers the
     //   pelvis (the knees bend). w.prints: [{ t, x, y, z, side }] the footprints (world, y = the ground);
-    //   w.end: the last footfall; w.local(x, z) / w.world(lx, lz): between world and the walk's own frame.
+    //   w.end: the last footfall; w.local(x, z) / w.world(lx, lz): between world and the walk's own frame;
+    //   w.track(t) -> [x, z]: the walk's smooth line, without the pelvis's bob and sway (a camera can follow it calmly).
     // a.stand(opts) is a walk of no steps: standing at `from`, the feet side by side, legs straight, arms at the sides.
     // Lessons (see HANDOFF): near a straight leg a few mm of reach make a big knee bend (keep the pelvis at the full
     // reach less ~3 mm); the hand's palm faces forward at rest (turn the wrist about y, s * 1.4, for palm-in).
@@ -1165,7 +1166,7 @@
         return { phase: ph, stride: sv, lead: la };
       }
       const prints = P.map(([t, z, sd]) => { const x = (sd === 'L' ? -1 : 1) * FOOT_X, w = world(x, z); return { t, x: w[0], y: ground(w[0], w[1]), z: w[1], side: sd }; });
-      return { update, prints, end: P[P.length - 1][0], local, world, ground };
+      return { update, prints, end: P[P.length - 1][0], local, world, ground, track: t => world(0, pelvisZ(t)) };   // track: the walk's smooth line (no bob or sway), e.g. for a camera
     }
     const stand = (o = {}) => walk(Object.assign({}, o, { steps: 0, stop: false }));
 

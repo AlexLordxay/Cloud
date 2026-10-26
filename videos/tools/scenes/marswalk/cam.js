@@ -288,7 +288,8 @@
     });
     const rng = (() => { let s = 12345; return () => { s = Math.imul(s ^ (s >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((s >>> 0) % 1e6) / 1e6; }; })();
     const NROCK = 750, perShape = Math.ceil(NROCK / 3);
-    const rockMeshes = shapes.map(g => { const m = new T.InstancedMesh(g, rockMat, perShape); m.castShadow = m.receiveShadow = true; m.count = 0; scene.add(m); return m; });
+    const rockMeshes = shapes.map(g => { const m = new T.InstancedMesh(g, rockMat, perShape); m.receiveShadow = true; m.count = 0; scene.add(m); return m; });   // their shadows are baked into the ground (below)
+    const ROCKS = [];
     const M4 = new T.Matrix4(), Q = new T.Quaternion(), E = new T.Euler(), V = new T.Vector3(), SC = new T.Vector3(), Cc = new T.Color();
     for (let k = 0; k < NROCK * 3 && rockMeshes.some(m => m.count < perShape); k++) {
       const x = -15 + 30 * rng(), z = -25 + 42 * rng(), u = rng();
@@ -298,20 +299,46 @@
       const m = rockMeshes[k % 3]; if (m.count >= perShape) continue;
       E.set(rng() * 0.5, rng() * 6.28, rng() * 0.5); Q.setFromEuler(E);
       SC.set(s * (0.8 + 0.4 * rng()), s, s * (0.8 + 0.4 * rng()));
-      V.set(x, G(x, z) + s * 0.1, z); M4.compose(V, Q, SC); m.setMatrixAt(m.count, M4);
+      V.set(x, G(x, z) + s * 0.1, z); M4.compose(V, Q, SC); m.setMatrixAt(m.count, M4); ROCKS.push([x, G(x, z) + s * 0.1, z, s]);
       const l = lit(x, G(x, z) + s * 0.5, z, 60), v = 0.75 + 0.4 * rng();
       Cc.setRGB(0.5 * v, 0.33 * v, 0.23 * v).convertSRGBToLinear().multiplyScalar(0.7 + 0.3 * l); m.setColorAt(m.count, Cc);
       m.count++;
     }
     rockMeshes.forEach(m => { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+    // The rocks' long shadows, baked into the ground's sunlight (a shadow map wide enough for all of them is too coarse
+    // on the figure and makes its shadows crawl): each rock as an ellipsoid (s wide, 0.75 s high); a ground point is in
+    // its shadow where the ray towards the Sun passes through it, the edge soft.
+    { const SL = nearGeo.attributes.sunlit, Ls = [sun.x, sun.y, sun.z];
+      for (const [cx, cy, cz, rs] of ROCKS) {
+        const R = [rs, 0.75 * rs, rs], Lq = Ls.map((v, k) => v / R[k]), LL = Lq[0] ** 2 + Lq[1] ** 2 + Lq[2] ** 2;
+        const len = (0.9 * rs + 0.4) / tanE, ex = cx - sx * len, ez = cz - sz * len;
+        const i0 = Math.max(0, Math.floor((Math.min(cx, ex) - rs - X0) / DX)), i1 = Math.min(NX - 1, Math.ceil((Math.max(cx, ex) + rs - X0) / DX));
+        const j0 = Math.max(0, Math.floor((Math.min(cz, ez) - rs - Z0) / DX)), j1 = Math.min(NZ - 1, Math.ceil((Math.max(cz, ez) + rs - Z0) / DX));
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const q = j * NX + i, P = nearGeo.attributes.position, Pq = [(P.getX(q) - cx) / R[0], (P.getY(q) - cy) / R[1], (P.getZ(q) - cz) / R[2]];
+          const u = -(Pq[0] * Lq[0] + Pq[1] * Lq[1] + Pq[2] * Lq[2]) / LL; if (u <= 0) continue;
+          const d = Math.hypot(Pq[0] + Lq[0] * u, Pq[1] + Lq[1] * u, Pq[2] + Lq[2] * u);
+          SL.setX(q, SL.getX(q) * smooth((d - 0.75) / 0.3));
+        }
+      }
+      SL.needsUpdate = true; }
 
     // the light: the low Sun (its shadow map covers the walk and the rocks round it: the Sun is so low that this
     // box reaches far along the ground), a dim brown sky and ground, a cool rim on the figure
     const key = new T.DirectionalLight(0xfff1e2, 2.6);
     key.position.copy(sun).multiplyScalar(80).add(new T.Vector3(0, 0, -5)); key.target.position.set(0, 0, -5);
-    key.castShadow = true; key.shadow.mapSize.set(4096, 4096); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 3;
-    Object.assign(key.shadow.camera, { left: -16, right: 16, top: 7, bottom: -7, near: 15, far: 170 });
+    // its shadow map covers just the figure and the flag (2.4 each way across the light: fine texels, ~2 mm; the long
+    // shadow behind still falls in it, as it runs along the light) and follows the figure in whole texels, so the
+    // shadows on the suit stay put instead of crawling
+    key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0003; key.shadow.normalBias = 0.012;
+    const SB = 2.4; Object.assign(key.shadow.camera, { left: -SB, right: SB, top: SB, bottom: -SB, near: 1, far: 170 });
     scene.add(key, key.target);
+    const sunF = sun.clone().negate(), sunR = new T.Vector3().crossVectors(sunF, new T.Vector3(0, 1, 0)).normalize(), sunU = new T.Vector3().crossVectors(sunR, sunF);
+    function aimSun(c) {
+      const tx = 2 * SB / 2048, snap = v => Math.round(v / tx) * tx;
+      const p = sunR.clone().multiplyScalar(snap(c.dot(sunR))).addScaledVector(sunU, snap(c.dot(sunU))).addScaledVector(sunF, c.dot(sunF));
+      key.target.position.copy(p); key.position.copy(p).addScaledVector(sun, 80); key.target.updateMatrixWorld();
+    }
     scene.add(new T.HemisphereLight(0x6a7088, 0x4a2c1e, 0.38));
     a.rim.color.value.setRGB(0.45, 0.65, 1.0);
     scene.environment = window.__astronautEnv(T, r.renderer, { warm: sun });
@@ -463,13 +490,15 @@
         }`,
     }));
     dust.frustumCulled = false; scene.add(dust);
-    S = { T, scene, a, cam, sky, key, placeFlag, prints, dustU };
+    S = { T, scene, a, cam, sky, key, placeFlag, prints, dustU, aimSun };
   };
 
   // ---------------- the camera ----------------
-  // keys [t, camera offset from the pelvis (x, y, z; y kept above the ground), look-at offset]; Catmull-Rom between them.
-  // low by the boots (a step into the dust), alongside, ahead-left looking back, round behind on the crest for the
-  // flag, then up and back over the valley into the blue dusk.
+  // keys [t, camera offset, look-at offset], both from a calm reference: the walk's smooth line (w.track, averaged over
+  // ±0.4 s) at the standing pelvis height over the ground (so the camera never bobs or sways with the steps); between
+  // the keys a spline even in time (its speed doesn't jump at a key); kept softly above the ground.
+  // low by the boots (a step into the dust), alongside, ahead looking back, round behind on the crest for the flag,
+  // ahead-left for the thumbs-up, then round, up and back over the valley into the blue dusk.
   const CAM = [
     [0.0, [0.9, -1.12, 2.9], [0.0, -0.8, -1.0]],
     [2.6, [1.5, -0.75, 3.4], [0.0, -0.4, -0.8]],
@@ -479,22 +508,35 @@
     [12.0, [-1.4, 0.8, 5.6], [0, 0.25, -2.0]],
     [13.4, [1.7, -0.3, 4.6], [-0.15, 0.35, -1.0]],
     [14.8, [1.9, -0.3, 4.0], [-0.1, 0.1, -0.8]],
-    [16.6, [3.4, 0.45, 3.0], [0.25, 0.1, -0.3]],
-    [18.3, [1.7, 1.2, 4.9], [0.15, -0.35, -1.8]],
-    [20.0, [0.7, 2.0, 6.4], [0.2, -0.5, -7.0]],
-    [23.0, [0.4, 3.0, 8.8], [0.2, -0.6, -9.0]],
+    [16.4, [-2.5, 0.3, -2.8], [0.2, 0.1, 0.0]],
+    [18.0, [-2.3, 0.4, -2.5], [0.2, 0.1, 0.0]],
+    [19.8, [-3.4, 1.5, 0.9], [0.0, -0.2, -1.5]],
+    [22.0, [-0.6, 2.4, 6.0], [0.1, -0.4, -6.5]],
+    [26.5, [0.3, 3.3, 9.6], [0.2, -0.6, -9.5]],
   ];
+  function key3(i, q) { return CAM[Math.max(0, Math.min(CAM.length - 1, i))][q]; }
+  function spline(t, q) {
+    const K = CAM, n = K.length; if (t <= K[0][0]) return K[0][q]; if (t >= K[n - 1][0]) return K[n - 1][q];
+    let i = 0; while (K[i + 1][0] < t) i++;
+    const t1 = K[i][0], t2 = K[i + 1][0], h = t2 - t1, u = (t - t1) / h;
+    const tan = k => { const a0 = Math.max(0, k - 1), b0 = Math.min(n - 1, k + 1); return [0, 1, 2].map(j => (key3(b0, q)[j] - key3(a0, q)[j]) / (K[b0][0] - K[a0][0])); };
+    const m1 = tan(i), m2 = tan(i + 1), p1 = K[i][q], p2 = K[i + 1][q];
+    const h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u, h11 = u ** 3 - u * u;
+    return [0, 1, 2].map(j => h00 * p1[j] + h10 * h * m1[j] + h01 * p2[j] + h11 * h * m2[j]);
+  }
+  const PELVIS_UP = 1.268;   // the pelvis over the ground, standing
+  function reference(t) {
+    let x = 0, z = 0, y = 0;
+    for (let k = -2; k <= 2; k++) { const p = W.track(t + 0.2 * k); x += p[0] / 5; z += p[1] / 5; y += G(p[0], p[1]) / 5; }
+    return [x, y + PELVIS_UP, z];
+  }
+  const groundSmooth = (x, z) => (G(x, z) * 2 + G(x + 0.3, z) + G(x - 0.3, z) + G(x, z + 0.3) + G(x, z - 0.3)) / 6;
   function shoot(t, a, cam) {
-    const p = a.group.position, T = S.T, K = CAM, n = K.length;
-    let i = 0; while (i < n - 2 && t > K[i + 1][0]) i++;
-    const u = clamp((t - K[i][0]) / (K[i + 1][0] - K[i][0]), 0, 1);
-    const k0 = K[Math.max(i - 1, 0)], k1 = K[i], k2 = K[i + 1], k3 = K[Math.min(i + 2, n - 1)];
-    const cr = (a0, b, c, d) => 0.5 * (2 * b + (c - a0) * u + (2 * a0 - 5 * b + 4 * c - d) * u * u + (3 * b - a0 - 3 * c + d) * u * u * u);
-    const f = q => [0, 1, 2].map(j => cr(k0[q][j], k1[q][j], k2[q][j], k3[q][j]));
-    const o = f(1), l = f(2);
-    const cx = o[0], cz = p.z + o[2], gy = G(cx, cz);
-    cam.position.set(cx, Math.max(gy + 0.12, p.y + o[1]), cz);
-    cam.lookAt(new T.Vector3(l[0], p.y + l[1], p.z + l[2]));
+    const T = S.T, r = reference(t), o = spline(t, 1), l = spline(t, 2);
+    const cx = r[0] + o[0], cz = r[2] + o[2], gy = groundSmooth(cx, cz) + 0.1, k = 0.06;
+    const y = r[1] + o[1], yc = gy + k * Math.log(1 + Math.exp((y - gy) / k));   // a soft floor
+    cam.position.set(cx, yc, cz);
+    cam.lookAt(new T.Vector3(r[0] + l[0], r[1] + l[1], r[2] + l[2]));
   }
 
   window.__recCam = () => {};
@@ -504,13 +546,14 @@
     const { T, scene, a, cam, sky } = S, t = window.__vt() - (window.__t0 || 0);
     walk(a, t);
     S.placeFlag(t);
-    // the end: it turns its head to the camera and gives a thumbs-up with the free hand
-    a.gestureAt(t, 'thumbsUp', { start: T_LAST + 2.9, end: T_LAST + 5.2, side: 'R' });
+    // the end: it turns its head to the camera and gives a thumbs-up with the left hand (the flag is on its right)
+    a.gestureAt(t, 'thumbsUp', { start: T_LAST + 3.4, end: T_LAST + 6.2, side: 'L' });
     shoot(t, a, cam);
-    if (t > T_LAST + 2.6) a.lookAt(cam.position, smooth((t - T_LAST - 2.6) / 0.8) * (1 - smooth((t - T_LAST - 5.3) / 0.8)));
+    if (t > T_LAST + 3.0) a.lookAt(cam.position, smooth((t - T_LAST - 3.0) / 0.8) * (1 - smooth((t - T_LAST - 6.4) / 0.8)));
     a.group.updateMatrixWorld(true);
     S.prints.forEach(m => { m.visible = t >= m.userData.t; });
     S.dustU.uT.value = t;
+    S.aimSun(a.group.position.clone().add(new T.Vector3(0.2, -0.2, 0)));
     sky.position.copy(cam.position);
     const tm = ren.toneMapping, te = ren.toneMappingExposure, sm = ren.shadowMap.enabled, st = ren.shadowMap.type;
     ren.toneMapping = T.ACESFilmicToneMapping; ren.toneMappingExposure = 1.1; ren.shadowMap.enabled = true; ren.shadowMap.type = T.PCFSoftShadowMap;
