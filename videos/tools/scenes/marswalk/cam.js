@@ -521,11 +521,11 @@
     [17.2, [-4.0, 0.15, 0.35], [0.1, -0.15, 0.0]],
     [18.4, [-2.65, 0.35, -3.0], [0.2, -0.05, 0.0]],
     [20.4, [-2.5, 0.45, -2.8], [0.2, -0.05, 0.0]],
-    // back round its left, up and behind, out over the valley
+    // back round its left, up and behind, then settling to look past it into the sunset
     [21.8, [-4.0, 1.3, 0.3], [0.1, -0.1, -0.4]],
     [23.0, [-2.4, 1.7, 3.6], [0.0, -0.1, -0.6]],
     [24.4, [-0.6, 2.0, 6.0], [0.1, -0.2, -3.0]],
-    [30.0, [0.3, 3.4, 10.2], [0.2, -0.5, -6.0]],
+    [30.0, [1.2, 1.4, 8.5], [-1.6, 0.6, -8.0]],   // lower and to the right, looking up into the sunset: the figure and the flag against the blue glow
   ];
   function key3(i, q) { return CAM[Math.max(0, Math.min(CAM.length - 1, i))][q]; }
   function spline(t, q) {
