@@ -273,7 +273,8 @@
                 float ang = atan(q.z, q.x), lr = log(qr);
                 float sw = ang + time * 0.9 / pow(qr, 1.5) + lr * 1.4;     // turning (faster inside), wound into a spiral
                 float u = sw / 6.2832;
-                float st = 0.55 * vnp(vec2(lr * 14.0, u * 14.0), 14.0) + 0.3 * vnp(vec2(lr * 42.0 + 5.0, u * 40.0), 40.0) + 0.15 * vnp(vec2(lr * 110.0, u * 90.0), 90.0);
+                float st = 0.5 * vnp(vec2(lr * 14.0, u * 14.0), 14.0) + 0.3 * vnp(vec2(lr * 42.0 + 5.0, u * 40.0), 40.0) + 0.2 * vnp(vec2(lr * 110.0, u * 90.0), 90.0);
+                st = pow(st, 1.6) * (0.45 + 1.1 * vnp(vec2(lr * 5.0 + 9.0, u * 6.0), 6.0));   // clumps
                 float nt = pow(3.0 / qr, 0.75) * pow(max(1.0 - sqrt(3.0 / qr), 0.0), 0.25) / 0.49;   // thin-disc temperature, peak ~1 near 4 r_s
                 float temp = max(nt, 0.35 * smoothstep(2.2, 3.0, qr) * (1.0 - smoothstep(3.0, 3.6, qr))) * (1.0 - smoothstep(11.0, 17.5, qr));
                 // Doppler: the disc turns anticlockwise seen from +y; gas coming at us is bluer and much brighter
@@ -281,14 +282,14 @@
                 vec3 vel = normalize(vec3(-q.z, 0.0, q.x)) * beta;
                 float g = sqrt(max(1.0 - 1.0 / qr, 0.05)) * sqrt(1.0 - beta * beta) / (1.0 - dot(vel, -normalize(v)));
                 float I = temp * (0.35 + 1.3 * st) * pow(g, 3.0);
-                vec3 e = bbody(temp * g * 1.05 * discHot) * I * 1.7 * discTint;
+                vec3 e = bbody(temp * g * 0.78 * discHot) * I * 1.35 * discTint;
                 float a = clamp(temp * (0.6 + 0.8 * st), 0.0, 0.94) * discK * (1.0 - alpha);
                 col += e * a; alpha += a;
                 if (alpha > 0.97) break;
               }
             }
           }
-          vec3 back = captured ? vec3(0.0) : skyCol(normalize(v));
+          vec3 back = captured ? vec3(0.0) : skyCol(normalize(v)) + vec3(0.55, 0.75, 1.15) * blue * blue;   // squeezed, blue-shifted starlight: a glow
           gl_FragColor = vec4(col + back * (1.0 - alpha), 1.0);
         }`,
       depthTest: false, depthWrite: false,
@@ -363,7 +364,7 @@
     const fill = new THREE.DirectionalLight(0x9fb4e0, 0.5), amb = new THREE.HemisphereLight(0x6a78a8, 0x2a1a10, 0.12);
     scene.add(key, key.target, fill, fill.target, amb);
     const cam = new THREE.PerspectiveCamera(45, 0.5625, 0.002, 5000);
-    const dots = dynDots(THREE, 9000); scene.add(dots);
+    const dots = dynDots(THREE, 30000); scene.add(dots);
     // the horizon (r = 1) as a glowing grid of dots: 12 meridians, 7 parallels
     const gp = [], gc = [], gs = [];
     for (let m = 0; m < 12; m++) for (let i = 0; i <= 90; i++) { const th = i / 90 * Math.PI, ph = m / 12 * 2 * Math.PI; gp.push(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph)); gc.push(0.35, 0.62, 1.0); gs.push(2.6); }
@@ -437,13 +438,14 @@
     G.eht = await new Promise(ok => { const im = new Image(); im.onload = () => { const tx = new THREE.Texture(im); tx.needsUpdate = true; ok(tx); }; im.onerror = () => ok(null); im.src = '/scene/eht.jpg'; });
     // The sky round the hole: the galaxy seen from its centre, once, into a cube map (2048 per face, mip-mapped).
     const cube = new THREE.WebGLCubeRenderTarget(2048, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
+    cube.texture.anisotropy = ren.capabilities.getMaxAnisotropy();
     const cc = new THREE.CubeCamera(1e-6, 1e7, cube);
     G.gal.position.set(0, 0, 0); G.local.position.set(0, 0, SUN_R); G.core.position.set(0, 0, 0);
     G.scene.children.forEach(o => { if (o.isPoints) o.material.uniforms.scale.value = 1024; });
     for (const p of [G.scene.userData.galStars, G.scene.userData.localStars, G.scene.userData.coreStars]) p.material.uniforms.scale.value = 1024;
     G.plane.material.uniforms.gain.value = 0; G.bulgeGlow.material.opacity = 0;
     G.scene.userData.galStars.material.uniforms.gain.value = 0.9; G.scene.userData.localStars.material.uniforms.gain.value = 0;
-    G.scene.userData.coreStars.material.uniforms.gain.value = 1; G.scene.userData.coreStars.material.uniforms.pmax.value = 3;
+    G.scene.userData.coreStars.material.uniforms.gain.value = 1; G.scene.userData.coreStars.material.uniforms.pmax.value = 2.2;
     G.scene.userData.sun.material.opacity = 0; G.scene.userData.ring.material.opacity = 0;
     ren.setClearColor(0x000000, 1);
     cc.update(ren, G.scene);
@@ -497,7 +499,7 @@
     const O = G.O, d = O.dots.userData; d.reset();
     O.flare.visible = false;
     if (S.bursts) {
-      const { e1, e2 } = plane4(), TRAIL = 2.6, K = 22, SPEED = 8;
+      const { e1, e2 } = plane4(), TRAIL = 2.6, K = 70, SPEED = 8;
       for (const b of G.bursts) {
         const age = t - b.t0; if (age < 0 || age > 9) continue;
         const head = SPEED * age;
@@ -508,7 +510,7 @@
             const [x, y] = along(P, s), rr = Math.hypot(x, y), gz = Math.sqrt(Math.max(0, 1 - 1 / rr));
             const w = Math.pow(1 - i / K, 1.6) * (P.fate === 'in' ? Math.min(1, (P.len - s) * 3 + 0.2) : 1);
             const q = e1.clone().multiplyScalar(x).addScaledVector(e2, y);
-            d.add(q.x, q.y, q.z, 1.0 * w * (0.4 + 0.6 * gz), 0.9 * w * gz, 0.7 * w * gz * gz, i === 0 ? 6 : 4.2 - 2.4 * i / K);
+            d.add(q.x, q.y, q.z, 1.6 * w * (0.4 + 0.6 * gz), 1.4 * w * gz, 1.05 * w * gz * gz, i === 0 ? 9 : 6 - 3.5 * i / K);
           }
         }
       }
@@ -519,10 +521,10 @@
     }
     if (S.orbit > 0) {
       const { A, B } = S.orb;
-      for (let j = 0; j < 7; j++) for (let i = 0; i < 40; i++) {
-        const al = 2.6 * t + j / 7 * 2 * Math.PI - i * 0.025, w = Math.pow(1 - i / 40, 1.5) * S.orbit;
+      for (let j = 0; j < 7; j++) for (let i = 0; i < 160; i++) {
+        const al = 2.6 * t + j / 7 * 2 * Math.PI - i * 0.006, w = Math.pow(1 - i / 160, 1.5) * S.orbit;
         const q = A.clone().multiplyScalar(1.5 * Math.cos(al)).addScaledVector(B, 1.5 * Math.sin(al));
-        d.add(q.x, q.y, q.z, 1.0 * w, 0.88 * w, 0.66 * w, i === 0 ? 7 : 4.5 - 3 * i / 40);
+        d.add(q.x, q.y, q.z, 1.4 * w, 1.25 * w, 0.95 * w, i === 0 ? 10 : 7 - 4.5 * i / 160);
       }
     }
     d.done();

@@ -45,7 +45,7 @@ def r4(t):           # the lamp's distance from the hole in r_s (the same as in 
     return max(1.004, 1 + 12 * (1 - u) ** 1.6)
 
 def _num(v):
-    return f'{int(round(v)):,}'.replace(',', ' ')
+    return f'{int(round(v)):,}'.replace(',', ' ')
 
 def _fade(t, a, b, d=0.35):
     return max(0.0, min(1.0, (t - a) / d, (b - t) / d))
@@ -68,7 +68,7 @@ def DRAW(img, t, g):
     # the friend's porthole and the astronaut's clock as the friend sees it: slower and slower, stopped
     al = _fade(t, 42.0, 50.6, 0.12)
     if al > 0:
-        cx, cy, R = W // 2, int(H * 0.47), int(W * 0.47)
+        cx, cy, R = W // 2, int(H * 0.5), int(W * 0.45)
         m = Image.new('L', (W, H), 255)
         ImageDraw.Draw(m).ellipse((cx - R, cy - R, cx + R, cy + R), fill=0)
         dark = Image.new('RGBA', (W, H), (10, 12, 16, 0)); dark.putalpha(m.point(lambda v: int(v * 0.93 * al)))
@@ -80,12 +80,12 @@ def DRAW(img, t, g):
             a = i / 16 * 2 * math.pi; x, y = cx + (R + 9) * math.cos(a), cy + (R + 9) * math.sin(a)
             d.ellipse((x - 5, y - 5, x + 5, y + 5), fill=(150, 156, 166, int(255 * al)))
         img.alpha_composite(ring)
-        block(img, 'так бачить друг здалеку', f_lab, cy - R - 70, al, fill=(200, 208, 224))
-        k = (1 - math.exp(-(t - 42.0) / 2.3)) / (1 - math.exp(-8.6 / 2.3))
+        block(img, 'так бачить друг здалеку', f_lab, 1580, al, fill=(200, 208, 224))
+        k = (1 - math.exp(-(t - 42.0) / 3.0)) / (1 - math.exp(-8.6 / 3.0))
         sec = 7.0 + 5.5 * k
         red = k * k
-        block(img, f'0:{sec:04.1f}'.replace('.', ','), f_tick, cy + R + 95, al, fill=(255, int(255 - 140 * red), int(255 - 190 * red)))
-        block(img, 'його годинник', f_lab, cy + R + 180, al, fill=(200, 208, 224))
+        block(img, f'0:{sec:04.1f}'.replace('.', ','), f_tick, 330, al, fill=(255, int(255 - 140 * red), int(255 - 190 * red)))
+        block(img, 'його годинник', f_lab, 420, al, fill=(200, 208, 224))
     # then his own clock, ticking as ever
     al = _fade(t, 50.65, 52.9, 0.2)
     if al > 0:

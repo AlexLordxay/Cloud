@@ -19,10 +19,10 @@ window.__bhShots = (H) => {
   function s1(t) {
     const A = V(0, 1.0, 24), s = 0.32, head = A.clone().add(V(0, 0.8 * s, 0));
     const k = ease((t - 1.2) / 4.8);
-    const dist = lerpLog(0.95 * s, 11, k) * (1 - 0.025 * Math.min(t, 1.2));
-    const off = V(lerp(0.12, 0.32, k), lerp(0.03, 0.22, k), 1).normalize();
+    const dist = lerpLog(1.45 * s, 11, k) * (1 - 0.03 * Math.min(t, 1.2));
+    const off = V(lerp(0.32, 0.32, k), lerp(0.06, 0.22, k), 1).normalize();
     const pos = head.clone().lerp(A, k).addScaledVector(off, dist);
-    const look = head.clone().add(V(0, 0.04 * s, 0)).lerp(V(0, 0.65, 15.6), ease((t - 1.6) / 4.4));
+    const look = head.clone().add(V(0.05 * s, 0.32 * s, 0)).lerp(V(0, 0.65, 15.6), ease((t - 1.6) / 4.4));
     const turn = Math.PI * ease((t - 3.4) / 2.6);
     return { cam: { pos, look, up: V(0, 1, 0), fov: 40 }, exposure: 1.3,
       astro: { pos: A, fwd: V(Math.sin(turn), 0, Math.cos(turn)), up: V(0, 1, 0), s, env: 'front', warm: V(0.35, 0.3, 1) } };
@@ -57,14 +57,14 @@ window.__bhShots = (H) => {
   const C4 = () => sph(7, -15);
   const r4 = t => Math.max(1.004, 1 + 12 * Math.pow(1 - clamp((t - 21.6) / 12.6, 0, 1), 1.6));   // the lamp's distance (also in captions.py)
   function plane4() { const e3 = C4(), e1 = V(0, 1, 0).cross(e3).normalize(), e2 = e3.clone().cross(e1); return { e1, e2, e3 }; }
-  const th4 = t => lerp(30, 16, sm(21.6, 35, t)) * D;
+  const th4 = t => lerp(62, 40, sm(21.6, 35, t)) * D;
   const lamp4 = t => { const { e1, e2 } = plane4(), r = r4(t); return e1.multiplyScalar(r * Math.cos(th4(t))).addScaledVector(e2, r * Math.sin(th4(t))); };
   const BURSTS = [22.0, 24.2, 26.4, 28.6, 30.4, 31.9, 33.1, 34.4, 35.7];
   function s4(t) {
     const { e3 } = plane4(), L = lamp4(t), rad = L.clone().normalize();
     const look = V(0, 0.4, 0).lerp(L.clone().multiplyScalar(0.62), sm(27, 36, t));
-    const d = lerpLog(22, 7.5, ease((t - 26.5) / 9.5));
-    return { cam: { pos: look.clone().addScaledVector(e3, d), look, up: V(0, 1, 0), fov: 45 }, discK: 0.8,
+    const d = lerpLog(27, 7.5, ease((t - 26.5) / 9.5));
+    return { cam: { pos: look.clone().addScaledVector(e3, d), look, up: V(0, 1, 0), fov: 45 }, discK: 0.5,
       astro: { lamp: L, fwd: e3, up: rad, s: 0.3, env: 'side', warm: rad.clone().negate(), op: sm(21.0, 21.8, t) },
       bursts: true, grid: (0.3 * sm(32.8, 33.6, t) + 0.9 * sm(37.2, 38.0, t)) * (1 - sm(41.5, 41.95, t)) };
   }
@@ -72,8 +72,8 @@ window.__bhShots = (H) => {
   function s5(t) {
     const c = sph(10, 30).multiplyScalar(40), look = V(0, 0.8, 0), f = look.clone().sub(c).normalize();
     const rgt = f.clone().cross(V(0, 1, 0)).normalize(), up = rgt.clone().cross(f);
-    const k = (1 - Math.exp(-(t - 42.0) / 2.3)) / (1 - Math.exp(-8.6 / 2.3));
-    const dd = lerpLog(1.6, 40.5, Math.pow(k, 0.9)), xs = lerp(0.17, 2.3 / 40, k), ys = lerp(-0.22, 2.0 / 40, k);
+    const k = (1 - Math.exp(-(t - 42.0) / 3.0)) / (1 - Math.exp(-8.6 / 3.0));
+    const dd = lerpLog(1.6, 40.5, Math.pow(k, 1.25)), xs = lerp(0.17, 2.3 / 40, k), ys = lerp(-0.22, 2.0 / 40, k);
     const P = c.clone().addScaledVector(f, dd).addScaledVector(rgt, xs * dd).addScaledVector(up, ys * dd), red = k * k;
     return { cam: { pos: c, look, up: V(0, 1, 0), fov: 45 },
       astro: { pos: P, fwd: f, up, s: 0.35, poseT: 42 + 5.5 * k, tint: [1, 1 - 0.7 * red, 1 - 0.92 * red], op: 1 - sm(47.6, 50.2, t), tumble: k, env: 'back', warm: f } };
@@ -87,27 +87,27 @@ window.__bhShots = (H) => {
     const { A, B, N } = orb(), ph = PH6(t), R = R6(t);
     const rad = A.clone().multiplyScalar(Math.cos(ph)).addScaledVector(B, Math.sin(ph)), tan = B.clone().multiplyScalar(Math.cos(ph)).addScaledVector(A, -Math.sin(ph));
     const P = rad.clone().multiplyScalar(R), far = 1 + 1.6 * (1 - sm(50.6, 53.6, t));
-    const pos = P.clone().addScaledVector(tan, -0.55 * far).addScaledVector(rad, 0.42 * far).addScaledVector(N, 0.2 * far);
-    const look = P.clone().addScaledVector(rad, -0.9).addScaledVector(tan, 0.35);
-    const gph = ph + 0.75, gp = A.clone().multiplyScalar(Math.cos(gph)).addScaledVector(B, Math.sin(gph)).multiplyScalar(1.53).addScaledVector(N, 0.05);
-    return { cam: { pos, look, up: N.clone(), fov: 50 }, orbit: sm(52.6, 53.6, t), orb: { A, B, N },
-      astro: { pos: P, fwd: rad.clone().negate(), up: N.clone(), s: 0.3, env: 'fall', warm: rad.clone().negate(), lookCam: sm(55.4, 56.4, t) * (1 - sm(58.6, 59.3, t)),
-        ghost: { k: sm(56.2, 57.2, t), pos: gp, fwd: gp.clone().sub(pos).normalize(), up: N.clone() } } };
+    const pos = P.clone().addScaledVector(tan, -1.3 * far).addScaledVector(rad, 0.1 * far).addScaledVector(N, 0.35 * far);
+    const look = P.clone().addScaledVector(tan, 2.5).addScaledVector(rad, 0.35 - 0.6 * (far - 1)).addScaledVector(N, -0.1);
+    const gph = ph + 1.25, gp = A.clone().multiplyScalar(Math.cos(gph)).addScaledVector(B, Math.sin(gph)).multiplyScalar(1.6);
+    return { cam: { pos, look, up: rad.clone(), fov: 50 }, orbit: sm(52.6, 53.6, t), orb: { A, B, N },
+      astro: { pos: P, fwd: tan.clone(), up: rad.clone(), s: 0.3, env: 'fall', warm: rad.clone().negate(), lookCam: sm(55.4, 56.4, t) * (1 - sm(58.6, 59.3, t)),
+        ghost: { k: sm(56.2, 57.2, t), pos: gp, fwd: gp.clone().sub(pos).normalize(), up: gp.clone().normalize() } } };
   }
   // 59.3–62.6: a small black hole (~10 Suns) would stretch him like spaghetti
   function s8a(t) {
-    const c = sph(13, -35).multiplyScalar(15), look = V(0, 0.6, 0), e3 = c.clone().normalize();
+    const c = sph(13, -35).multiplyScalar(14), look = V(0, 2.0, 0), e3 = c.clone().normalize();
     const e1 = V(0, 1, 0).cross(e3).normalize(), e2 = e3.clone().cross(e1);
-    const w = e1.clone().multiplyScalar(Math.cos(24 * D)).addScaledVector(e2, Math.sin(24 * D));
-    const k = 1 + 5 * Math.pow(sm(59.7, 62.4, t), 1.5), R = lerp(5.6, 3.6, sm(59.5, 62.5, t)) - 0.12 * (k - 1);
+    const w = e1.clone().multiplyScalar(Math.cos(70 * D)).addScaledVector(e2, Math.sin(70 * D));
+    const k = 1 + 2.2 * Math.pow(sm(59.8, 62.4, t), 1.4), R = lerp(4.6, 3.5, sm(59.5, 62.5, t)) - 0.3 * (k - 1);
     return { cam: { pos: c, look, up: V(0, 1, 0), fov: 45 }, discTint: [0.78, 0.9, 1.2], discHot: 1.45,
-      astro: { pos: w.clone().multiplyScalar(R), fwd: e3, up: w, s: 0.35, stretch: k, tint: [1, 1 - 0.05 * (k - 1), 1 - 0.07 * (k - 1)], env: 'side', warm: w.clone().negate() } };
+      astro: { pos: w.clone().multiplyScalar(R), fwd: e3, up: w, s: 0.5, stretch: k, tint: [1, 1 - 0.08 * (k - 1), 1 - 0.12 * (k - 1)], env: 'side', warm: w.clone().negate() } };
   }
   // 62.6–67.3: at Sgr A* nothing of the kind: thumbs up
   function s8b(t) {
     const A = V(1.4, 1.1, 10), s = 0.32, head = A.clone().add(V(0, 0.8 * s, 0)), k = (t - 62.6) / 4.7;
-    const pos = head.clone().addScaledVector(V(lerp(0.3, 0.42, k), lerp(0.02, 0.1, k), 1).normalize(), lerp(1.25, 1.75, k) * s);
-    return { cam: { pos, look: head.clone().add(V(-0.12 * s, -0.22 * s, 0)), up: V(0, 1, 0), fov: 42 },
+    const pos = head.clone().addScaledVector(V(lerp(-0.12, -0.02, k), lerp(0.02, 0.1, k), 1).normalize(), lerp(2.3, 2.8, k) * s);
+    return { cam: { pos, look: head.clone().add(V(-0.18 * s, -0.36 * s, 0)), up: V(0, 1, 0), fov: 42 },
       astro: { pos: A, fwd: V(0.12, 0, 1).normalize(), up: V(0, 1, 0), s, thumbs: [63.4, 66.9], env: 'front', warm: V(0.35, 0.3, 1) } };
   }
   // 67.3–78.8: through his eyes, looking back out: the sky squeezes into a bright circle; the horizon (a flash, a jolt);
