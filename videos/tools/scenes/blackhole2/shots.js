@@ -32,19 +32,23 @@ window.__bhShots = (H) => {
     const e = s1(6.2), u1 = e.cam.pos.clone().normalize(), d1 = e.cam.pos.length(), qi = Qh().invert();
     const gd = V(0, Math.sin(55 * D), Math.cos(55 * D)).applyQuaternion(qi), gu = V(0, 1, 0).applyQuaternion(qi), dM = sph(30, 25);
     let dist, dir, up = V(0, 1, 0), look = V(0, 0, 0);
-    if (t < 9.0) {
-      dist = lerpLog(d1, FAR, ease((t - 6.2) / 2.8));
-      dir = slerpV(u1, gd, smooth((t - 6.7) / 2.1)); up = slerpV(V(0, 1, 0), gu, smooth((t - 6.7) / 2.1));
-      look = e.cam.look.clone().lerp(V(0, 0, 0), smooth((t - 6.2) / 0.9));
+    if (t < 9.4) {
+      // a slow start (he stays in view, shrinking), then faster and faster out to the whole galaxy
+      const u = clamp((t - 6.2) / 3.2, 0, 1), f = Math.pow((1 - Math.cos(Math.PI * u)) / 2, 3);
+      dist = lerpLog(d1, FAR, f);
+      dir = slerpV(u1, gd, smooth((t - 7.0) / 2.2)); up = slerpV(V(0, 1, 0), gu, smooth((t - 7.0) / 2.2));
+      look = e.cam.look.clone().lerp(V(0, 0, 0), smooth((t - 6.2) / 1.2));
     } else if (t < 10.2) {
-      dist = lerpLog(FAR, FAR * 0.9, (t - 9) / 1.2); dir = gd; up = gu;
+      dist = lerpLog(FAR, FAR * 0.9, (t - 9.4) / 0.8); dir = gd; up = gu;
     } else if (t < 12.7) {
       const k = (t - 10.2) / 2.5;
       dist = lerpLog(FAR * 0.9, 32, ease(k)); dir = slerpV(gd, dM, smooth(k * 1.15)); up = slerpV(gu, V(0, 1, 0), smooth(k * 1.15));
     } else {
       const k = (t - 12.7) / 3.7; dist = lerp(32, 28, k); dir = sph(lerp(30, 34, k), lerp(25, 40, k));
     }
-    return { cam: { pos: dir.multiplyScalar(dist), look, up, fov: 45 }, merc: sm(12.6, 13.4, t) * (1 - sm(16.0, 16.6, t)), you: sm(8.3, 8.9, t) * (1 - sm(9.9, 10.4, t)) };
+    // the astronaut stays where he was, fading only once he is small
+    const astro = t < 8.2 ? Object.assign({}, e.astro, { op: 1 - sm(7.3, 8.1, t) }) : null;
+    return { cam: { pos: dir.multiplyScalar(dist), look, up, fov: 45 }, astro, merc: sm(12.6, 13.4, t) * (1 - sm(16.0, 16.6, t)), you: sm(8.6, 9.1, t) * (1 - sm(9.9, 10.4, t)) };
   }
   // 16.4–20.6: from above, as we see it from Earth; the 2022 photo
   function s3(t) {
