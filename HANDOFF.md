@@ -895,7 +895,7 @@
   2. «Ти, мабуть, не той знак, яким себе вважаєш» — прецесія: за ~2000 років Сонце зсунулося приблизно на знак.
   3. «Є 13-й знак зодіаку» — Змієносець (Сонце в ньому ~кінець листопада — середина грудня).
   **Зроблено 27.10:** «Є 13-й знак» — `scenes/zodiac13` (сценарій, голос 65 с); голоси до серії «Ти X?» —
-  `scenes/zodiac_sco`, `zodiac_sgr`, `zodiac_tau`, `zodiac_gem`, `zodiac_leo`, `zodiac_vir`, `zodiac_ari`, `zodiac_cnc`, `zodiac_lib`, `zodiac_cap`, `zodiac_aqr`, `zodiac_psc` — усі 12 + «13-й знак» (voice.mp3 + voice_text.txt, ~45–50 с). Небо — `sky.py`: фото ESO
+  `scenes/zodiac_sco`, `zodiac_sgr`, `zodiac_tau`, `zodiac_gem`, `zodiac_leo`, `zodiac_vir`, `zodiac_ari`, `zodiac_cnc`, `zodiac_lib`, `zodiac_cap`, `zodiac_aqr`, `zodiac_psc` — усі 12 + «13-й знак»; ще `zodiac_wrongsign` («Ти не той знак») і `zodiac_findtonight` («Знайди зодіак сьогодні ввечері») (voice.mp3 + voice_text.txt, ~45–50 с). Небо — `sky.py`: фото ESO
   (eso0932a, CC BY 4.0 — у титри «Фото неба: ESO/S. Brunier») + сузір'я d3-celestial. Відео ще не зібрані.
   4. «Знайди своє сузір'я сьогодні ввечері» — як знайти з України, коли найкраще видно; «покрути небо сам» на сайті.
 - Постер «Небо твого дня народження» (продукт), партнерські посилання, спонсори, версія для шкіл, англійська версія.
