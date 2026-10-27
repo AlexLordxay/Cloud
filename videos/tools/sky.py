@@ -93,6 +93,10 @@ class Sky:
         rift = np.exp(-((bgal - 1.5) / 2.2) ** 2) * np.exp(-((lgal - 30) / 40) ** 2) * 0.55
         mwv = band * (0.3 + 1.2 * noise ** 1.5) * (1 - rift)
         self.mwmap = np.clip(mwv / np.percentile(mwv, 99.7), 0, 1).astype(np.float32)
+        # the photographic sky (ESO/S. Brunier panorama, galactic coordinates), as a float array; galactic frame vectors
+        Image.MAX_IMAGE_PIXELS = None
+        self.photo = np.asarray(Image.open(os.path.join(DATA, 'eso0932a.jpg')).convert('RGB'), np.float32)
+        self.ngp, self.gc = ngp, gc; self.gy = np.cross(ngp, gc)
         # faint stars below the catalogue (mag 6-8.5): random, half of them following the Milky Way
         u = rng.normal(size=(self._faint_n * 3, 3)); u /= np.linalg.norm(u, axis=1)[:, None]
         ra = np.degrees(np.arctan2(u[:, 1], u[:, 0])) % 360; dec = np.degrees(np.arcsin(u[:, 2]))
@@ -158,7 +162,32 @@ class Sky:
         base = Image.fromarray(img.astype(np.uint8))
         # Milky Way: the RA/Dec brightness map, sampled through the inverse projection (at a quarter of the size)
         img = np.asarray(base, np.float32)
-        if v.get('mw', 1) > 0:
+        photo = v.get('photo', 1.0)
+        if photo > 0:
+            # the real sky: every pixel looks up its direction in the panorama (bilinear), at half the supersampled size
+            q = 2; w, h = W // q, H // q
+            X, Y = np.meshgrid((np.arange(w) + 0.5) * q, (np.arange(h) + 0.5) * q)
+            dirs = self.unproj(v['centre'], v['scale'], v.get('roll', 0.0), X, Y)
+            b_ = np.degrees(np.arcsin(np.clip(dirs @ self.ngp, -1, 1)))
+            l_ = np.degrees(np.arctan2(dirs @ self.gy, dirs @ self.gc))
+            ph, pw = self.photo.shape[:2]
+            fx = (0.5 - l_ / 360) * pw - 0.5; fy = (90 - b_) / 180 * ph - 0.5
+            x0 = np.floor(fx).astype(int); y0 = np.floor(fy).astype(int); ax = (fx - x0)[..., None]; ay = (fy - y0)[..., None]
+            x0m, x1m = x0 % pw, (x0 + 1) % pw; y0c, y1c = np.clip(y0, 0, ph - 1), np.clip(y0 + 1, 0, ph - 1)
+            P_ = self.photo
+            smp = (P_[y0c, x0m] * (1 - ax) + P_[y0c, x1m] * ax) * (1 - ay) + (P_[y1c, x0m] * (1 - ax) + P_[y1c, x1m] * ax) * ay
+            smp = 255 * (smp / 255) ** v.get('photo_gamma', 0.9) * v.get('photo_gain', 1.25)
+            smp = np.asarray(Image.fromarray(np.clip(smp, 0, 255).astype(np.uint8)).resize((W, H), Image.BICUBIC), np.float32)
+            img = img * (1 - photo) + np.maximum(img, smp) * photo
+        if v.get('clip_rho'):
+            # only the sky within clip_rho of the centre (e.g. the zodiac ring), the rest fading to night
+            q = 4; w, h = W // q, H // q
+            X, Y = np.meshgrid((np.arange(w) + 0.5) * q, (np.arange(h) + 0.5) * q)
+            rho = np.arccos(np.clip(self.unproj(v['centre'], v['scale'], v.get('roll', 0.0), X, Y) @ (v['centre'] / np.linalg.norm(v['centre'])), -1, 1))
+            m = np.clip((v['clip_rho'] - rho) / 0.25, 0, 1).astype(np.float32)
+            m = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).resize((W, H), Image.BILINEAR), np.float32)[:, :, None] / 255
+            img = img * (0.15 + 0.85 * m)
+        if v.get('mw', 0 if photo > 0 else 1) > 0:
             q = 4; w, h = W // q, H // q
             X, Y = np.meshgrid((np.arange(w) + 0.5) * q, (np.arange(h) + 0.5) * q)
             dirs = self.unproj(v['centre'], v['scale'], v.get('roll', 0.0), X, Y)
@@ -180,16 +209,17 @@ class Sky:
             self._add(img, x0, y0, gk, np.array(col, np.float32))
         # faint stars: tiny splats
         x, y, ok = P(self.faint_v)
-        sel = ok & (x >= 0) & (x < W - 1) & (y >= 0) & (y < H - 1)
+        sel = (photo <= 0) & ok & (x >= 0) & (x < W - 1) & (y >= 0) & (y < H - 1)
         if sel.any():
             xi, yi = x[sel].astype(int), y[sel].astype(int); val = (self.faint_b[sel] * 70 * v.get('stars', 1.0))[:, None] * self.faint_c[sel] / 255
             for dx in (0, 1):
                 for dy in (0, 1):
                     np.add.at(img, (yi + dy, xi + dx), val)
         # stars: a gaussian dot each, size and brightness by magnitude; a soft halo on the brightest
+        maxmag = 4.8 if photo > 0 else 9
         x, y, ok = P(self.star_v)
-        sel = ok & (x > -20) & (x < W + 20) & (y > -20) & (y < H + 20)
-        sk = v.get('stars', 1.0) * v.get('star_gain', 1.0)
+        sel = ok & (x > -20) & (x < W + 20) & (y > -20) & (y < H + 20) & (self.star_mag < maxmag)
+        sk = v.get('stars', 1.0) * v.get('star_gain', 0.55 if photo > 0 else 1.0)
         size_k = v.get('star_size', min(2.6, max(1.0, (v['scale'] / 400) ** 0.4)))
         for i in np.nonzero(sel)[0]:
             mag = self.star_mag[i]
@@ -251,8 +281,8 @@ class Sky:
                 a = v.get('lines', 0.3) * (1 - k); col = (150, 170, 210)
             for seg in segs:
                 pts = dense(seg)
-                if a > 0.01: poly(pts, col + (int(160 * a),), int(1.5 * ss))
-                if k > 0.01: poly(pts, (120, 220, 255, int(235 * k)), 3 * ss)
+                if a > 0.01: poly(pts, col + (int(120 * a),), max(1, int(1.2 * ss)))
+                if k > 0.01: poly(pts, (150, 215, 255, int(190 * k)), 2 * ss)
         out.alpha_composite(lay)
         # the Sun on the ecliptic
         sun = v.get('sun')
