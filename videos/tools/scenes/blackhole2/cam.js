@@ -299,23 +299,17 @@
   }
 
   // Final picture: the hole's frame and the galaxy's frame crossfaded, a soft filmic shoulder, a vignette, a white
-  // flash (the horizon), and the 2022 photo laid over the hole when there is one (scenes/blackhole2/eht.jpg).
+  // flash (the horizon). (The 2022 photo is drawn beside the hole by captions.py.)
   function buildComposite(r) {
     const THREE = r.THREE;
     const mat = new THREE.ShaderMaterial({
-      uniforms: { hole: { value: null }, gal: { value: null }, k: { value: 1 }, exposure: { value: 1 }, flash: { value: 0 }, aspect: { value: 0.5625 },
-        eht: { value: null }, ehtK: { value: 0 }, ehtC: { value: new THREE.Vector2(0.5, 0.5) }, ehtS: { value: 0.3 } },
+      uniforms: { hole: { value: null }, gal: { value: null }, k: { value: 1 }, exposure: { value: 1 }, flash: { value: 0 }, aspect: { value: 0.5625 } },
       vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
       fragmentShader: `uniform sampler2D hole; uniform sampler2D gal; uniform float k; uniform float exposure; uniform float flash; uniform float aspect;
-        uniform sampler2D eht; uniform float ehtK; uniform vec2 ehtC; uniform float ehtS; varying vec2 vUv;
+        varying vec2 vUv;
         void main() {
           vec3 c = mix(texture2D(gal, vUv).rgb, texture2D(hole, vUv).rgb, k) * exposure;
           c = 1.0 - exp(-c);
-          if (ehtK > 0.0) {
-            vec2 u = (vUv - ehtC) * vec2(aspect, 1.0) / ehtS + vec2(0.504, 0.513);   // the ring's centre in the photo
-            float m = smoothstep(0.48, 0.36, length(u - 0.5));
-            c = mix(c, texture2D(eht, clamp(u, 0.0, 1.0)).rgb, ehtK * m);
-          }
           vec2 q = (vUv - 0.5) * vec2(aspect, 1.0);
           c *= 1.0 - 0.38 * smoothstep(0.32, 0.75, length(q) * 1.15);
           gl_FragColor = vec4(c + flash, 1.0);
@@ -434,8 +428,6 @@
     };
     await G.O.a.ready;
     { const a = G.O.a; a.pose(0); a.group.updateMatrixWorld(true); const h = a.joints.head.getWorldPosition(new THREE.Vector3()), l = a.joints.head.localToWorld(new THREE.Vector3(-0.226, 0.2, -0.115)); console.log('[scene] head', h.toArray().map(x => x.toFixed(3)).join(' '), 'lamp', l.toArray().map(x => x.toFixed(3)).join(' ')); }
-    // the 2022 photo, if it is there
-    G.eht = await new Promise(ok => { const im = new Image(); im.onload = () => { const tx = new THREE.Texture(im); tx.needsUpdate = true; ok(tx); }; im.onerror = () => ok(null); im.src = '/scene/eht.jpg'; });
     // The sky round the hole: the galaxy seen from its centre, once, into a cube map (2048 per face, mip-mapped).
     const cube = new THREE.WebGLCubeRenderTarget(2048, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter });
     cube.texture.anisotropy = ren.capabilities.getMaxAnisotropy();
@@ -577,11 +569,6 @@
     }
     const cu = G.comp.mat.uniforms;
     cu.hole.value = G.rtHole.texture; cu.gal.value = G.rtGal.texture; cu.k.value = kHole; cu.exposure.value = S.exposure; cu.flash.value = S.flash; cu.aspect.value = cam.aspect;
-    cu.ehtK.value = G.eht ? S.eht : 0;
-    if (G.eht && S.eht > 0) {                  // the photo over the hole, its ring on the shadow's edge
-      const p = new THREE.Vector3(0, 0, 0).project(cam); cu.eht.value = G.eht; cu.ehtC.value.set(p.x * 0.5 + 0.5, p.y * 0.5 + 0.5);
-      cu.ehtS.value = 2.6 / (2 * dist * Math.tan(cam.fov * D / 2)) / 0.178;   // its bright ring (0.178 of the photo) on the shadow's edge
-    }
     ren.setRenderTarget(null); ren.clear(); ren.render(G.comp.scene, G.comp.cam);
     // over it: the astronaut (filmic, soft shadows), his ghost, the dots
     const A = placeAstro(S, t, cam);
