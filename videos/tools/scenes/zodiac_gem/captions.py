@@ -1,36 +1,38 @@
-# «Ти Близнята?» — captions over the sky (frames.py). The voice runs from 0.2 s; the fact «найкращий зорепад року» from
-# 29.55 s (in place of the voice's own Geminids line); the call to comment from 43.1 s (a 2 s pause before it). DRAW: the date under the Sun, the two insets
+# «Ти Близнята?» — captions over the sky (frames.py). The voice runs from 0.2 s; the fact «а Сонце — у Тельці» from 15.45 s, «найкращий зорепад року» from
+# 42.15 s (in place of the voice's own Geminids line); the call to comment from 55.7 s (a 2 s pause before it). DRAW: the date under the Sun, the two insets
 # (Castor's six stars, Pollux's planet).
 import math, os, sys
 sys.path[:0] = [os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), os.path.dirname(os.path.abspath(__file__))]
 from PIL import Image, ImageDraw, ImageFilter
 import timeline as T
 
-DURATION = 49.7
+DURATION = 62.3
 CAPTIONS = [
     (-1.0, 1.15, 'hook', 'Ти Близнята?'),
     (1.6, 4.25, 'cap', 'У твоєму сузір’ї відкрили\nдві планети'),
     (4.55, 7.45, 'cap', 'Уран — у 1781 році'),
     (7.7, 10.25, 'cap', 'Плутон — у 1930-му'),
     (10.7, 15.05, 'cap', 'Сонце проходить крізь Близнят\nз 21 червня до 20 липня'),
-    (15.45, 19.55, 'cap', 'Їхні голови — дві яскраві зорі:\nКастор і Поллукс'),
-    (19.8, 24.9, 'cap', 'Але Кастор — не одна зоря,\nа шість, що кружляють\nодна навколо одної'),
-    (25.2, 29.0, 'cap', 'А навколо Поллукса обертається\nпланета, більша за Юпітер'),
-    (29.5, 36.8, 'cap', 'Щороку в середині грудня з твого\nсузір\u2019я — найкращий зорепад року'),
-    (36.9, 39.2, 'cap', 'понад 100 метеорів за годину'),
-    (39.4, 41.6, 'cap', 'Встигни загадати бажання'),
-    (43.2, 46.4, 'cap', 'Напиши свій знак у коментарях —\nпокажу наступним'),
+    (15.5, 22.9, 'cap', 'Якщо ти Близнята за гороскопом —\nу твій день народження Сонце\nстояло не в Близнятах, а в Тельці'),
+    (23.1, 27.6, 'cap', 'З 21 травня до 20 червня\nвоно щороку там'),
+    (28.05, 32.15, 'cap', 'Їхні голови — дві яскраві зорі:\nКастор і Поллукс'),
+    (32.4, 37.5, 'cap', 'Але Кастор — не одна зоря,\nа шість, що кружляють\nодна навколо одної'),
+    (37.8, 41.6, 'cap', 'А навколо Поллукса обертається\nпланета, більша за Юпітер'),
+    (42.1, 49.4, 'cap', 'Щороку в середині грудня з твого\nсузір\u2019я — найкращий зорепад року'),
+    (49.5, 51.8, 'cap', 'понад 100 метеорів за годину'),
+    (52.0, 54.2, 'cap', 'Встигни загадати бажання'),
+    (55.8, 59.0, 'cap', 'Напиши свій знак у коментарях —\nпокажу наступним'),
 ]
-NAMES = [(1.6, 15.05, 'Близнята'), (15.45, 19.55, 'Кастор і Поллукс'), (19.8, 24.9, 'Кастор'), (25.2, 29.0, 'Поллукс'),
-         (29.5, 41.6, 'Гемініди'), (43.2, 46.4, 'Близнята')]
-SUBS = [(19.8, 24.9, '6 зір · 3 пари'), (25.2, 29.0, 'планета Поллукс b'), (29.5, 41.6, 'пік — 13–14 грудня')]
-CREDITS = [(0.0, 46.4, 'Фото неба: ESO/S. Brunier (CC BY 4.0) · межі сузір’їв — МАС')]
+NAMES = [(1.6, 15.05, 'Близнята'), (15.5, 27.6, 'Телець'), (28.05, 32.15, 'Кастор і Поллукс'), (32.4, 37.5, 'Кастор'), (37.8, 41.6, 'Поллукс'),
+         (42.1, 54.2, 'Гемініди'), (55.8, 59.0, 'Близнята')]
+SUBS = [(15.5, 27.6, 'а за гороскопом — Близнята'), (32.4, 37.5, '6 зір · 3 пари'), (37.8, 41.6, 'планета Поллукс b'), (42.1, 54.2, 'пік — 13–14 грудня')]
+CREDITS = [(0.0, 59.0, 'Фото неба: ESO/S. Brunier (CC BY 4.0) · межі сузір’їв — МАС')]
 CUTS = []
 FADE_IN = 0
 HOOK_SIZE = 84
-SUBSCRIBE_AT = 16.0
+SUBSCRIBE_AT = 30.0
 SUBSCRIBE_Y = 1700
-END_CARD = 46.6
+END_CARD = 59.2
 END_TITLE = 'Знайди свій знак\nна справжньому небі —\nна сайті'
 
 W, H = 1080, 1920
@@ -48,7 +50,7 @@ def _star(img, x, y, r, col, a):
     ImageDraw.Draw(img).ellipse((x - r, y - r, x + r, y + r), fill=(255, 255, 255, int(255 * a)))
 
 def _castor(img, t, g):
-    a = g['ease'](g['fade'](t, 19.8, 24.9, 0.5))
+    a = g['ease'](g['fade'](t, 32.4, 37.5, 0.5))
     if a <= 0: return
     _window(img, a)
     f = g['font']('Commissioner.ttf', 30, 600); d = ImageDraw.Draw(img)
@@ -65,10 +67,10 @@ def _castor(img, t, g):
         d.text((x, y - 58), name, font=f, anchor='mm', fill=(200, 220, 255, int(220 * a)))
 
 def _pollux(img, t, g):
-    a = g['ease'](g['fade'](t, 25.2, 29.0, 0.5))
+    a = g['ease'](g['fade'](t, 37.8, 41.6, 0.5))
     if a <= 0: return
     _window(img, a)
-    ang = (t - 25.2) * 1.3
+    ang = (t - 37.8) * 1.3
     px, py = CX + 220 * math.cos(ang), CY + 70 * math.sin(ang)
     front = math.sin(ang) > 0
     d = ImageDraw.Draw(img)
@@ -84,7 +86,7 @@ def _pollux(img, t, g):
 
 def DRAW(img, t, g):
     lam, k = T.sun(t)
-    al = g['fade'](t, 10.7, 15.05, 0.35) * k
-    if al > 0: g['draw_block'](img, T.date_of(lam), g['font']('Unbounded.ttf', 64, 600), 470, al, fill=g['SUN'])
+    al = max(g['fade'](t, 10.7, 15.05, 0.35), g['fade'](t, 16.0, 27.4, 0.35)) * k
+    if al > 0: g['draw_block'](img, T.date_of(lam), g['font']('Unbounded.ttf', 64, 600), 470 if t < 15.3 else 510, al, fill=g['SUN'])
     _castor(img, t, g)
     _pollux(img, t, g)

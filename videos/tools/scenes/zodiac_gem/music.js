@@ -1,5 +1,5 @@
-// «Ти Близнята?» — the Hoverla organ score (MUSIC.md) retimed: the hush after Pollux's planet (28.6 s), A major
-// blooming with the Geminids (30.6 s), the quiet figure for the fact (the shower again) and the question. Originally: "What if over Hoverla instead of the Moon…" — the video's own score, in the spirit of a space-film organ score (no
+// «Ти Близнята?» — the Hoverla organ score (MUSIC.md) retimed: the hush after Pollux's planet (41.2 s), A major
+// blooming with the Geminids (43.2 s), the quiet figure for the call to comment. Originally: "What if over Hoverla instead of the Moon…" — the video's own score, in the spirit of a space-film organ score (no
 // quotation): one organ, no bass, no drums. A clock-like eighth-note figure in A minor that groups in threes against the
 // bar, held chords that breathe in and out, stops and octaves added as the worlds grow, a sudden hush just before the
 // Sun, then the Sun lifts the music to A major, and the Moon brings back the quiet figure. Everything is synthesised.
@@ -179,12 +179,12 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const SUN = 30.6, HUSH = 28.6, MOON = 36.0, END = 49.7, E8 = BEAT / 2;
+    const SUN = 43.2, HUSH = 41.2, MOON = 48.6, END = 62.3, E8 = BEAT / 2;
     const FL = [[1, 1], [2, 0.35]];
     // one chord per world (5 s = two bars): Am Am F F C G Am | the Sun: A major | the Moon: Am
     const CH = { Am: [57, 60, 64], F: [53, 57, 60], C: [55, 60, 64], G: [55, 59, 62], A: [57, 61, 64] };
-    const PLAN = ['Am', 'Am', 'F', 'F', 'C', 'G'];
-    const chordAt = t => t >= MOON ? 'Am' : t >= SUN - 0.01 ? 'A' : PLAN[Math.min(5, Math.floor(t / 5))];
+    const PLAN = ['Am', 'Am', 'F', 'F', 'C', 'G', 'Am', 'F', 'G'];
+    const chordAt = t => t >= MOON ? 'Am' : t >= SUN - 0.01 ? 'A' : PLAN[Math.min(8, Math.floor(t / 5))];
     // the figure: root, fifth, octave, repeated, so it falls in threes across the eight eighths of a bar
     const fig = ch => [ch[0], ch[0] + 7, ch[0] + 12];
     const play = (t0, t1, dyn) => {                       // dyn(t): 0..1 loudness; also brings in the octave above
@@ -200,16 +200,16 @@ function createSceneMusic(ctx, dest) {
     play(0, HUSH, wave);
     // held chords that breathe: each swells in and out over its 5 s
     PLAN.forEach((k, c) => {
-      const t0 = c * 5, t1 = c === 5 ? HUSH : t0 + 5.4, w = wave(t0 + 2.5);
-      for (const m of CH[k]) organ(t0, t1, m + 12, c < 4 ? FL : REG_MID, 0.08 + 0.22 * w, 900 + 2500 * w, 2.2, 1.6);
+      const t0 = c * 5, t1 = c === 8 ? HUSH : t0 + 5.4, w = wave(t0 + 2.5);
+      for (const m of CH[k]) organ(t0, t1, m + 12, c < 6 ? FL : REG_MID, 0.08 + 0.22 * w, 900 + 2500 * w, 2.2, 1.6);
     });
     // a long high line over the last rise
-    [[19, 5, 76], [24, 4.4, 79]].forEach(([t0, len, m]) => organ(t0, t0 + len, m + 12, FL, 0.16, 3000, 1.5, 0.6));
+    [[31.6, 5, 76], [36.6, 4.4, 79]].forEach(([t0, len, m]) => organ(t0, t0 + len, m + 12, FL, 0.16, 3000, 1.5, 0.6));
     // the hush: everything stops, one high note hangs on
     organ(HUSH - 0.2, SUN + 0.5, 81, FL, 0.12, 2500, 0.3, 1.0);
     // the Sun: A major breathes in over 2.5 s, the figure comes back in full, then calms down for the Moon
     for (const m of [57, 61, 64, 69, 73, 76]) organ(SUN - 1.0, MOON + 0.5, m, REG_MID, 0.30, 3500, 2.5, 2.0);
-    play(SUN, MOON, t => 0.85 - 0.5 * Math.max(0, (t - 33.5) / 2.5));
+    play(SUN, MOON, t => 0.85 - 0.5 * Math.max(0, (t - 46.4) / 2.5));
     organ(SUN + 1.5, MOON, 85, FL, 0.16, 3000, 1.5, 1.0);
     // the Moon: the quiet figure alone, fading to nothing
     play(MOON, END - 1.0, t => 0.25 * (1 - (t - MOON) / (END - MOON)));
