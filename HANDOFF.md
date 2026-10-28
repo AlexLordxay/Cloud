@@ -46,6 +46,8 @@
   ~25 хв на 2115 кадрів), `captions.py`, `music.js` (орган Говерли, перерахований під таймінг). `./make.sh zodiac13`.
   Шаблон для серії «Ти X?»: скопіювати сцену, змінити timeline/captions. Відео >100 МБ GitHub не приймає → make.sh
   тепер обмежує бітрейт (9 Мбіт/с).
+- **ГОТОВО 28.10: `videos/zodiac_sco.mp4` — «Ти Скорпіон?», 47 с** (описи — `scenes/zodiac_sco/posts.md`). Шаблон знака:
+  `timeline.py` (бере помічники з zodiac13), `frames.py`, `captions.py` (DRAW: дата, порівняння розмірів, горизонт), `music.js`.
 - **Записані голоси, відео ще НЕ зібрані (рендер — хвилини, небо готове):**
   - «Є 13-й знак зодіаку» — `scenes/zodiac13` (script.md з кадрами й фактами, voice.mp3 65 с).
   - Серія «Ти X?» — `scenes/zodiac_{ari,tau,gem,cnc,leo,vir,lib,sco,sgr,cap,aqr,psc}` (voice.mp3 ~40–46 с + voice_text.txt).
