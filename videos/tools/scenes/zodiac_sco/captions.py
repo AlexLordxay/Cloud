@@ -1,11 +1,11 @@
-# «Ти Скорпіон?» — captions over the sky (frames.py). The voice runs from 0.2 s; the call to comment from 40.6 s (a 2 s
-# pause before it). DRAW: the date under the Sun, Antares in place of the Sun among the planets' orbits, the horizon.
+# «Ти Скорпіон?» — captions over the sky (frames.py). The voice runs from 0.2 s; the fact «on your birthday» from 39.3 s,
+# the call to comment from 49.75 s (a 2 s pause before it). DRAW: the date under the Sun, Antares in place of the Sun among the planets' orbits, the horizon.
 import math, os, sys
 sys.path[:0] = [os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), os.path.dirname(os.path.abspath(__file__))]
 from PIL import Image, ImageDraw, ImageFilter
 import timeline as T
 
-DURATION = 47.5
+DURATION = 56.6
 CAPTIONS = [
     (-1.0, 1.3, 'hook', 'Ти Скорпіон?'),
     (1.55, 4.45, 'cap', 'Твоє сузір’я — найкоротше\nв зодіаку'),
@@ -16,18 +16,21 @@ CAPTIONS = [
     (20.9, 28.0, 'cap', 'На місці Сонця він поглинув би\nМеркурій, Венеру, Землю\nі навіть Марс'),
     (28.5, 34.5, 'cap', 'Антарес старіє і колись вибухне\nяк наднова — її буде видно\nнавіть удень'),
     (34.8, 38.9, 'cap', 'З України Скорпіона видно\nнизько на півдні літніми вечорами'),
-    (40.7, 44.3, 'cap', 'Напиши свій знак у коментарях —\nпокажу наступним'),
+    (39.4, 43.0, 'cap', 'У твій день народження\nСкорпіона не видно —\nвін ховається за Сонцем'),
+    (44.6, 47.9, 'cap', 'Свій знак ти найкраще побачиш\nчерез пів року — у червні'),
+    (49.8, 53.3, 'cap', 'Напиши свій знак у коментарях —\nпокажу наступним'),
 ]
 NAMES = [(1.55, 10.3, 'Скорпіон'), (10.7, 18.3, 'Антарес'),
-         (28.5, 34.5, 'Антарес'), (34.8, 44.3, 'Скорпіон')]
-SUBS = [(10.7, 18.3, 'α Скорпіона · ~550 світлових років від нас'),         (28.5, 34.5, 'колись — наднова'), (34.8, 44.3, 'липень · 22:00 · південь')]
-CREDITS = [(0.0, 44.3, 'Фото неба: ESO/S. Brunier (CC BY 4.0) · межі сузір’їв — МАС')]
+         (28.5, 34.5, 'Антарес'), (34.8, 38.9, 'Скорпіон'), (39.4, 43.0, 'Твій день народження'), (44.6, 53.3, 'Скорпіон')]
+SUBS = [(10.7, 18.3, 'α Скорпіона · ~550 світлових років від нас'),         (28.5, 34.5, 'колись — наднова'), (34.8, 38.9, 'липень · 22:00 · південь'), (39.4, 43.0, 'Сонце поруч зі Скорпіоном'),
+        (44.6, 53.3, 'червень · 23:00 · південь')]
+CREDITS = [(0.0, 53.3, 'Фото неба: ESO/S. Brunier (CC BY 4.0) · межі сузір’їв — МАС')]
 CUTS = []
 FADE_IN = 0
 HOOK_SIZE = 84
 SUBSCRIBE_AT = 14.5
 SUBSCRIBE_Y = 1700
-END_CARD = 44.4
+END_CARD = 53.5
 END_TITLE = 'Знайди свій знак\nна справжньому небі —\nна сайті'
 
 W, H = 1080, 1920
@@ -67,7 +70,7 @@ def _orbits(img, t, g):
     img.alpha_composite(lay)
 
 def _horizon(img, t, g):
-    a = g['ease'](g['fade'](t, 35.4, 99, 1.0))
+    a = g['ease'](max(g['fade'](t, 35.4, 39.6, 1.0), g['fade'](t, 45.4, 99, 1.0)))
     if a <= 0: return
     lay = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
     pts = [(0, 1440)] + [(x, 1440 - 26 * math.sin(x / 170) - 14 * math.sin(x / 61 + 1)) for x in range(0, W + 1, 20)] + [(W, H), (0, H)]

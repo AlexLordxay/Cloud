@@ -179,7 +179,7 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const SUN = 31.8, HUSH = 29.6, MOON = 37.5, END = 47.5, E8 = BEAT / 2;
+    const SUN = 31.8, HUSH = 29.6, MOON = 37.5, END = 56.6, E8 = BEAT / 2;
     const FL = [[1, 1], [2, 0.35]];
     // one chord per world (5 s = two bars): Am Am F F C G Am | the Sun: A major | the Moon: Am
     const CH = { Am: [57, 60, 64], F: [53, 57, 60], C: [55, 60, 64], G: [55, 59, 62], A: [57, 61, 64] };

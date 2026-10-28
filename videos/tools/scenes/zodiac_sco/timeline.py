@@ -14,7 +14,7 @@ LOW = vec(250.0, -17.0)                           # the summer view from Ukraine
 L23, L29 = sun_lon(datetime.datetime(2026, 11, 23, 12)), sun_lon(datetime.datetime(2026, 11, 29, 12))
 
 KEYS = [(0.0, SCO, 620, 0), (10.2, SCO, 680, 0), (12.6, ANTARES, 1800, 0), (18.3, ANTARES, 2000, 0),
-        (28.2, ANTARES, 2100, 0), (30.0, ANTARES, 1300, 0), (34.4, ANTARES, 1250, 0), (36.4, LOW, 520, 0), (47.5, LOW, 540, 0)]
+        (28.2, ANTARES, 2100, 0), (30.0, ANTARES, 1300, 0), (34.4, ANTARES, 1250, 0), (36.4, LOW, 520, 0), (39.0, LOW, 525, 0), (40.9, SCO, 600, 0), (44.4, SCO, 620, 0), (46.3, LOW, 530, 0), (56.6, LOW, 550, 0)]
 
 def camera(t):
     for (t0, c0, s0, r0), (t1, c1, s1, r1) in zip(KEYS, KEYS[1:]):
@@ -29,6 +29,7 @@ def sun(t):
     lam = SUN_KEYS[0][1] if t < SUN_KEYS[0][0] else SUN_KEYS[-1][1]
     for (t0, l0), (t1, l1) in zip(SUN_KEYS, SUN_KEYS[1:]):
         if t0 <= t <= t1: lam = l0 + (l1 - l0) * ease((t - t0) / (t1 - t0)); break
+    if t > 30: return 245.0, win(t, 39.5, 45.0, 0.8)          # the fact: on your birthday the Sun sits by Scorpius
     return lam, win(t, 1.2, 10.6, 0.5)
 
 def sectors(t):
@@ -44,5 +45,7 @@ def view(t):
     if 30.8 < t < 35.5:                          # «колись вибухне»: a flash brighter than everything round it
         k = min(1.0, (t - 31.0) / 0.5) * win(t, 30.8, 35.4, 0.8)
         glow += [(ANTARES, 80, (255, 220, 190), 0.7 * k), (ANTARES, 20, (255, 245, 235), 2.4 * k), (ANTARES, 6, (255, 255, 255), 4.0 * k)]
+    day = win(t, 39.5, 45.0, 0.8)
+    if day > 0: glow.append((ecl(245.0), 330, (90, 130, 200), 0.9 * day))   # daylight round the Sun washes the stars out
     return dict(centre=c, scale=s, roll=r, ecliptic=0.7 * win(t, -1, 11.0, 0.6), hi={'Sco': hi}, borders={'Sco': hi, 'Oph': 0.5 * hi},
-                zlines=0.8, lines=0.25, labels=1.0, sun=lam, sun_k=sk, sun_r=18, label_size=20, glow=glow, clip_rho=2.0)
+                zlines=0.8, lines=0.25, labels=1.0, sun=lam, sun_k=sk, sun_r=18 + 14 * day, label_size=20, glow=glow, clip_rho=2.0)

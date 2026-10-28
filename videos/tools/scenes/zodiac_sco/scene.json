@@ -1,13 +1,31 @@
 {
   "title": "Ти Скорпіон?",
-  "duration": 47.5,
+  "duration": 56.6,
   "fps": 30,
   "width": 720,
   "height": 1280,
-  "audio": { "music": "scene" },
+  "audio": {
+    "music": "scene"
+  },
   "narration": {
-    "file": "voice.mp3",
+    "file": "voice_all.mp3",
     "level": 1.0,
-    "parts": [[0, 38.9, 0.2], [38.9, 42.37, 40.6]]
+    "parts": [
+      [
+        0,
+        38.9,
+        0.2
+      ],
+      [
+        42.37,
+        50.8,
+        39.3
+      ],
+      [
+        38.9,
+        42.37,
+        49.75
+      ]
+    ]
   }
 }
