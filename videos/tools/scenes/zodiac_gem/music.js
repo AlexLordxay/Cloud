@@ -179,7 +179,7 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const SUN = 30.6, HUSH = 28.6, MOON = 37.0, END = 56.7, E8 = BEAT / 2;
+    const SUN = 30.6, HUSH = 28.6, MOON = 36.0, END = 49.7, E8 = BEAT / 2;
     const FL = [[1, 1], [2, 0.35]];
     // one chord per world (5 s = two bars): Am Am F F C G Am | the Sun: A major | the Moon: Am
     const CH = { Am: [57, 60, 64], F: [53, 57, 60], C: [55, 60, 64], G: [55, 59, 62], A: [57, 61, 64] };
@@ -209,7 +209,7 @@ function createSceneMusic(ctx, dest) {
     organ(HUSH - 0.2, SUN + 0.5, 81, FL, 0.12, 2500, 0.3, 1.0);
     // the Sun: A major breathes in over 2.5 s, the figure comes back in full, then calms down for the Moon
     for (const m of [57, 61, 64, 69, 73, 76]) organ(SUN - 1.0, MOON + 0.5, m, REG_MID, 0.30, 3500, 2.5, 2.0);
-    play(SUN, MOON, t => 0.85 - 0.5 * Math.max(0, (t - 34.4) / 2.5));
+    play(SUN, MOON, t => 0.85 - 0.5 * Math.max(0, (t - 33.5) / 2.5));
     organ(SUN + 1.5, MOON, 85, FL, 0.16, 3000, 1.5, 1.0);
     // the Moon: the quiet figure alone, fading to nothing
     play(MOON, END - 1.0, t => 0.25 * (1 - (t - MOON) / (END - MOON)));

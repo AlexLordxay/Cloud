@@ -1,5 +1,5 @@
-# «Ти Близнята?» — the camera, the Sun, Castor and Pollux, where Uranus and Pluto were found, and the Geminids (in the
-# voice, then again for the fact «найкращий зорепад року… загадай бажання», with one big fireball), as functions of the
+# «Ти Близнята?» — the camera, the Sun, Castor and Pollux, where Uranus and Pluto were found, and the Geminids (for the
+# fact «найкращий зорепад року… загадай бажання», with one big fireball), as functions of the
 # video time t (s). Helpers from the 13th-sign scene.
 import importlib.util, math, os, datetime
 import numpy as np
@@ -22,7 +22,7 @@ L_JUN21, L_JUL20, L_MAY21, L_JUN20 = lam(6, 21), lam(7, 20), lam(5, 21), lam(6, 
 
 KEYS = [(0.0, GEM, 1050, 0), (10.4, GEM, 1100, 0), (15.0, GEM, 1100, 0), (17.0, HEADS, 1700, 0), (19.6, HEADS, 1750, 0),
         (21.0, CASTOR, 2600, 0), (24.9, CASTOR, 2700, 0), (26.0, POLLUX, 2600, 0), (29.0, POLLUX, 2700, 0),
-        (30.6, GEMC, 1000, 0), (36.2, GEMC, 1040, 0), (56.7, GEMC, 920, 0)]
+        (30.6, GEMC, 1000, 0), (49.7, GEMC, 940, 0)]
 
 def camera(t):
     for (t0, c0, s0, r0), (t1, c1, s1, r1) in zip(KEYS, KEYS[1:]):
@@ -71,12 +71,12 @@ def overlay(img, P, t, sky):
             x, y, ok = _pt(P, v_)
             d.text((x + dx * 22, y + 26), name, font=f, anchor='rm' if dx < 0 else 'lm', fill=(255, 236, 200, int(255 * k)))
     # the Geminids: streaks shooting out from the radiant, each a short bright line that fades
-    k = win(t, 29.6, 49.6, 0.6)
+    k = win(t, 29.6, 42.6, 0.6)
     if k > 0:
         rx, ry, _ = _pt(P, RADIANT)
         rng = np.random.default_rng(3)
         for i in range(280):
-            t0 = 29.6 + rng.uniform(0, 19.4); ang = rng.uniform(0, 2 * math.pi); r0 = rng.uniform(40, 260); L = rng.uniform(90, 230)
+            t0 = 29.6 + rng.uniform(0, 12.4); ang = rng.uniform(0, 2 * math.pi); r0 = rng.uniform(40, 260); L = rng.uniform(90, 230)
             u = (t - t0) / 0.45
             if 0 <= u <= 1:
                 a = math.sin(math.pi * u)
@@ -84,7 +84,7 @@ def overlay(img, P, t, sky):
                 ca, sa = math.cos(ang), math.sin(ang)
                 d.line((rx + ca * p0, ry + sa * p0, rx + ca * p1, ry + sa * p1), fill=(255, 250, 235, int(250 * a * k)), width=3)
     # «встигни загадати бажання»: one long, bright fireball
-    u = (t - 46.6) / 1.4
+    u = (t - 39.4) / 1.4
     if 0 <= u <= 1:
         rx, ry, _ = _pt(P, RADIANT)
         ang = math.radians(118); ca, sa = math.cos(ang), math.sin(ang)
