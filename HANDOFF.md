@@ -54,8 +54,8 @@
   «Твоя голова старша за ноги» (час/гравітація/МКС/GPS), «Зоря твого дня народження» (Альтаїр 17, Вега 25, Поллукс 34,
   Арктур 37, Капелла 43 св. р.), «Ти зроблений із зірок», «Нейтрино крізь тебе». Відео ще не зроблені. Прослухати:
   `videos/future_voices_preview.mp4`.
-- **Англійські озвучки (28.10, ~34 кр.):** `scenes/{scale_kyiv,orionids,venus_meet,scale,comet67p,blackhole2,mars_meet,zodiac13,zodiac_sco,zodiac_gem}/voice_en.mp3` +
-  `voice_text_en.txt` (50–68 с, коротші за укр. відео). Прослухати: `videos/en_voices_preview.mp4`, `en_voices_preview2.mp4`, `zodiac_en_preview.mp4`. Для англ. версій
+- **Англійські озвучки (28.10, ~34 кр.):** `scenes/{scale_kyiv,orionids,venus_meet,scale,comet67p,blackhole2,mars_meet,zodiac13,zodiac_sco,zodiac_gem,zodiac_ari,zodiac_cap}/voice_en.mp3` (Овен і Козеріг — з фактом «про тебе» всередині) +
+  `voice_text_en.txt` (50–68 с, коротші за укр. відео). Прослухати: `videos/en_voices_preview.mp4`, `en_voices_preview2.mp4`, `zodiac_en_preview.mp4`, `zodiac_en_preview2.mp4`. Для англ. версій
   ще треба: англійські титри (captions_en), розкласти фрази `narration.parts` під кадри, англ. кінцеву картку.
 - **Факти «про тебе» записано для всіх знаків (28.10, ~8 кр.):** `scenes/zodiac_<знак>/fact.mp3` + `fact_text.txt`
   (Овен…Риби; Скорпіон — у його сцені). Прослухати: `videos/zodiac_facts_preview.mp4`. Вставляти як у Скорпіоні:
