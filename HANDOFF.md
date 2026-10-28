@@ -50,8 +50,8 @@
 - **Правило серії знаків (автор):** у кожному відео — факт «про тебе» (ти/твій/тобі), голосом, перед закликом у
   коментарі. Скорпіон: «у твій день народження Скорпіона не видно — він за Сонцем; найкраще — через пів року, у червні»
   (`fact.mp3` + `voice_all.mp3`, денне небо навколо Сонця в timeline.py).
-- **Англійські озвучки топ-5 (28.10, ~24 кр.):** `scenes/{scale_kyiv,orionids,venus_meet,scale,comet67p}/voice_en.mp3` +
-  `voice_text_en.txt` (50–68 с, коротші за укр. відео). Прослухати: `videos/en_voices_preview.mp4`. Для англ. версій
+- **Англійські озвучки (28.10, ~34 кр.):** `scenes/{scale_kyiv,orionids,venus_meet,scale,comet67p,blackhole2,mars_meet}/voice_en.mp3` +
+  `voice_text_en.txt` (50–68 с, коротші за укр. відео). Прослухати: `videos/en_voices_preview.mp4`, `en_voices_preview2.mp4`. Для англ. версій
   ще треба: англійські титри (captions_en), розкласти фрази `narration.parts` під кадри, англ. кінцеву картку.
 - **Факти «про тебе» записано для всіх знаків (28.10, ~8 кр.):** `scenes/zodiac_<знак>/fact.mp3` + `fact_text.txt`
   (Овен…Риби; Скорпіон — у його сцені). Прослухати: `videos/zodiac_facts_preview.mp4`. Вставляти як у Скорпіоні:
