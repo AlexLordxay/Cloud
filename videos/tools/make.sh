@@ -42,7 +42,7 @@ if [ "$mode" = sound ]; then
   echo "done: videos/${scene}_voice.mp4"; exit 0
 else
   "$ffmpeg" -y -loglevel error -i "$work/audio.wav" "${extra[@]}" -framerate 30 -i "$work/out/f_%05d.jpg" "${audio[@]}" \
-    -map "$(( ${#extra[@]} / 2 + 1 )):v" -c:v libx264 -preset slow -crf 22 -pix_fmt yuv420p -profile:v high \
+    -map "$(( ${#extra[@]} / 2 + 1 )):v" -c:v libx264 -preset slow -crf 22 -maxrate 9M -bufsize 18M -pix_fmt yuv420p -profile:v high \
     -movflags +faststart -t "$duration" "../$scene.mp4"
 fi
 echo "done: videos/$scene.mp4"

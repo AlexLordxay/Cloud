@@ -27,7 +27,7 @@ CREDITS = [(0.0, 67.4, 'Фото неба: ESO/S. Brunier (CC BY 4.0) · меж�
 CUTS = []
 FADE_IN = 0
 SUBSCRIBE_AT = 30.0
-SUBSCRIBE_Y = 1500
+SUBSCRIBE_Y = 1700
 END_CARD = 67.6
 END_TITLE = 'Знайди свій знак\nна справжньому небі —\nна сайті'
 
