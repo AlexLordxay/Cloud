@@ -64,12 +64,16 @@
   const zetaAt = z => Math.min(0.357 * Math.pow(384.4 / z, 3), 3200);
   // how stretched and cracked the Moon is: from ~30 000 km in, more as it nears (the real tearing starts ~9 500 km)
   const stretchAt = z => 0.06 * smooth((30 - z) / 12) + 0.18 * smooth((18.5 - z) / 9);
+  // how far the crust has broken up (0..1), by time before the touch: from ~9 minutes out, nearly all of the near half at the end
+  const crumbleAt = tp => 0.8 * smooth((tp + 260) / 250);
   const crackAt = z => smooth((30 - z) / 12) * 0.6 + smooth((18.5 - z) / 8) * 0.4;
 
   // ---- the rubble: shed from the near side from ~14 minutes before the touch, each on its own fall ------------------
   let RUB = null;
   function buildRubble(X) {
-    const rnd = X.rnd, n = X.dust.geometry.attributes.position.count, nr = 1600, nc = 26;
+    // (no separate specks before the touch any more — the author: they looked like noise; the crust breaking up and the
+    // dust clouds are drawn on the Moon itself and as soft billows, buildPuffs)
+    const rnd = X.rnd, n = 0, nr = 0, nc = 0;
     // the Moon's own frame (as in setup): +x toward the Earth; its surface stretched as in the vertex shader of world.js
     const xa = MHAT.clone().negate(), ya = V(0, 1, 0).sub(xa.clone().multiplyScalar(xa.y)).normalize(), za = xa.clone().cross(ya);
     const surface = (d, e) => { const lx = d.dot(xa), ly = d.dot(ya), lz = d.dot(za), k = 1 / Math.sqrt(1 + e);
@@ -123,6 +127,36 @@
     met.mesh.geometry.instanceCount = k; met.done(); out.met = met;
     return out;
   }
+  // ---- dust billows off the crumbling end: born on the surface (stretched as the Moon is), drifting out and down toward
+  // the Earth on their own falls (the Earth's gravity, integrated), growing and thinning as they go
+  function buildPuffs(X) {
+    const rnd = X.rnd, N = X.puffs.geometry.attributes.position.count, out = [];
+    const xa = MHAT.clone().negate(), ya = V(0, 1, 0).sub(xa.clone().multiplyScalar(xa.y)).normalize(), za = xa.clone().cross(ya);
+    const surface = (d, e) => { const lx = d.dot(xa), ly = d.dot(ya), lz = d.dot(za), k = 1 / Math.sqrt(1 + e);
+      return xa.clone().multiplyScalar(lx * (1 + e) + e * 0.25 * Math.pow(Math.max(lx, 0), 4)).addScaledVector(ya, ly * k).addScaledVector(za, lz * k).multiplyScalar(RM); };
+    const acc = q => q.clone().multiplyScalar(-GMU / Math.pow(q.length(), 3));
+    for (let i = 0; i < N; i++) {
+      const tb = lerp(-300, -3, Math.pow(rnd(), 0.6));
+      const z = moonZ(tb), e = stretchAt(z), cr = crumbleAt(tb);
+      // where on the near end: within the crumbling zone at that moment (it spreads up from the tip)
+      let d; do { d = V(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1); } while (d.lengthSq() > 1 || d.lengthSq() < 0.01);
+      d.normalize(); if (d.dot(xa) < 0) d.negate();
+      const reach = 0.95 - 0.8 * cr; if (d.dot(xa) < reach) d.lerp(xa, 0.5 + 0.5 * rnd()).normalize();
+      const p = MHAT.clone().multiplyScalar(z).add(surface(d, e));
+      const v = MHAT.clone().multiplyScalar(-vAt(z * 1e6) / 1e6).addScaledVector(d, 0.0003 + 0.0011 * rnd()).add(V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(0.0004));
+      const samples = [p.x, p.y, p.z]; let t = tb, a0 = acc(p), gone = null;
+      while (t < 40) {
+        const dt = 2; p.addScaledVector(v, dt).addScaledVector(a0, 0.5 * dt * dt);
+        const a1 = acc(p); v.addScaledVector(a0.add(a1), 0.5 * dt); a0 = a1; t += dt;
+        if (Math.round((t - tb) / dt) % 2 === 0) samples.push(p.x, p.y, p.z);
+        if (p.length() < ER + 0.03) { gone = t; break; }
+      }
+      out.push({ tb, s: new Float32Array(samples), hit: gone !== null ? { t: gone } : null, life: 160 + 280 * rnd(), s0: 0.02 + 0.03 * rnd(), s1: 0.12 + 0.3 * Math.pow(rnd(), 1.5), a: 0.1 + 0.2 * rnd() });
+    }
+    return out;
+  }
+  let PUFFS = null;
+
   const posAt = (r, tp) => {                                                    // a rubble piece's place (null: not yet / gone)
     if (tp < r.tb || (r.hit && tp >= r.hit.t)) return null;
     const f = (tp - r.tb) / 4, i = Math.floor(f), s = r.s, m = s.length / 3 - 1;
@@ -245,6 +279,7 @@
       async setup(X) {
         RUB = buildRubble(X);
         X.plume = buildPlume(X);
+        PUFFS = buildPuffs(X);
         X.U.moonDir.value.copy(MHAT); X.U.sun.value.copy(SUN);
         X.moon.scale.setScalar(RM);
         const xa = MHAT.clone().negate(), ya = V(0, 1, 0).sub(xa.clone().multiplyScalar(xa.y)).normalize(), za = xa.clone().cross(ya);
@@ -268,6 +303,16 @@
         X.MU.stretch.value = stretchAt(zc);
         X.RU.moonC.value.copy(X.moon.position); X.RU.moonR.value = RM * (1 + 0.3 * stretchAt(zc));
         X.MU.crack.value = crackAt(zc);
+        X.MU.crumble.value = tp < 0 ? crumbleAt(tp) : 1;
+        { const pp = X.puffs.geometry.attributes.position, ps = X.puffs.geometry.attributes.psize, pa = X.puffs.geometry.attributes.palpha;
+          PUFFS.forEach((f, i) => {
+            const age = tp - f.tb, p = posAt(f, tp);
+            if (!p || age > f.life || tp > 25) { pa.setX(i, 0); return; }
+            const u = age / f.life;
+            pp.setXYZ(i, p.x, p.y, p.z); ps.setX(i, lerp(f.s0, f.s1, Math.sqrt(u)));
+            pa.setX(i, f.a * smooth(age / 25) * (1 - smooth((u - 0.6) / 0.4)) * (tp > 0 ? 1 - smooth(tp / 20) : 1));
+          });
+          pp.needsUpdate = ps.needsUpdate = pa.needsUpdate = true; }
         X.MU.spin.value = -(13.18 / 360) * (tp + T_HIT) / 86400;            // its own turn goes on: 13° a day
         X.MU.heat.value = smooth((ER + 0.6 - (z - RM)) / 0.6) * (tp < 0 ? 1 : 1.4);
         X.MU.earthLit.value = 0.4;

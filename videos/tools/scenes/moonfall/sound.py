@@ -1,5 +1,6 @@
-# The soundtrack of «Що, якби Місяць упав на Землю?»: no music for now (the author: later), only the astronaut's
-# breathing (breath.py, the film schedule) and the suit's soft caution tone in the last minutes before the impact.
+# The soundtrack of «Що, якби Місяць упав на Землю?»: no music for now (the author: later); the astronaut's breathing
+# (breath.py, the film schedule), the suit's soft caution tone in the last seconds before the impact, and the effects
+# (sfx.py: the roar into the air, the blow and its rumble).
 #   python3 scenes/moonfall/sound.py   ->  work/moonfall/audio.wav
 import os, sys
 import numpy as np
@@ -31,6 +32,10 @@ def main():
     bp = beeps(T)
     bp = signal.lfilter(*signal.iirpeak(1200, 2.0, fs=SR), bp) * 0.6 + bp * 0.5
     y = b + np.stack([bp, bp], axis=1)
+    sfx = os.path.join(WORK, 'sfx.wav')
+    if os.path.exists(sfx):
+        sr, fx = wavfile.read(sfx); fx = fx.astype(np.float32) / 32768
+        m = min(len(fx), len(y)); y[:m] += 1.6 * fx[:m]
     fade = np.clip((T - np.arange(len(y)) / SR) / 2.0, 0, 1)[:, None]          # out over the end card
     y *= fade
     y = y / max(1e-6, np.abs(y).max()) * 0.8

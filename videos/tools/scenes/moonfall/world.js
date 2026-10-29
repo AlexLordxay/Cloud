@@ -215,12 +215,25 @@
   // A unit sphere scaled to the Moon; its local +x looks at the Earth (the near side's middle). In the vertex shader it
   // is stretched along that axis by the tides (stretch: 0 = round) with its near end a little pointed.
   const MU = { map: { value: moonTex }, nrm: { value: moonNrm }, sun: U.sun, exposure: { value: 1.0 },
-    stretch: { value: 0 }, crack: { value: 0 }, heat: { value: 0 }, spin: { value: 0 }, earthLit: { value: 0.3 }, melt: { value: 0 },
+    stretch: { value: 0 }, crack: { value: 0 }, heat: { value: 0 }, spin: { value: 0 }, earthLit: { value: 0.3 }, melt: { value: 0 }, crumble: { value: 0 },
     toEarth: { value: new T.Vector3(-1, 0, 0) }, ER: { value: ER } };
   const moon = new T.Mesh(new T.SphereGeometry(1, 256, 128), new T.ShaderMaterial({ uniforms: MU, extensions: { derivatives: true },
-    vertexShader: `uniform float stretch; varying vec3 vP, vW, vN; varying vec2 vUv;
+    vertexShader: `uniform float stretch, crumble; varying vec3 vP, vW, vN; varying vec2 vUv; varying float vLift, vHole, vZone;
+      ${NOISE}
+      // the crust breaking up from the end that faces the Earth: plates (cells on the sphere) lifting off by different
+      // amounts, some already gone, leaving pits of hot rock — the zone spreads up from the tip as crumble grows
+      vec3 cellOf(vec3 q) { vec3 i = floor(q), best = i; float d1 = 9.0;
+        for (int x = -1; x <= 1; x++) for (int y = -1; y <= 1; y++) for (int z = -1; z <= 1; z++) {
+          vec3 c = i + vec3(x, y, z); vec3 o = c + vec3(h3(c), h3(c + 17.3), h3(c + 31.7)); float d = length(q - o);
+          if (d < d1) { d1 = d; best = c; } }
+        return best; }
       void main() {
         vec3 p = position;
+        float zone = crumble * smoothstep(0.78 - 0.55 * crumble, 1.0, p.x + 0.18 * fb(p * 3.0));
+        vec3 wq = p * 10.0 + 11.0 + 1.2 * vec3(fb(p * 2.0 + 1.0), fb(p * 2.0 + 5.0), fb(p * 2.0 + 9.0));
+        float hs = h3(cellOf(wq) + 3.1);
+        vLift = zone * (0.002 + 0.014 * hs * hs); vHole = zone * smoothstep(0.955 - 0.12 * zone, 0.99 - 0.1 * zone, hs); vZone = zone;
+        p *= 1.0 + vLift - 0.02 * vHole;
         float e = stretch, ax = p.x;
         p.x = ax * (1.0 + e) + e * 0.25 * pow(max(ax, 0.0), 4.0);
         p.yz *= inversesqrt(1.0 + e);
@@ -230,7 +243,7 @@
         gl_Position = projectionMatrix * viewMatrix * w;
       }`,
     fragmentShader: `uniform sampler2D map, nrm; uniform vec3 sun, toEarth; uniform float exposure, crack, heat, spin, earthLit, ER, melt;
-      varying vec3 vP, vW, vN; varying vec2 vUv;
+      varying vec3 vP, vW, vN; varying vec2 vUv; varying float vLift, vHole, vZone;
       ${NOISE}
       // cracks: the edges of cells on the sphere (3-D Voronoi), more and wider on the side facing the Earth
       vec2 vor(vec3 p) {
@@ -249,6 +262,8 @@
         vec3 E = normalize(cross(vec3(0.0, 1.0, 0.0), n) + 1e-5), N = cross(n, E);
         vec3 tn = texture2D(nrm, uv).rgb * 2.0 - 1.0;
         vec3 nb = normalize(E * tn.x * 1.4 + N * tn.y * 1.4 + n * tn.z);
+        // where the crust is breaking up the true surface (plates and the walls between them) sets the light
+        if (vZone > 0.001) { vec3 ng = normalize(cross(dFdx(vW), dFdy(vW))); if (dot(ng, V) < 0.0) ng = -ng; nb = normalize(mix(nb, ng, min(1.0, vZone * 3.0))); n = normalize(mix(n, ng, min(1.0, vZone * 3.0))); }
         vec3 alb = pow(texture2D(map, uv).rgb, vec3(2.2)) * 1.25;
         float mu0 = max(dot(nb, sun), 0.0), mu = max(dot(n, V), 0.0), m0 = max(dot(n, sun), 0.0);
         float ls = m0 / (m0 + mu + 1e-4) * 2.0;
@@ -269,6 +284,15 @@
           col += vec3(1.0, 0.33, 0.07) * cc * k * k * 0.35 * (0.5 + 0.5 * fb(vP * 20.0)) * (0.35 + 0.65 * smoothstep(0.0, 0.3, m0)) * (1.0 + 7.0 * melt);
           // going in: the whole body splits along its faults, the cracks running with molten rock, its lower half glowing
           if (melt > 0.0) col += vec3(1.0, 0.38, 0.09) * melt * smoothstep(-0.2, 0.9, side) * (0.25 + 0.5 * cc + 0.25 * fb(vP * 8.0));
+        }
+        if (vZone > 0.001) {
+          vec3 wq = vP * 10.0 + 11.0 + 1.2 * vec3(fb(vP * 2.0 + 1.0), fb(vP * 2.0 + 5.0), fb(vP * 2.0 + 9.0));
+          vec2 vc = vor(wq);
+          float gap = (1.0 - smoothstep(0.0, 0.02 + 0.035 * vZone, vc.y - vc.x)) * smoothstep(0.0, 0.3, vZone);
+          col *= 1.0 - 0.8 * gap;
+          col += vec3(1.0, 0.3, 0.06) * gap * (0.05 + 0.6 * melt);
+          // where a plate has gone: a pit of dark, hot rock
+          col = mix(col, vec3(0.25, 0.06, 0.02) + vec3(0.9, 0.25, 0.05) * (0.15 + 0.3 * fb(vP * 30.0) + 0.8 * melt), vHole);
         }
         // ploughing into the air: what is low glows white-hot, the rest orange
         float hgt = length(vW) - ER;
@@ -298,6 +322,7 @@
   const NR = 2000;
   // the rubble's light: dark lunar rock (albedo ~0.1, grey-brown, blotchy), dust-like shading (Lommel–Seeliger), and the
   // Moon's own shadow — what is on its night side stays dark; red-hot once in the air or when flung out of the impact
+  const MAXPT0 = () => renderer.getContext().getParameter(renderer.getContext().ALIASED_POINT_SIZE_RANGE)[1];
   const SHADOW = `uniform vec3 moonC; uniform float moonR;
     float moonShadow(vec3 P, vec3 s) { vec3 c = moonC - P; float t = dot(c, s); if (t < 0.0) return 1.0;
       return smoothstep(moonR * 0.96, moonR * 1.04, length(c - s * t)); }`;
@@ -344,6 +369,33 @@
         vec3 c = mix(vec3(0.62, 0.58, 0.54) * 0.45, vec3(1.0, 0.6, 0.25) * 3.0, vHot);
         gl_FragColor = vec4(c * exp(-r * r * 3.0) * vA * gain, 1.0); }` }));
   dust.frustumCulled = false; dust.renderOrder = 3; scene.add(dust);
+
+  // ---- the Moon's dust: soft billows of broken regolith rising off the crumbling end and trailing toward the Earth;
+  // big, soft and faint (no single specks), lit by the Sun, dark in the Moon's own shadow, glowing once in the air.
+  // Positions, sizes (units) and opacity are set per frame by shots.js.
+  const PN = 2600, pg = new T.BufferGeometry();
+  for (const [k, m] of [['position', 3], ['psize', 1], ['palpha', 1], ['seed', 1]]) pg.setAttribute(k, new T.BufferAttribute(new Float32Array(PN * m), m));
+  pg.attributes.seed.array.forEach((_, i, a) => { a[i] = rnd(); });
+  const puffs = new T.Points(pg, new T.ShaderMaterial({ uniforms: { sun: U.sun, ER: { value: ER }, moonC: RU.moonC, moonR: RU.moonR, scale: { value: H / 2 }, maxPt: { value: MAXPT0() } },
+    transparent: true, depthWrite: false,
+    vertexShader: `attribute float psize, palpha, seed; uniform float ER, scale, maxPt; uniform vec3 sun; varying float vA, vL, vHot, vSeed;
+      ${SHADOW}
+      void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
+        gl_PointSize = clamp(psize * scale / max(-mv.z, 1e-4), 1.0, maxPt); vA = palpha; vSeed = seed;
+        vL = moonShadow(position, sun); vHot = 1.0 - smoothstep(0.0, 0.25, length(position) - ER); }`,
+    fragmentShader: `varying float vA, vL, vHot, vSeed;
+      float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
+      void main() {
+        vec2 d = gl_PointCoord - 0.5;
+        float puff = 0.55 * n2(d * 4.0 + vSeed * 41.0) + 0.3 * n2(d * 9.0 - vSeed * 17.0) + 0.15 * n2(d * 19.0 + vSeed * 7.0);
+        float r = length(d) * 2.0 * (0.7 + 0.6 * puff); if (r > 1.0) discard;
+        float a = exp(-r * r * 2.6) * vA * (0.6 + 0.6 * puff);
+        vec3 c = vec3(0.30, 0.27, 0.23) * (0.06 + 0.94 * vL) * (0.8 + 0.4 * puff) + vec3(1.0, 0.45, 0.15) * vHot * 1.5;
+        gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), a);
+      }` }));
+  puffs.frustumCulled = false; puffs.renderOrder = 3; scene.add(puffs);
 
   // ---- fire and smoke particles laid out in advance with birth times (as in the dinosaur video) ----------------------
   const MAXPT = renderer.getContext().getParameter(renderer.getContext().ALIASED_POINT_SIZE_RANGE)[1];
@@ -473,7 +525,7 @@
   scene.add(stars);
 
   window.X = { T, D, W, H, ER, RM, renderer, scene, camera, earth, halo, U, moon, MU, rocks, dust, fx, streaks, fireball,
-    stars, starMat, dirLL, rnd, glow, RU };
+    stars, starMat, dirLL, rnd, glow, RU, puffs };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
