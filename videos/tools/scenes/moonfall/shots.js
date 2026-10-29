@@ -63,16 +63,21 @@
   // the sea is already one heap) — facts.py: 0.36 m today, x(d0/d)^3
   const zetaAt = z => Math.min(0.357 * Math.pow(384.4 / z, 3), 3200);
   // how stretched and cracked the Moon is: from ~30 000 km in, more as it nears (the real tearing starts ~9 500 km)
-  const stretchAt = z => 0.06 * smooth((30 - z) / 12) + 0.18 * smooth((18.5 - z) / 9) + 0.12 * smooth((10 - z) / 2);
+  const stretchAt = z => 0.06 * smooth((30 - z) / 12) + 0.18 * smooth((18.5 - z) / 9);
   const crackAt = z => smooth((30 - z) / 12) * 0.6 + smooth((18.5 - z) / 8) * 0.4;
 
   // ---- the rubble: shed from the near side from ~14 minutes before the touch, each on its own fall ------------------
   let RUB = null;
   function buildRubble(X) {
-    const rnd = X.rnd, n = X.dust.geometry.attributes.position.count, nr = 1500, nc = 80;
+    const rnd = X.rnd, n = X.dust.geometry.attributes.position.count, nr = 1600, nc = 26;
+    // the Moon's own frame (as in setup): +x toward the Earth; its surface stretched as in the vertex shader of world.js
+    const xa = MHAT.clone().negate(), ya = V(0, 1, 0).sub(xa.clone().multiplyScalar(xa.y)).normalize(), za = xa.clone().cross(ya);
+    const surface = (d, e) => { const lx = d.dot(xa), ly = d.dot(ya), lz = d.dot(za), k = 1 / Math.sqrt(1 + e);
+      return xa.clone().multiplyScalar(lx * (1 + e) + e * 0.25 * Math.pow(Math.max(lx, 0), 4)).addScaledVector(ya, ly * k).addScaledVector(za, lz * k).multiplyScalar(RM); };
     const out = { dust: [], rocks: [] };
     const toE = MHAT.clone().negate();
-    const make = (count, tFrom, tTo, dvMin, dvMax, list, pow) => {
+    // each piece is born on the surface (a rock half sunk in it, so it climbs out of the ground rather than appearing)
+    const make = (count, tFrom, tTo, dvMin, dvMax, list, pow, sizeOf) => {
       for (let i = 0; i < count; i++) {
         const u = Math.pow(rnd(), pow), tb = lerp(tFrom, tTo, u);                // birth (physical s): more of it later
         const z = moonZ(tb), e = stretchAt(z);
@@ -81,7 +86,8 @@
         d.normalize(); if (d.dot(toE) < 0) d.negate();
         d.lerp(toE, 0.55 * rnd()).normalize();
         if (d.dot(toE) < Math.cos(42 * D)) { i--; continue; }
-        const p = MHAT.clone().multiplyScalar(z).addScaledVector(d, RM * (1 + e * 0.9));
+        const size = sizeOf ? sizeOf() : 0;
+        const p = MHAT.clone().multiplyScalar(z).add(surface(d, e)).addScaledVector(d, -0.5 * size);
         const vm = -vAt(z * 1e6) / 1e6;                                         // the Moon's own speed (toward the Earth)
         const dv = lerp(dvMin, dvMax, rnd());
         const v = MHAT.clone().multiplyScalar(vm).addScaledVector(d, dv).add(V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(dv * 0.6));
@@ -96,17 +102,16 @@
           if (Math.round((t - tb) / dt) % 2 === 0) samples.push(p.x, p.y, p.z);
           if (p.length() < ER + 0.002) { hit = { t, dir: p.clone().normalize(), v: v.clone() }; break; }
         }
-        list.push({ tb, s: new Float32Array(samples), hit });
+        list.push({ tb, s: new Float32Array(samples), hit, size });
       }
     };
-    make(n, -14 * 60, -5, 0.00005, 0.0004, out.dust, 0.45);
-    make(nr, -8 * 60, -5, 0.00008, 0.0004, out.rocks, 0.6);
-    out.rocks.forEach(r => { r.size = 0.004 + 0.05 * Math.pow(rnd(), 4); });
-    // big blocks peeling off the side that faces the Earth in the last minutes: 80-250 km, slow to part
-    const big = []; make(nc, -4 * 60, -20, 0.00003, 0.00012, big, 0.8);
-    big.forEach(r => { r.size = 0.04 + 0.11 * Math.pow(rnd(), 1.5); });
+    make(n, -14 * 60, -5, 0.00008, 0.0006, out.dust, 0.45);
+    make(nr, -8 * 60, -5, 0.0001, 0.0009, out.rocks, 0.6, () => 0.004 + 0.026 * Math.pow(rnd(), 2.5));
+    // a few big blocks peeling off the side that faces the Earth in the last minutes: 30-70 km, slow to part
+    const big = []; make(nc, -150, -15, 0.00006, 0.0002, big, 0.8, () => 0.03 + 0.04 * Math.pow(rnd(), 1.5));
     out.rocks.push(...big);
-    out.rocks.forEach(r => { r.ax = V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); r.w = (rnd() - 0.5) * (r.size > 0.04 ? 0.004 : 0.02); });
+    out.rocks.forEach(r => { r.ax = V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); r.w = (rnd() - 0.5) * (r.size > 0.03 ? 0.003 : 0.012);
+      r.asp = V(0.65 + 0.6 * rnd(), 0.65 + 0.6 * rnd(), 0.65 + 0.6 * rnd()); });
     out.hits = out.rocks.filter(r => r.hit).map(r => ({ t: r.hit.t, dir: r.hit.dir, size: r.size })).sort((a, b) => a.t - b.t);
     // meteors: the small stuff that reaches the air (straight for its last ~120 km)
     const met = X.streaks(4000); let k = 0;
@@ -261,6 +266,7 @@
         X.moon.position.copy(MHAT).multiplyScalar(z);
         X.moon.visible = tp < 700;
         X.MU.stretch.value = stretchAt(zc);
+        X.RU.moonC.value.copy(X.moon.position); X.RU.moonR.value = RM * (1 + 0.3 * stretchAt(zc));
         X.MU.crack.value = crackAt(zc);
         X.MU.spin.value = -(13.18 / 360) * (tp + T_HIT) / 86400;            // its own turn goes on: 13° a day
         X.MU.heat.value = smooth((ER + 0.6 - (z - RM)) / 0.6) * (tp < 0 ? 1 : 1.4);
@@ -274,14 +280,14 @@
         RUB.dust.forEach((d, i) => {
           const p = posAt(d, tp);
           if (!p) { dal.setX(i, 0); return; }
-          dpos.setXYZ(i, p.x, p.y, p.z); dal.setX(i, smooth((tp - d.tb) / 20) * 0.8);
+          dpos.setXYZ(i, p.x, p.y, p.z); dal.setX(i, smooth((tp - d.tb) / 6) * 0.8);
         });
         dpos.needsUpdate = dal.needsUpdate = true;
         const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
         RUB.rocks.forEach((r, i) => {
           const p = posAt(r, tp);
           if (!p) { m4.makeScale(0, 0, 0); X.rocks.setMatrixAt(i, m4); return; }
-          q.setFromAxisAngle(r.ax, r.w * (tp - r.tb)); sc.setScalar(r.size * smooth((tp - r.tb) / 15));
+          q.setFromAxisAngle(r.ax, r.w * (tp - r.tb)); sc.copy(r.asp).multiplyScalar(r.size);
           m4.compose(p, q, sc); X.rocks.setMatrixAt(i, m4);
         });
         X.rocks.instanceMatrix.needsUpdate = true;

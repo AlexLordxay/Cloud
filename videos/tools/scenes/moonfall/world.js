@@ -283,26 +283,43 @@
 
   // ---- rubble: rocks big enough to have a shape (instanced), and a cloud of small stuff (points) -------------------
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // a broken piece of rock: a lumpy ball sliced by a few flat fracture planes (it was torn off something bigger)
   const rock = new T.IcosahedronGeometry(1, 3);
   { const p = rock.attributes.position, v = new T.Vector3();
+    const cuts = [[0.9, 0.2, 0.3, 0.62], [-0.3, 0.95, 0.1, 0.7], [0.2, -0.4, 0.9, 0.58], [-0.7, -0.5, -0.5, 0.75]].map(([x, y, z, c]) => [new T.Vector3(x, y, z).normalize(), c]);
     for (let i = 0; i < p.count; i++) {
       v.fromBufferAttribute(p, i);
-      const k = 1 + 0.28 * Math.sin(v.x * 3.1 + 1) * Math.sin(v.y * 2.7 + 2) + 0.18 * Math.sin(v.z * 5.3 + v.x * 2.1) + 0.08 * Math.sin(v.y * 11 + v.z * 9);
-      v.multiplyScalar(k); p.setXYZ(i, v.x, v.y, v.z);
+      const k = 1 + 0.22 * Math.sin(v.x * 3.1 + 1) * Math.sin(v.y * 2.7 + 2) + 0.14 * Math.sin(v.z * 5.3 + v.x * 2.1) + 0.07 * Math.sin(v.y * 11 + v.z * 9) + 0.04 * Math.sin(v.x * 19 + v.y * 17);
+      v.multiplyScalar(k);
+      for (const [pn, c] of cuts) { const d = v.dot(pn); if (d > c) v.addScaledVector(pn, c - d + 0.02 * Math.sin(v.x * 23 + v.z * 17)); }
+      p.setXYZ(i, v.x, v.y, v.z);
     }
     rock.computeVertexNormals(); }
   const NR = 2000;
-  const rocks = new T.InstancedMesh(rock, new T.ShaderMaterial({ uniforms: { sun: U.sun, glowK: { value: 0 }, ER: { value: ER } },
-    vertexShader: `attribute float tint, hot; varying vec3 vN, vW; varying float vT, vHot;
-      void main() { vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = w.xyz; vT = tint; vHot = hot;
+  // the rubble's light: dark lunar rock (albedo ~0.1, grey-brown, blotchy), dust-like shading (Lommel–Seeliger), and the
+  // Moon's own shadow — what is on its night side stays dark; red-hot once in the air or when flung out of the impact
+  const SHADOW = `uniform vec3 moonC; uniform float moonR;
+    float moonShadow(vec3 P, vec3 s) { vec3 c = moonC - P; float t = dot(c, s); if (t < 0.0) return 1.0;
+      return smoothstep(moonR * 0.96, moonR * 1.04, length(c - s * t)); }`;
+  const RU = { sun: U.sun, ER: { value: ER }, moonC: { value: new T.Vector3() }, moonR: { value: RM } };
+  const rocks = new T.InstancedMesh(rock, new T.ShaderMaterial({ uniforms: RU, extensions: { derivatives: true },
+    vertexShader: `attribute float tint, hot; varying vec3 vN, vW, vO; varying float vT, vHot;
+      void main() { vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = w.xyz; vO = position * (3.0 + tint * 5.0); vT = tint; vHot = hot;
         vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform vec3 sun; uniform float glowK, ER; varying vec3 vN, vW; varying float vT, vHot;
+    fragmentShader: `uniform vec3 sun; uniform float ER; varying vec3 vN, vW, vO; varying float vT, vHot;
+      ${NOISE}
+      ${SHADOW}
       void main() {
         vec3 n = normalize(vN), V = normalize(cameraPosition - vW);
+        // facets: the normal tilted by the rock's own roughness
+        vec3 g = vec3(fb(vO + 1.0), fb(vO + 7.0), fb(vO + 13.0));
+        n = normalize(n + 0.45 * (g - n * dot(g, n)));
         float m0 = max(dot(n, sun), 0.0), mu = max(dot(n, V), 0.0);
-        vec3 col = vec3(0.16, 0.15, 0.14) * vT * (m0 / (m0 + mu + 1e-4) * 1.4 + 0.5 * m0) * 2.4;
+        vec3 alb = vec3(0.115, 0.105, 0.095) * (0.75 + 0.5 * vT) * (0.7 + 0.6 * (fb(vO * 0.7) * 0.5 + 0.5));
+        float lit = (m0 / (m0 + mu + 1e-4) * 1.6 + 0.4 * m0) * moonShadow(vW, sun);
+        vec3 col = alb * lit * 2.6 + alb * 0.04;
         float hgt = length(vW) - ER, hh = 1.0 - smoothstep(0.0, 0.15, hgt);
-        col += vec3(1.0, 0.45, 0.12) * (glowK * 0.25 * pow(1.0 - mu, 2.0) + hh * 4.0) + vec3(1.0, 0.5, 0.15) * vHot * (0.6 + 1.4 * pow(1.0 - mu, 1.5));
+        col += vec3(1.0, 0.45, 0.12) * hh * 4.0 + vec3(1.0, 0.5, 0.15) * vHot * (0.6 + 1.4 * pow(1.0 - mu, 1.5)) * (0.6 + 0.8 * (fb(vO * 1.3) * 0.5 + 0.5));
         col = vec3(1.0) - exp(-col);
         gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
       }` }), NR);
@@ -313,16 +330,18 @@
   const ND = 16000;
   const dg = new T.BufferGeometry();
   dg.setAttribute('position', new T.BufferAttribute(new Float32Array(ND * 3), 3));
-  dg.setAttribute('sz', new T.BufferAttribute(new Float32Array(ND).map(() => 0.6 + 2.2 * Math.pow(rnd(), 3)), 1));
+  dg.setAttribute('sz', new T.BufferAttribute(new Float32Array(ND).map(() => 0.5 + 1.6 * Math.pow(rnd(), 3)), 1));
   dg.setAttribute('alpha', new T.BufferAttribute(new Float32Array(ND), 1));
-  const dust = new T.Points(dg, new T.ShaderMaterial({ uniforms: { sun: U.sun, gain: { value: 1 }, ER: { value: ER } },
+  const dust = new T.Points(dg, new T.ShaderMaterial({ uniforms: { sun: U.sun, gain: { value: 1 }, ER: { value: ER }, moonC: RU.moonC, moonR: RU.moonR },
     transparent: true, depthWrite: false, blending: T.AdditiveBlending,
-    vertexShader: `attribute float sz, alpha; uniform float ER; varying float vA, vHot;
+    vertexShader: `attribute float sz, alpha; uniform float ER; uniform vec3 sun; varying float vA, vHot;
+      ${SHADOW}
       void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
-        gl_PointSize = sz * clamp(8.0 / -mv.z, 0.8, 3.0); vA = alpha; vHot = 1.0 - smoothstep(0.0, 0.12, length(position) - ER); }`,
+        vHot = 1.0 - smoothstep(0.0, 0.12, length(position) - ER);
+        gl_PointSize = sz * clamp(8.0 / -mv.z, 0.8, 3.0); vA = alpha * max(moonShadow(position, sun), vHot); }`,
     fragmentShader: `uniform float gain; varying float vA, vHot;
       void main() { vec2 q = gl_PointCoord - 0.5; float r = length(q) * 2.0; if (r > 1.0) discard;
-        vec3 c = mix(vec3(0.75, 0.72, 0.68) * 0.5, vec3(1.0, 0.6, 0.25) * 3.0, vHot);
+        vec3 c = mix(vec3(0.62, 0.58, 0.54) * 0.45, vec3(1.0, 0.6, 0.25) * 3.0, vHot);
         gl_FragColor = vec4(c * exp(-r * r * 3.0) * vA * gain, 1.0); }` }));
   dust.frustumCulled = false; dust.renderOrder = 3; scene.add(dust);
 
@@ -454,7 +473,7 @@
   scene.add(stars);
 
   window.X = { T, D, W, H, ER, RM, renderer, scene, camera, earth, halo, U, moon, MU, rocks, dust, fx, streaks, fireball,
-    stars, starMat, dirLL, rnd, glow };
+    stars, starMat, dirLL, rnd, glow, RU };
   window.WORLD_READY = 1;
 
   window.startShot = async (name) => {
