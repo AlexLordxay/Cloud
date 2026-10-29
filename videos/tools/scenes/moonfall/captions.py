@@ -1,7 +1,7 @@
 # «Що, якби Місяць упав на Землю?»: no voice, so the words are few — the hook, four captions, the question; and what
 # a helmet would show: the time left, the distance to the Moon, the tide, a ring round the Moon while it is still a speck.
-# DRAW (compose.py calls it for every frame) also lays the inside of the helmet over the view: its dark rim, a faint
-# reflection on the visor, the flash of the impact and the gold sun visor coming down after it.
+# DRAW (compose.py calls it for every frame) also adds the flash of the impact. Nothing else is in front of the eyes:
+# the camera is the astronaut's head (the author: no hands, no helmet rim — just the view, turning as the head turns).
 # The per-frame numbers come from the render (work/moonfall/frames/f_NNNNN.json, written by render.js from shots.js).
 import json, math, os
 from PIL import Image, ImageDraw, ImageFilter
@@ -29,7 +29,7 @@ FPS, W, H = 30, 1080, 1920
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAMES = os.path.abspath(os.path.join(HERE, '../../work/moonfall/frames'))
 SUN = (243, 185, 100)
-_FONTS, _HELMET = {}, {}
+_FONTS = {}
 
 
 def _state(t):
@@ -64,30 +64,6 @@ def _font(g, file, size, w):
     return _FONTS[k]
 
 
-def _helmet():
-    # the visor seen from inside the helmet: the opening's rim curving across the top and bottom of the view (dark,
-    # soft), the seal round it catching the light (brighter toward the upper left), a faint sheen on the curved glass.
-    # Drawn bigger than the frame so it can lag a little behind the head's turns (the helmet sits on the suit).
-    if 'img' in _HELMET: return _HELMET['img']
-    import numpy as np
-    P = 80
-    y, x = np.mgrid[0:H + 2 * P, 0:W + 2 * P].astype(np.float32)
-    dx, dy = (x - P - W * 0.5) / (W * 0.60), (y - P - H * 0.485) / (H * 0.535)
-    r = (np.abs(dx) ** 2.4 + np.abs(dy) ** 2.4) ** (1 / 2.4)
-    dark = np.clip((r - 0.90) / 0.13, 0, 1) ** 1.3 * 0.96
-    lightside = np.clip(0.55 - 0.45 * (dx * 0.6 + dy * 0.8), 0.15, 1.0)
-    seal = np.exp(-((r - 0.955) / 0.012) ** 2) * 0.22 * lightside
-    sheen = np.exp(-(((x - P) - (y - P) * 0.42 - W * 0.12) / (W * 0.20)) ** 2) * 0.03 * np.clip(1 - (y - P) / (H * 0.75), 0, 1)
-    arc = np.exp(-((r - 0.80) / 0.035) ** 2) * 0.025 * np.clip(-dy, 0, 1)
-    glow = seal + sheen + arc
-    a = np.clip(dark + glow, 0, 1)
-    c = np.where(a > 1e-4, 255 * glow / np.maximum(a, 1e-4), 0)
-    rgb = np.dstack([c * 0.96, c * 0.92, c * 0.86])
-    im = Image.fromarray(np.dstack([np.clip(rgb, 0, 255), a * 255]).astype(np.uint8), 'RGBA')
-    _HELMET['img'] = im
-    return im
-
-
 def DRAW(img, t, g):
     st = _state(t)
     d = ImageDraw.Draw(img)
@@ -110,26 +86,6 @@ def DRAW(img, t, g):
         if fl > 0.01: img.alpha_composite(Image.new('RGBA', img.size, (255, 246, 230, int(255 * fl))))
     if 1.62 < t < 1.95:                                            # the rewind starts with a blink
         img.alpha_composite(Image.new('RGBA', img.size, (255, 255, 255, int(150 * _fade(t, 1.62, 1.95, 0.12)))))
-    # the gold sun visor slides down over the glass after the flash: amber, a little darker, its edge passing down
-    gold = _sm((t - 33.75) / 0.75)
-    if gold > 0:
-        edge = gold * H * 1.08
-        mask = Image.new('L', (1, H))
-        mask.putdata([int(255 * min(1.0, max(0.0, (edge - yy) / 60.0))) for yy in range(H)])
-        mask = mask.resize(img.size)
-        gl = Image.new('RGBA', img.size, (105, 62, 12, 80)); gl.putalpha(mask.point(lambda v: v * 80 // 255))
-        img.alpha_composite(gl)
-        if gold < 1:
-            ln = Image.new('RGBA', img.size, (0, 0, 0, 0))
-            ImageDraw.Draw(ln).rectangle((0, edge - 3, W, edge + 3), fill=(255, 220, 160, int(90 * (1 - gold))))
-            img.alpha_composite(ln.filter(ImageFilter.GaussianBlur(3)))
-    # the helmet's rim, lagging a little behind the head's turns
-    ox = oy = 0
-    if st:
-        ox = int(max(-60, min(60, st.get('yawRate', 0) * 1.6)))
-        oy = int(max(-60, min(60, st.get('pitchRate', 0) * 1.6)))
-    hm = _helmet()
-    img.alpha_composite(hm.crop((80 - ox, 80 - oy, 80 - ox + W, 80 - oy + H)))
     # the readouts, up top under the logo
     if st:
         tp = st.get('tp', 0)
@@ -142,7 +98,7 @@ def DRAW(img, t, g):
             if tp < 0 and t > 2.9:
                 draw(img, f"до Місяця {_num(st['z'] * 1000)} км", _font(g, 'Commissioner.ttf', 32, 500), 410, al, fill=(220, 226, 238))
             if 1.7 < t < 3.0:
-                draw(img, '◀◀', g['ImageFont'].truetype(g['F_STAR'], 40), 470, _fade(t, 1.7, 3.0, 0.15), fill=(255, 255, 255))
+                draw(img, '◀◀', g['ImageFont'].truetype(g['F_STAR'], 40), 410, _fade(t, 1.7, 3.0, 0.15), fill=(255, 255, 255))
         za = _fade(t, 10.4, 23.4, 0.5)
         if za > 0 and st.get('zeta', 0) > 0.3:
             z = st['zeta']

@@ -5,7 +5,7 @@ import math, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import facts as F
 
-ALT, BETA = 1.0e6, math.radians(40)            # the astronaut: 1 000 km up, 40° of arc from the point under the Moon
+ALT, BETA = 0.6e6, math.radians(45)            # the astronaut: 600 km up, 45° of arc from the point under the Moon
 RA = F.RE + ALT
 A = (RA * math.sin(BETA), RA * math.cos(BETA))  # the Moon falls along +y (Earth's centre at the origin)
 UP = (math.sin(BETA), math.cos(BETA))
@@ -13,8 +13,9 @@ LIMB_DIP = math.degrees(math.acos(F.RE / RA))   # the horizon lies this far belo
 
 # video second -> seconds left before the Moon touches the Earth ("T-minus"); linear between keys, log where "log"
 KEYS = [  # (video s, T-minus s, mode of the span that starts here)
-    (0.0, 720, 'lin'), (1.7, 720, 'log'), (3.0, F.T_HIT - 600, 'lin'),        # cold open at T-12 min, then the rewind to the stop
+    (0.0, 180, 'lin'), (1.7, 180, 'log'), (3.0, F.T_HIT - 600, 'lin'),        # cold open at T-3 min, then the rewind to the stop
     (9.5, 12 * 3600, 'log'), (15.5, 1.5 * 3600, 'log'), (23.0, 22.5 * 60, 'log'), (31.0, 180, 'log'), (33.5, 1.0, 'lin'), (46.0, 1.0, 'lin'),
+    # (the same keys as shots.js KEYS; after the touch shots.js runs its own AFTER clock)
 ]
 
 

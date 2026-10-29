@@ -181,8 +181,8 @@
     [21.5, 1.4, 'm', 0, -8],
     [26.0, 2.5, 'm', 0, -5],
     [31.0, 1.5, 'm', 0, -3],
-    [33.5, 0.28, 'a', -38, -42],    // the flash: the head jerks away, down to the left
-    [34.7, 1.3, 'm', 4, -3],        // and comes back to look
+    [33.5, 0.7, 'a', -34, -38],     // the flash: the head turns away, down to the left
+    [34.9, 1.5, 'm', 4, -3],        // and comes back to look
     [38.4, 3.2, 'a', -6, -33],      // down at the burning ground
     [41.6, 2.2, 'a', 9, -29],
   ];
@@ -200,13 +200,12 @@
     const u = quint((tau - HEAD[k][0]) / Math.max(HEAD[k][1], 1e-3)), was = poseAt(k - 1, tau, tp);
     return { yaw: lerp(was.yaw, now.yaw, u), pitch: lerp(was.pitch, now.pitch, u) };
   }
-  // the head's small movements on top: a slow drift, the breath, a tremor that grows near the end, a jolt at the flash
+  // the head's small movements on top, all slow and smooth: a drift, the breath (no shaking: the author wants the view
+  // to turn smoothly with the head)
   function headShake(tau) {
-    const br = 0.22 * Math.sin(2 * Math.PI * tau / (tau < 20 ? 4.2 : tau < 30 ? 2.6 : 1.8));
-    const drift = (a, b, c) => 0.45 * Math.sin(tau * a + 1) + 0.25 * Math.sin(tau * b + 2) + 0.12 * Math.sin(tau * c + 3);
-    const tr = (tau > 24 && tau < 38.5 ? 0.22 * smooth((tau - 24) / 9) : 0) + (tau > 33.5 && tau < 36 ? 0.8 * Math.exp(-(tau - 33.5) * 1.6) : 0);
-    const j = k => Math.sin(tau * 37.1 * k + k) * 0.6 + Math.sin(tau * 23.3 * k + 2 * k) * 0.4;
-    return { dp: br + drift(0.31, 0.83, 1.9) + tr * j(1), dy: drift(0.23, 0.61, 1.7) + tr * j(1.7), dr: 0.3 * Math.sin(tau * 0.21) + tr * j(2.3) * 0.5 };
+    const br = 0.18 * Math.sin(2 * Math.PI * tau / (tau < 20 ? 4.2 : tau < 30 ? 3.0 : 2.4));
+    const drift = (a, b) => 0.4 * Math.sin(tau * a + 1) + 0.2 * Math.sin(tau * b + 2);
+    return { dp: br + drift(0.31, 0.71), dy: drift(0.23, 0.53), dr: 0.3 * Math.sin(tau * 0.21) };
   }
 
   const SHOTS = {
