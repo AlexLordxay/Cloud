@@ -3,6 +3,7 @@
 #   1  calm, then quickening as the Moon grows; a held breath before the brightening; one long exhale
 #   2  slow and deep (awe): in 2.4 s, out 3.2 s, long pauses
 #   3  shallow and fast, rising; breath caught (held) in the hush; one shaky exhale
+#   0  the film itself (46 s), timed to the shots: python3 scenes/moonfall/breath.py 0 -> work/moonfall/breath_0.wav
 #   python3 scenes/moonfall/breath.py [1 2 3]      ->  work/moonfall/breath_<variant>.wav  (stereo, 44.1 kHz)
 import os, sys
 import numpy as np
@@ -63,7 +64,27 @@ def schedule(variant):
         t += din + gap1
         ev.append(('out', t, dout, 0.8 * a, 750 * lo, 380 * lo))
         return t + dout + gap2
-    if variant == 1:
+    if variant == 0:
+        # the film (46 s, timed to shots.js): a gasp at the hook; the rewind as a breath drawn backwards; calm, then
+        # quicker and shakier as the Moon comes; a gasp and the breath held through the impact; a long shaky exhale;
+        # slow, tired breaths at the end
+        ev.append(('in', 0.05, 0.75, 0.75, 1400, 3000)); clicks.append(0.05)
+        ev.append(('out', 1.72, 1.2, 0.55, 700, 380, 'rev'))
+        t = 3.2
+        while t < 31.0:
+            P = float(np.interp(t, [3, 15, 23, 29, 31], [4.4, 3.4, 2.4, 1.6, 1.2]))
+            a = float(np.interp(t, [3, 23, 31], [0.85, 1.0, 1.1])); hi = float(np.interp(t, [3, 23, 31], [1.0, 1.1, 1.22]))
+            ev.append(('in', t, 0.4 * P, 0.55 * a, 1100 * hi, 2600 * hi, 'shaky' if t > 24 else ''))
+            if t < 24: clicks.append(t)
+            ev.append(('out', t + 0.43 * P, 0.5 * P, 0.8 * a, 750 * hi, 380 * hi, 'shaky' if t > 24 else ''))
+            t += P
+        while t < 32.6:
+            ev.append(('in', t, 0.32, 0.6, 1500, 3200, 'shaky')); ev.append(('out', t + 0.35, 0.42, 0.75, 900, 450, 'shaky')); t += 0.85
+        ev.append(('in', 32.75, 0.55, 0.85, 1600, 3400))                        # the gasp; then nothing till it is over
+        ev.append(('out', 36.6, 2.6, 0.7, 650, 320, 'shaky'))
+        ev.append(('in', 39.6, 1.6, 0.5, 950, 2100)); ev.append(('out', 41.4, 2.4, 0.6, 600, 330))
+        ev.append(('in', 44.0, 1.3, 0.35, 900, 2000))
+    elif variant == 1:
         t = 0.6
         for din, dout, a in [(1.5, 2.3, 0.9), (1.4, 2.0, 0.95), (1.2, 1.7, 1.0)]:
             t = cycle(t, din, dout, a=a)
@@ -90,8 +111,12 @@ def render(variant, T=16.0, seed=7):
         tr = band_tracks(rng, n + 6 * SR)
         ev, clicks = schedule(variant)
         y = np.zeros(n + 6 * SR, np.float32)
-        for kind, t0, dur, lvl, fc0, fc1 in ev:
+        for e in ev:
+            kind, t0, dur, lvl, fc0, fc1 = e[:6]; fxk = e[6] if len(e) > 6 else ''
             seg = shape(tr, t0 + 0.37 * ch, dur, fc0, fc1, inhale_env if kind == 'in' else exhale_env, lvl)
+            if fxk == 'rev': seg = seg[::-1].copy()
+            if fxk == 'shaky':
+                seg *= (0.8 + 0.2 * np.sin(2 * np.pi * 7.0 * np.arange(len(seg)) / SR + t0 * 5)).astype(np.float32)
             if variant == 3 and t0 > 13.9 and kind == 'out':                      # shaky exhale
                 seg *= (0.75 + 0.25 * np.sin(2 * np.pi * 6.2 * np.arange(len(seg)) / SR)).astype(np.float32)
             if variant == 3 and kind == 'in':                                     # raspy: soft-clip the edges
@@ -124,6 +149,6 @@ def render(variant, T=16.0, seed=7):
 if __name__ == '__main__':
     os.makedirs(WORK, exist_ok=True)
     for v in [int(a) for a in sys.argv[1:]] or [1, 2, 3]:
-        y = render(v)
+        y = render(v, T=46.5 if v == 0 else 16.0)
         wavfile.write(os.path.join(WORK, f'breath_{v}.wav'), SR, (y * 32767).astype(np.int16))
         print(f'breath_{v}.wav written, peak {np.abs(y).max():.2f}')

@@ -226,7 +226,7 @@ def frame(sc, i, src):
     for a, b, kind, text in sc.CAPTIONS:
         al = ease(fade(t, a, b, getattr(sc, 'CAP_FADE', 0.35)))
         if al <= 0: continue
-        if kind == 'hook': draw_block(img, text, hook_font(sc), 520, al, spacing=18)
+        if kind == 'hook': draw_block(img, text, hook_font(sc), getattr(sc, 'HOOK_Y', 520), al, spacing=18)   # HOOK_Y: its height
         else: draw_block(img, text, f_cap, kind if isinstance(kind, (int, float)) else 1400, al)   # a number: own height (rows)
     # SUBSCRIBE_AT in captions.py: a small subscribe button mid-video (top left, clear of the Shorts buttons), 2.4 s
     sub = getattr(sc, 'SUBSCRIBE_AT', None)
