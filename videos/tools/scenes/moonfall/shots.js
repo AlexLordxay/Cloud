@@ -25,7 +25,7 @@
   // ---- the clock: video second -> physical second (negative = before the touch) ------------------------------------
   const KEYS = [[0.0, 180, 'lin'], [1.7, 180, 'log'], [3.0, T_HIT - 600, 'lin'], [9.5, 12 * 3600, 'log'], [15.5, 1.5 * 3600, 'log'],
     [23.0, 22.5 * 60, 'log'], [31.0, 180, 'log'], [33.5, 0.5, 'end']];
-  const AFTER = [[33.5, 0], [35.0, 40], [38.5, 600], [43.5, 5400], [46.0, 14400]];
+  const AFTER = [[33.5, 0], [36.5, 90], [39.5, 900], [43.5, 5400], [46.0, 14400]];   // slow at first: the Moon going in
   function tPhys(tau) {
     if (tau >= 33.5) {
       for (let i = 0; i < AFTER.length - 1; i++) { const [a, ta] = AFTER[i], [b, tb] = AFTER[i + 1]; if (tau <= b) return lerp(ta, tb, (tau - a) / (b - a)); }
@@ -69,7 +69,7 @@
   // ---- the rubble: shed from the near side from ~14 minutes before the touch, each on its own fall ------------------
   let RUB = null;
   function buildRubble(X) {
-    const rnd = X.rnd, n = X.dust.geometry.attributes.position.count, nr = 700;
+    const rnd = X.rnd, n = X.dust.geometry.attributes.position.count, nr = 1500, nc = 80;
     const out = { dust: [], rocks: [] };
     const toE = MHAT.clone().negate();
     const make = (count, tFrom, tTo, dvMin, dvMax, list, pow) => {
@@ -100,8 +100,13 @@
       }
     };
     make(n, -14 * 60, -5, 0.00005, 0.0004, out.dust, 0.45);
-    make(nr, -7 * 60, -5, 0.00008, 0.0003, out.rocks, 0.6);
-    out.rocks.forEach(r => { r.size = 0.004 + 0.05 * Math.pow(rnd(), 4); r.ax = V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); r.w = (rnd() - 0.5) * 0.02; });
+    make(nr, -8 * 60, -5, 0.00008, 0.0004, out.rocks, 0.6);
+    out.rocks.forEach(r => { r.size = 0.004 + 0.05 * Math.pow(rnd(), 4); });
+    // big blocks peeling off the side that faces the Earth in the last minutes: 80-250 km, slow to part
+    const big = []; make(nc, -4 * 60, -20, 0.00003, 0.00012, big, 0.8);
+    big.forEach(r => { r.size = 0.04 + 0.11 * Math.pow(rnd(), 1.5); });
+    out.rocks.push(...big);
+    out.rocks.forEach(r => { r.ax = V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(); r.w = (rnd() - 0.5) * (r.size > 0.04 ? 0.004 : 0.02); });
     out.hits = out.rocks.filter(r => r.hit).map(r => ({ t: r.hit.t, dir: r.hit.dir, size: r.size })).sort((a, b) => a.t - b.t);
     // meteors: the small stuff that reaches the air (straight for its last ~120 km)
     const met = X.streaks(4000); let k = 0;
@@ -121,46 +126,67 @@
     return V(lerp(s[i * 3], s[i * 3 + 3], k), lerp(s[i * 3 + 1], s[i * 3 + 4], k), lerp(s[i * 3 + 2], s[i * 3 + 5], k));
   };
 
-  // ---- the impact's plume: glowing rock thrown up round the place where the Moon goes in ------------------------------
+  // ---- the impact: a crown of molten rock thrown up round the rim where the Moon goes in --------------------------------
+  // sparks: tens of thousands of glowing droplets on ballistic arcs (cooling white -> orange -> dark red); streaks: the
+  // fastest ejecta shooting out in straight bright trails; a glow for the body of the crown; dark smoke and dust rising
+  // behind; blocks of the Moon itself broken off and flung out, glowing; meteors as it all comes down round the world
   function buildPlume(X) {
-    const rnd = X.rnd, g = X.fx(5000, true), s = X.fx(2500, false);
-    const up = MHAT.clone(), e1 = V(0, 1, 0).cross(up).normalize(), e2 = up.clone().cross(e1);
-    for (let i = 0; i < g.n; i++) {
-      const az = rnd() * 2 * Math.PI, ring = 0.2 + 0.12 * rnd();                // round the rim where the Moon cuts in
+    const rnd = X.rnd, up = MHAT.clone(), e1 = V(0, 1, 0).cross(up).normalize(), e2 = up.clone().cross(e1);
+    const onRim = (ring, alt) => { const az = rnd() * 2 * Math.PI;
       const at = up.clone().addScaledVector(e1, Math.cos(az) * ring).addScaledVector(e2, Math.sin(az) * ring).normalize();
-      const p = at.clone().multiplyScalar(ER + 0.02);
-      const out = at.clone().sub(up.clone().multiplyScalar(at.dot(up))).normalize();
-      const sp = 0.002 + 0.008 * Math.pow(rnd(), 1.5);
-      const v = at.clone().multiplyScalar(sp * (0.6 + 0.4 * rnd())).addScaledVector(out, sp * 0.7 * rnd());
-      g.set(i, p, v, Math.pow(rnd(), 2.2) * 900, 300 + 900 * rnd(), 0.08 + 0.1 * rnd(), 0.25 + 0.5 * rnd(), rnd());
+      return { at, p: at.clone().multiplyScalar(ER + alt), out: at.clone().sub(up.clone().multiplyScalar(at.dot(up))).normalize() }; };
+    const sparks = X.fx(26000, true);
+    for (let i = 0; i < sparks.n; i++) {
+      const r = onRim(0.2 + 0.1 * rnd(), 0.01 + 0.06 * rnd()), sp = 0.0015 + 0.0085 * Math.pow(rnd(), 1.4), ang = 0.35 + 0.9 * rnd();
+      const v = r.at.clone().multiplyScalar(sp * Math.sin(ang)).addScaledVector(r.out, sp * Math.cos(ang));
+      sparks.set(i, r.p, v, Math.pow(rnd(), 2.0) * 420, 140 + 600 * rnd(), 0.006 + 0.012 * rnd(), 0.018 + 0.05 * rnd(), rnd());
     }
-    for (let i = 0; i < s.n; i++) {
-      const az = rnd() * 2 * Math.PI, ring = 0.15 + 0.3 * rnd();
-      const at = up.clone().addScaledVector(e1, Math.cos(az) * ring).addScaledVector(e2, Math.sin(az) * ring).normalize();
-      const v = at.clone().multiplyScalar(0.0015 + 0.003 * rnd());
-      s.set(i, at.clone().multiplyScalar(ER + 0.05), v, 30 + Math.pow(rnd(), 1.5) * 1500, 1500 + 3000 * rnd(), 0.15, 0.7 + 0.6 * rnd(), rnd());
+    sparks.u.heat.value = 1.7; sparks.u.grav.value.copy(up).multiplyScalar(-6e-6); sparks.done();
+    const body = X.fx(2600, true);
+    for (let i = 0; i < body.n; i++) {
+      const r = onRim(0.18 + 0.12 * rnd(), 0.02), sp = 0.0008 + 0.004 * rnd();
+      const v = r.at.clone().multiplyScalar(sp).addScaledVector(r.out, sp * 0.6 * rnd());
+      body.set(i, r.p, v, Math.pow(rnd(), 1.6) * 500, 300 + 700 * rnd(), 0.05 + 0.06 * rnd(), 0.12 + 0.2 * rnd(), rnd());
     }
-    g.u.heat.value = 2.2; g.u.grav.value.copy(up).multiplyScalar(-4e-6); s.u.grav.value.copy(up).multiplyScalar(-2e-6);
-    g.done(); s.done();
+    body.u.heat.value = 2.6; body.u.grav.value.copy(up).multiplyScalar(-3e-6); body.u.gain.value = 0.45; body.done();
+    const smoke = X.fx(3200, false);
+    for (let i = 0; i < smoke.n; i++) {
+      const r = onRim(0.12 + 0.35 * rnd(), 0.05 + 0.1 * rnd()), v = r.at.clone().multiplyScalar(0.0006 + 0.0018 * rnd()).addScaledVector(r.out, 0.001 * rnd());
+      smoke.set(i, r.p, v, 15 + Math.pow(rnd(), 1.5) * 1500, 1200 + 3000 * rnd(), 0.15, 0.6 + 0.8 * rnd(), rnd());
+    }
+    smoke.u.smoke.value.setRGB(0.09, 0.065, 0.05); smoke.u.grav.value.copy(up).multiplyScalar(-1e-6); smoke.done();
+    const jets = X.streaks(5000);
+    for (let i = 0; i < jets.n; i++) {
+      const r = onRim(0.2 + 0.09 * rnd(), 0.02), sp = 0.005 + 0.011 * rnd(), ang = 0.3 + 0.9 * rnd();
+      const v = r.at.clone().multiplyScalar(sp * Math.sin(ang)).addScaledVector(r.out, sp * Math.cos(ang));
+      jets.set(i, r.p, v, Math.pow(rnd(), 2.5) * 160, 25 + 60 * rnd(), 0.12 + 0.35 * rnd(), 0.8 + 1.0 * rnd());
+    }
+    jets.u.width.value = 1.3; jets.done();
+    // blocks of the Moon flung out as it breaks against the Earth (instances after the falling rubble)
+    const flung = [];
+    for (let i = 0; i < 360; i++) {
+      const r = onRim(0.16 + 0.12 * rnd(), 0.15 + 1.2 * rnd()), sp = 0.0008 + 0.004 * rnd();
+      flung.push({ p: r.p, v: r.at.clone().multiplyScalar(sp * (0.4 + 0.6 * rnd())).addScaledVector(r.out, sp * (0.5 + rnd())), tb: Math.pow(rnd(), 1.5) * 150,
+        size: 0.006 + 0.05 * Math.pow(rnd(), 2.5), ax: V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize(), w: (rnd() - 0.5) * 0.03 });
+    }
     // glows round the rim where the Moon cuts in (the near ones sit right on our horizon)
     const rim = [];
-    for (let i = 0; i < 10; i++) {
-      const az = i / 10 * 2 * Math.PI, at = up.clone().addScaledVector(e1, Math.cos(az) * 0.27).addScaledVector(e2, Math.sin(az) * 0.27).normalize();
+    for (let i = 0; i < 12; i++) {
+      const az = i / 12 * 2 * Math.PI, at = up.clone().addScaledVector(e1, Math.cos(az) * 0.27).addScaledVector(e2, Math.sin(az) * 0.27).normalize();
       rim.push({ at, spr: X.glow([[0, 'rgba(255,250,235,1)'], [0.25, 'rgba(255,215,150,0.7)'], [0.6, 'rgba(255,130,50,0.18)'], [1, 'rgba(255,90,30,0)']]), ph: rnd() });
     }
     // the ejecta coming back down all over the world: meteors over the ground ahead of us, as the front passes
-    const met = X.streaks(6000);
+    const met = X.streaks(9000);
     for (let i = 0; i < met.n; i++) {
-      const ang = 0.2 + 1.1 * Math.sqrt(rnd()), az = rnd() * 2 * Math.PI;              // from the impact out past us
+      const ang = 0.2 + 1.1 * Math.sqrt(rnd()), az = rnd() * 2 * Math.PI;
       const at = up.clone().multiplyScalar(Math.cos(ang)).addScaledVector(e1, Math.sin(ang) * Math.cos(az)).addScaledVector(e2, Math.sin(ang) * Math.sin(az)).normalize();
-      const tb = 600 * Math.pow(ang / 0.785, 1.8) * (0.6 + 0.8 * rnd()) + 20;           // when the front gets there
+      const tb = 700 * Math.pow(ang / 0.785, 1.8) * (0.6 + 0.8 * rnd()) + 40 + 4200 * Math.pow(rnd(), 1.6);   // it keeps coming down for hours
       const out = at.clone().sub(up.clone().multiplyScalar(at.dot(up))).normalize();
       const v = at.clone().multiplyScalar(-0.006 - 0.004 * rnd()).addScaledVector(out, 0.004 * rnd());
-      const life = 0.13 / v.length();
-      met.set(i, at.clone().multiplyScalar(ER + 0.13), v, tb, life, 0.06 + 0.1 * rnd(), 0.5 + 1.0 * rnd());
+      met.set(i, at.clone().multiplyScalar(ER + 0.13), v, tb, 0.13 / v.length(), 0.08 + 0.14 * rnd(), 0.8 + 1.2 * rnd());
     }
     met.done();
-    return { g, s, rim, met };
+    return { sparks, body, smoke, jets, flung, rim, met, fx: [sparks, body, smoke] };
   }
 
   // ---- the camera: our head, inside the helmet ------------------------------------------------------------------------
@@ -181,10 +207,10 @@
     [21.5, 1.4, 'm', 0, -8],
     [26.0, 2.5, 'm', 0, -5],
     [31.0, 1.5, 'm', 0, -3],
-    [33.5, 0.7, 'a', -34, -38],     // the flash: the head turns away, down to the left
-    [34.9, 1.5, 'm', 4, -3],        // and comes back to look
-    [38.4, 3.2, 'a', -6, -33],      // down at the burning ground
-    [41.6, 2.2, 'a', 9, -29],
+    [33.5, 0.45, 'm', -7, -7],      // the flash: the head flinches a little
+    [34.3, 1.3, 'm', 2, -2],        // and looks straight at it: the Moon going in
+    [39.4, 3.2, 'a', -6, -33],      // down at the burning ground
+    [42.2, 1.8, 'a', 9, -29],
   ];
   const quint = u => { u = clamp(u, 0, 1); return u * u * u * (u * (u * 6 - 15) + 10); };
   function poseAt(k, tau, tp) {
@@ -219,7 +245,6 @@
         const xa = MHAT.clone().negate(), ya = V(0, 1, 0).sub(xa.clone().multiplyScalar(xa.y)).normalize(), za = xa.clone().cross(ya);
         X.moon.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(xa, ya, za));
         X.MU.toEarth.value.set(1, 0, 0);
-        X.rocks.count = 700;
       },
       frame(X, tau) {
         const tp = tPhys(tau);
@@ -271,10 +296,24 @@
         X.U.fire.value.set(MHAT.x, MHAT.y, MHAT.z, tp < 0 ? 0 : Math.min(3.2, 0.03 + 0.62 * Math.pow(ta / 600, 0.55)));
         X.U.fire2.value.set(tp < 0 ? 0 : smooth(ta / 20), tp < 0 ? 0 : smooth(ta / 60), tp < 0 ? 0 : smooth(ta / 2400), tp < 0 ? 0 : smooth((ta - 100) / 1500) * 0.8);
         X.U.lights.value = 1 - smooth((ta - 200) / 900);
-        X.plume.g.points.visible = X.plume.s.points.visible = tp > 0;
-        X.plume.g.u.time.value = X.plume.s.u.time.value = ta;
-        X.plume.g.u.gain.value = 0.9 * (0.35 + 0.65 * Math.exp(-ta / 400));
+        for (const f of X.plume.fx) { f.points.visible = tp > 0; f.u.time.value = ta; }
+        X.plume.sparks.u.gain.value = 1.1 * (0.4 + 0.6 * Math.exp(-ta / 300));
+        X.plume.jets.mesh.visible = tp > 0; X.plume.jets.u.time.value = ta;
         X.plume.met.mesh.visible = tp > 0; X.plume.met.u.time.value = ta;
+        // blocks flung out of the impact: after the falling rubble in the same instances, glowing as they fly
+        { const base = RUB.rocks.length, hot = X.rocks.geometry.attributes.hot, g = MHAT.clone().multiplyScalar(-6e-6);
+          X.plume.flung.forEach((f, i) => {
+            const age = ta - f.tb;
+            if (tp <= 0 || age < 0) { m4.makeScale(0, 0, 0); X.rocks.setMatrixAt(base + i, m4); hot.setX(base + i, 0); return; }
+            const p = f.p.clone().addScaledVector(f.v, age).addScaledVector(g, 0.5 * age * age);
+            if (p.length() < ER) { m4.makeScale(0, 0, 0); X.rocks.setMatrixAt(base + i, m4); hot.setX(base + i, 0); return; }
+            q.setFromAxisAngle(f.ax, f.w * age); sc.setScalar(f.size * smooth(age / 4)); m4.compose(p, q, sc); X.rocks.setMatrixAt(base + i, m4);
+            hot.setX(base + i, 2.2 * Math.exp(-age / 200));
+          });
+          hot.needsUpdate = true; X.rocks.count = base + X.plume.flung.length; }
+        X.U.shk.value.set(tp < 0 ? 0 : 0.05 + 0.9 * Math.pow(ta / 300, 0.6), tp < 0 ? 0 : Math.exp(-ta / 400));
+        X.U.pre.value.set(tp < 0 ? 1.4 * smooth((tp + 150) / 150) : 1.4 * Math.exp(-ta / 30), 0.35);
+        X.MU.melt.value = tp < 0 ? 0 : smooth(ta / 25);
         for (const r of X.plume.rim) {
           r.spr.visible = tp > -2;
           const k = smooth((tp + 2) / 3) * (0.25 + 0.75 * Math.exp(-ta / 60)) * Math.exp(-ta / 500) * (0.85 + 0.15 * Math.sin(ta * 3 + r.ph * 6));
@@ -295,7 +334,7 @@
         const yawRate = (h1.yaw - h0.yaw) / 0.08, pitchRate = (h1.pitch - h0.pitch) / 0.08;
         const dir = dirFrom(hd.pitch + hs2.dp, hd.yaw + hs2.dy);
         // the lens: wider while we look round, narrowing on the Moon as it comes
-        const fov = tau < 1.7 ? 85 : tau < 3.0 ? lerp(85, 100, smooth((tau - 1.7) / 1.3)) : tau < 22 ? 100 : tau < 33.5 ? lerp(100, 72, smooth((tau - 22) / 11)) : lerp(72, 92, smooth((tau - 37) / 5));
+        const fov = tau < 1.7 ? 85 : tau < 3.0 ? lerp(85, 100, smooth((tau - 1.7) / 1.3)) : tau < 22 ? 100 : tau < 33.5 ? lerp(100, 72, smooth((tau - 22) / 11)) : lerp(72, 92, smooth((tau - 38.5) / 4.5));
         const cam = X.camera; cam.fov = fov; cam.updateProjectionMatrix();
         cam.position.copy(A); cam.up.copy(UP); cam.lookAt(A.clone().add(dir));
         cam.rotateZ((hs2.dr - 0.12 * clamp(yawRate, -40, 40)) * D);

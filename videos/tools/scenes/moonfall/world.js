@@ -47,10 +47,12 @@
     flashR: { value: 2.0 },                              // its reach (units)
     fire: { value: new T.Vector4(1, 0, 0, 0) },         // the impact point (direction) and how far the fire has spread (angle)
     fire2: { value: new T.Vector4(0, 0, 0, 0) },        // burning front strength, glow of the air, melt, smoke
-    hits: { value: Array.from({ length: 8 }, () => new T.Vector4(1, 0, 0, -1)) } };   // small impacts: direction, age (s)
+    hits: { value: Array.from({ length: 8 }, () => new T.Vector4(1, 0, 0, -1)) },
+    shk: { value: new T.Vector2(0, 0) },               // the air's shock wave from the impact: its angle, strength
+    pre: { value: new T.Vector2(0, 0.35) } };          // the air glowing under the Moon before it touches: strength, reach (rad)   // small impacts: direction, age (s)
   const earth = new T.Mesh(new T.SphereGeometry(ER, 768, 384), new T.ShaderMaterial({ uniforms: U, vertexShader: VS, extensions: { derivatives: true },
     fragmentShader: `uniform sampler2D color, night, clouds, hgt; uniform vec3 sun, C, moonDir; uniform mat3 toBody;
-      uniform float R, zeta, cloudLon, exposure, haze, atm, lights, flashR, cloudK; uniform vec4 moonL, flash, fire, fire2; uniform vec4 hits[8];
+      uniform float R, zeta, cloudLon, exposure, haze, atm, lights, flashR, cloudK; uniform vec4 moonL, flash, fire, fire2; uniform vec4 hits[8]; uniform vec2 shk;
       varying vec3 vW;
       ${NOISE}
       ${AIR}
@@ -94,8 +96,16 @@
         float k1 = 1.0 - smoothstep(0.0006, 0.002, px);
         cl = clamp(cl + (fb(b * 1400.0 + 7.0) * 0.7 + fb(b * 5200.0) * 0.3) * k1 * 0.9 * cl * (1.0 - cl) * 4.0 - 0.06 * k1 * (1.0 - cl), 0.0, 1.0);
         cl = mix(cl, smoothstep(0.35, 0.95, cl), 1.0 - cloudK) * mix(0.55, 1.0, cloudK);      // thinned: the thin haze goes first
+        // the impact's shock wave racing out through the air: it sweeps the clouds away behind it
+        float fa0 = acos(clamp(dot(n, fire.xyz), -1.0, 1.0)), shkIn = 0.0, shkRing = 0.0;
+        if (shk.y > 0.0) {
+          float sw = fa0 + 0.015 * fb(n * 40.0);
+          shkIn = 1.0 - smoothstep(shk.x - 0.04, shk.x, sw);
+          shkRing = exp(-pow((sw - shk.x) / 0.01, 2.0)) * shk.y;
+          cl *= 1.0 - 0.85 * shkIn * shk.y;
+        }
         vec3 ns = normalize(b + (toBody * sun) * 0.0018 / max(mu, 0.15));
-        col *= 1.0 - 0.55 * texture2D(clouds, uvOf(ns, cloudLon)).r * cloudK;
+        col *= 1.0 - 0.55 * texture2D(clouds, uvOf(ns, cloudLon)).r * cloudK * (1.0 - 0.85 * shkIn * shk.y);
         vec3 Hh = normalize(sun + V);
         float g = pow(max(dot(n, Hh), 0.0), 600.0) * 0.45 + pow(max(dot(n, Hh), 0.0), 40.0) * 0.035;
         col += vec3(1.0, 0.93, 0.80) * g * water * (1.0 - cl) * day;
@@ -143,24 +153,30 @@
           float crack = 1.0 - smoothstep(0.02, 0.09 + 0.12 * near, plates);
           vec3 hot = mix(vec3(0.75, 0.10, 0.01), vec3(1.0, 0.62, 0.20), clamp(near * 1.2 + crack * 0.3, 0.0, 1.0));
           col = mix(col, vec3(0.012, 0.008, 0.006) + hot * (0.05 + 0.25 * near), m);
-          col += hot * crack * m * (1.2 + 3.0 * near);
+          col += hot * crack * m * (2.2 + 3.0 * near) * (0.7 + 0.6 * fb(b * 9.0 + vec3(fire.w)));
+          // pools of melt where the plates have gone under
+          col += hot * smoothstep(0.62, 0.9, fb(b * 14.0 + 4.0) * 0.5 + 0.5) * m * 1.4;
           col += vec3(1.0, 0.5, 0.18) * front * fire2.x * 2.2;
           // smoke: drifting billows, lit orange from below
           float sm = inside * fire2.w * smoothstep(-0.15, 0.45, fb(n * 9.0 + 4.0 + vec3(fire.w * 2.0)) + 0.25 * fb(n * 30.0));
           col = mix(col, vec3(0.03, 0.022, 0.018) * (0.4 + 0.6 * max(mu, 0.0)) + hot * m * 0.12, sm * 0.7);
         }
+        // the shock front itself: a thin bright wall of compressed, glowing air and dust running over the ground
+        col += vec3(1.0, 0.82, 0.62) * shkRing * (0.6 + 0.6 * fb(n * 90.0)) * 1.6;
         // the air between us and the ground: it dims what is below and adds its own sunlit blue
         vec3 Tv = exp(-BETA * HS * airmass(max(dot(n, V), 0.0)) * haze);
         float cs2 = dot(-V, sun), ph = 0.75 * (1.0 + cs2 * cs2) + 0.5 * pow(max(cs2, 0.0), 8.0);
         vec3 sunA = sunT(0.008, mu + 0.02) * smoothstep(-0.03, 0.05, mu) * mix(0.45, 1.0, smoothstep(0.0, 0.3, mu));
-        col = col * Tv + (1.0 - Tv) * sunA * ph * atm * 0.75;
+        // after the impact the air is full of ash and smoke: brown, lit orange from below, not blue
+        sunA *= mix(vec3(1.0), vec3(0.55, 0.32, 0.18), clamp(fire2.w * 1.2, 0.0, 1.0));
+        col = col * Tv + (1.0 - Tv) * (sunA * ph * atm * 0.75 + vec3(1.0, 0.35, 0.1) * fire2.z * 0.25);
         col = vec3(1.0) - exp(-col * exposure);
         gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
       }` }));
   // the atmosphere edge-on (as in the dinosaur video), with the air glowing orange where the rubble comes down
   const halo = new T.Mesh(new T.SphereGeometry(ER * 1.035, 256, 128), new T.ShaderMaterial({ uniforms: U, vertexShader: VS,
     transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.FrontSide,
-    fragmentShader: `uniform vec3 sun, C; uniform float R, atm; uniform vec4 fire, fire2, flash; uniform float flashR; varying vec3 vW;
+    fragmentShader: `uniform vec3 sun, C, moonDir; uniform float R, atm; uniform vec4 fire, fire2, flash; uniform float flashR; uniform vec2 pre; varying vec3 vW;
       ${AIR}
       void main() {
         vec3 d = normalize(vW - cameraPosition), oc = C - cameraPosition;
@@ -179,6 +195,12 @@
           float dl = length(flash.xyz - near);
           L += vec3(1.0, 0.6, 0.3) * (1.0 - exp(-tauV.g)) * flash.w * 0.6 / (1.0 + dl * dl / (flashR * flashR));
         }
+        if (pre.x > 0.0) {
+          // before the touch: the rubble already pouring in and the Moon's front pushing into the air make the sky over
+          // the place glow, a dome of light rising behind our horizon
+          float a = acos(clamp(dot(up, moonDir), -1.0, 1.0));
+          L += vec3(1.0, 0.55, 0.25) * pre.x * exp(-a * a / (pre.y * pre.y)) * exp(-pow((h - 0.05) / 0.045, 2.0)) * 6.0;
+        }
         if (fire2.y > 0.0) {
           float a = acos(clamp(dot(up, fire.xyz), -1.0, 1.0));
           float G = 1.0 - smoothstep(fire.w * 0.8, fire.w * 1.15 + 0.05, a);
@@ -193,7 +215,7 @@
   // A unit sphere scaled to the Moon; its local +x looks at the Earth (the near side's middle). In the vertex shader it
   // is stretched along that axis by the tides (stretch: 0 = round) with its near end a little pointed.
   const MU = { map: { value: moonTex }, nrm: { value: moonNrm }, sun: U.sun, exposure: { value: 1.0 },
-    stretch: { value: 0 }, crack: { value: 0 }, heat: { value: 0 }, spin: { value: 0 }, earthLit: { value: 0.3 },
+    stretch: { value: 0 }, crack: { value: 0 }, heat: { value: 0 }, spin: { value: 0 }, earthLit: { value: 0.3 }, melt: { value: 0 },
     toEarth: { value: new T.Vector3(-1, 0, 0) }, ER: { value: ER } };
   const moon = new T.Mesh(new T.SphereGeometry(1, 256, 128), new T.ShaderMaterial({ uniforms: MU, extensions: { derivatives: true },
     vertexShader: `uniform float stretch; varying vec3 vP, vW, vN; varying vec2 vUv;
@@ -207,7 +229,7 @@
         vN = normalize(mat3(modelMatrix) * vec3(position.x / (1.0 + e), position.yz * sqrt(1.0 + e)));
         gl_Position = projectionMatrix * viewMatrix * w;
       }`,
-    fragmentShader: `uniform sampler2D map, nrm; uniform vec3 sun, toEarth; uniform float exposure, crack, heat, spin, earthLit, ER;
+    fragmentShader: `uniform sampler2D map, nrm; uniform vec3 sun, toEarth; uniform float exposure, crack, heat, spin, earthLit, ER, melt;
       varying vec3 vP, vW, vN; varying vec2 vUv;
       ${NOISE}
       // cracks: the edges of cells on the sphere (3-D Voronoi), more and wider on the side facing the Earth
@@ -244,7 +266,9 @@
           float c2 = (1.0 - smoothstep(0.0, w2 + 1e-4, v2.y - v2.x)) * smoothstep(0.15, 0.6, fb(q * 3.0) + crack * 0.4 + 0.3 * side);
           float cc = max(c1, c2 * 0.8) * step(0.001, k);
           col *= 1.0 - 0.8 * cc;
-          col += vec3(1.0, 0.33, 0.07) * cc * k * k * 0.35 * (0.5 + 0.5 * fb(vP * 20.0)) * (0.35 + 0.65 * smoothstep(0.0, 0.3, m0));
+          col += vec3(1.0, 0.33, 0.07) * cc * k * k * 0.35 * (0.5 + 0.5 * fb(vP * 20.0)) * (0.35 + 0.65 * smoothstep(0.0, 0.3, m0)) * (1.0 + 7.0 * melt);
+          // going in: the whole body splits along its faults, the cracks running with molten rock, its lower half glowing
+          if (melt > 0.0) col += vec3(1.0, 0.38, 0.09) * melt * smoothstep(-0.2, 0.9, side) * (0.25 + 0.5 * cc + 0.25 * fb(vP * 8.0));
         }
         // ploughing into the air: what is low glows white-hot, the rest orange
         float hgt = length(vW) - ER;
@@ -267,25 +291,26 @@
       v.multiplyScalar(k); p.setXYZ(i, v.x, v.y, v.z);
     }
     rock.computeVertexNormals(); }
-  const NR = 700;
+  const NR = 2000;
   const rocks = new T.InstancedMesh(rock, new T.ShaderMaterial({ uniforms: { sun: U.sun, glowK: { value: 0 }, ER: { value: ER } },
-    vertexShader: `attribute float tint; varying vec3 vN, vW; varying float vT;
-      void main() { vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = w.xyz; vT = tint;
+    vertexShader: `attribute float tint, hot; varying vec3 vN, vW; varying float vT, vHot;
+      void main() { vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = w.xyz; vT = tint; vHot = hot;
         vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }`,
-    fragmentShader: `uniform vec3 sun; uniform float glowK, ER; varying vec3 vN, vW; varying float vT;
+    fragmentShader: `uniform vec3 sun; uniform float glowK, ER; varying vec3 vN, vW; varying float vT, vHot;
       void main() {
         vec3 n = normalize(vN), V = normalize(cameraPosition - vW);
         float m0 = max(dot(n, sun), 0.0), mu = max(dot(n, V), 0.0);
         vec3 col = vec3(0.16, 0.15, 0.14) * vT * (m0 / (m0 + mu + 1e-4) * 1.4 + 0.5 * m0) * 2.4;
         float hgt = length(vW) - ER, hh = 1.0 - smoothstep(0.0, 0.15, hgt);
-        col += vec3(1.0, 0.45, 0.12) * (glowK * 0.25 * pow(1.0 - mu, 2.0) + hh * 4.0);
+        col += vec3(1.0, 0.45, 0.12) * (glowK * 0.25 * pow(1.0 - mu, 2.0) + hh * 4.0) + vec3(1.0, 0.5, 0.15) * vHot * (0.6 + 1.4 * pow(1.0 - mu, 1.5));
         col = vec3(1.0) - exp(-col);
         gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
       }` }), NR);
   rocks.geometry = rock.clone(); rocks.geometry.setAttribute('tint', new T.InstancedBufferAttribute(new Float32Array(NR).map(() => 0.7 + 0.6 * rnd()), 1));
+  rocks.geometry.setAttribute('hot', new T.InstancedBufferAttribute(new Float32Array(NR), 1));
   rocks.frustumCulled = false; rocks.count = 0; rocks.renderOrder = 2; scene.add(rocks);
 
-  const ND = 9000;
+  const ND = 16000;
   const dg = new T.BufferGeometry();
   dg.setAttribute('position', new T.BufferAttribute(new Float32Array(ND * 3), 3));
   dg.setAttribute('sz', new T.BufferAttribute(new Float32Array(ND).map(() => 0.6 + 2.2 * Math.pow(rnd(), 3)), 1));
