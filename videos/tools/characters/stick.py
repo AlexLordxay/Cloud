@@ -194,7 +194,10 @@ class Figure:
         face = pose.get('face', 'smile')
         if face in ('smile', 'grin'):
             fw = w * 0.6                                         # the face is drawn thinner than the body
-            cv.arc((mx - mw, my - mw * 0.9, mx + mw, my + mw * 0.6), 25, 155, fw * (1.0 if face == 'smile' else 1.25), self.col)
+            if face == 'smile':                                  # a thin, narrow arc (wide thick ones read as a moustache)
+                cv.arc((mx - mw * 0.75, my - mw * 0.75, mx + mw * 0.75, my + mw * 0.55), 30, 150, fw, self.col)
+            else:                                                # 'grin': an open laughing mouth, a filled half-circle
+                cv.d.pieslice(((mx - mw * 0.7) * SS, (my - mw * 0.6) * SS, (mx + mw * 0.7) * SS, (my + mw * 0.6) * SS), 0, 180, fill=self.col)
         elif face == 'sad':
             cv.arc((mx - mw * 0.8, my - mw * 0.1, mx + mw * 0.8, my + mw * 1.0), 205, 335, w * 0.6, self.col)
         elif face == 'o':
@@ -234,3 +237,82 @@ def tiles(cv, y0, y1, step=90, col=(226, 230, 238)):
         cv.line([(0, y), (cv.w, y)], 2, col)
     for x in range(0, cv.w + step, step):
         cv.line([(x, y0), (x, y1)], 2, col)
+
+
+def phone_side(cv, hand, scale=1.0, face=1, screen=(150, 200, 250)):
+    """A phone held up to film oneself, seen from behind at an angle: the dark back with the camera, and a sliver of the
+    lit screen on the edge turned towards the face (face=1: the face is to the right of the phone, -1: to the left)."""
+    x, y = hand
+    w, h, sk = 26 * scale, 62 * scale, 7 * scale                # narrow (turned), a little skewed by perspective
+    top, bot = y - h * 0.85, y + h * 0.15
+    back = [(x - w / 2, top + sk), (x + w / 2, top), (x + w / 2, bot), (x - w / 2, bot - sk)]
+    if face < 0: back = [(2 * x - px, py) for px, py in back]
+    # the screen's edge: a lit strip on the side towards the face
+    ex = x + face * w / 2
+    strip = [(ex, top - (0 if face > 0 else sk) + 3 * scale), (ex + face * 9 * scale, top + 4 * scale),
+             (ex + face * 9 * scale, bot - 6 * scale), (ex, bot - (0 if face > 0 else sk) - 3 * scale)]
+    cv.poly(strip, fill=screen, col=INK, w=3 * scale)
+    cv.poly(back, fill=(46, 48, 58), col=INK, w=4 * scale)
+    cx = x - face * w * 0.18                                    # the camera block, near the top
+    cv.rrect((cx - 8 * scale, top + 9 * scale, cx + 8 * scale, top + 27 * scale), 4 * scale, fill=(30, 31, 38))
+    cv.circle((cx, top + 14 * scale), 3 * scale, col=(120, 130, 150))
+    cv.circle((cx, top + 22 * scale), 3 * scale, col=(120, 130, 150))
+
+
+def window(cv, box, t=0.0):
+    """A bathroom window: a frame with a cross, sky and a slowly drifting cloud."""
+    x0, y0, x1, y1 = box
+    cv.rrect(box, 14, fill=(196, 226, 255), col=INK, w=7)
+    cx = x0 + ((t * 18) % (x1 - x0 + 160)) - 80               # the cloud drifts across
+    for dx, dy, r in ((0, 0, 28), (30, -12, 34), (64, 2, 26)):
+        if x0 + 10 < cx + dx < x1 - 10:
+            cv.circle((cx + dx, y0 + (y1 - y0) * 0.38 + dy), r, col=(255, 255, 255))
+    cv.rrect(box, 14, col=INK, w=7)
+    cv.line([((x0 + x1) / 2, y0), ((x0 + x1) / 2, y1)], 7)
+    cv.line([(x0, (y0 + y1) / 2), (x1, (y0 + y1) / 2)], 7)
+    cv.rrect((x0 - 16, y1 - 4, x1 + 16, y1 + 14), 6, fill=(240, 242, 247), col=INK, w=5)   # the sill
+
+
+def lamp(cv, x, y, s=1.0, t=0.0):
+    """A ceiling lamp hanging on a cord: shade, bulb and a few light rays; it sways a little."""
+    sway = 4 * math.sin(t * 1.3)
+    cv.line([(x, -10), (x + sway, y - 40 * s)], 4)
+    bx = x + sway
+    cv.poly([(bx - 22 * s, y - 40 * s), (bx + 22 * s, y - 40 * s), (bx + 60 * s, y), (bx - 60 * s, y)], fill=(255, 210, 120), col=INK, w=5)
+    cv.circle((bx, y + 10 * s), 16 * s, col=INK, fill=(255, 241, 190))
+    cv.circle((bx, y + 10 * s), 16 * s, w=4, col=INK)
+    for a in (-50, -25, 0, 25, 50):                              # rays
+        dx, dy = math.sin(math.radians(a)), math.cos(math.radians(a))
+        cv.line([(bx + dx * 38 * s, y + 10 * s + dy * 38 * s), (bx + dx * 60 * s, y + 10 * s + dy * 60 * s)], 4, (230, 180, 80))
+
+
+def washer(cv, box, t=0.0):
+    """A washing machine: the body, a panel with a knob and buttons, the round door with the drum spinning inside."""
+    x0, y0, x1, y1 = box
+    w = x1 - x0
+    cv.rrect(box, 18, fill=(246, 248, 252), col=INK, w=7)
+    cv.line([(x0, y0 + w * 0.22), (x1, y0 + w * 0.22)], 5)
+    cv.circle((x0 + w * 0.2, y0 + w * 0.11), w * 0.06, fill=(255, 255, 255), col=INK)
+    cv.circle((x0 + w * 0.2, y0 + w * 0.11), w * 0.06, w=4, col=INK)
+    for k in range(3):
+        cv.rrect((x0 + w * (0.45 + k * 0.14), y0 + w * 0.08, x0 + w * (0.55 + k * 0.14), y0 + w * 0.14), 4, fill=(200, 210, 230), col=INK, w=3)
+    c = (x0 + w / 2, y0 + w * 0.22 + (y1 - y0 - w * 0.22) / 2)
+    R = w * 0.33
+    cv.circle(c, R, fill=(210, 222, 240), col=INK)
+    cv.circle(c, R, w=7, col=INK)
+    cv.circle(c, R * 0.78, fill=(170, 195, 230), col=(170, 195, 230))
+    for k in range(3):                                         # the spinning laundry
+        a = t * 9 + k * 2.1
+        cv.circle((c[0] + math.cos(a) * R * 0.45, c[1] + math.sin(a) * R * 0.45), R * 0.18, fill=[(240, 140, 160), (255, 214, 120), (140, 200, 170)][k])
+    cv.circle(c, R * 0.78, w=4, col=INK)
+    cv.rrect((x0 + w * 0.08, y1 - 4, x0 + w * 0.2, y1 + 10), 3, fill=INK)        # feet
+    cv.rrect((x1 - w * 0.2, y1 - 4, x1 - w * 0.08, y1 + 10), 3, fill=INK)
+
+
+def paper_roll(cv, c, s=1.0):
+    """A toilet-paper roll on a wall holder, a strip hanging down."""
+    x, y = c
+    cv.line([(x - 40 * s, y - 34 * s), (x + 40 * s, y - 34 * s)], 6)
+    cv.rrect((x - 34 * s, y - 34 * s, x + 34 * s, y + 30 * s), 12 * s, fill=(255, 255, 255), col=INK, w=6)
+    cv.rrect((x + 18 * s, y, x + 34 * s, y + 80 * s), 4 * s, fill=(255, 255, 255), col=INK, w=5)
+    cv.ellipse((x - 12 * s, y - 14 * s, x + 12 * s, y + 10 * s), col=INK, w=5)

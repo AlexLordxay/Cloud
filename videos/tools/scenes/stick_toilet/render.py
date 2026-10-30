@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 TOOLS = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0, TOOLS)
 from characters.feed import draw_feed, _heart as fheart
-from characters.stick import Canvas, Figure, POSES, lerp_pose, ease, phone, toilet, tiles, floor, INK, PINK, SS
+from characters.stick import Canvas, Figure, POSES, lerp_pose, ease, phone_side, toilet, tiles, floor, window, lamp, washer, paper_roll, INK, PINK, SS
 
 W, H, FPS, DUR = 1080, 1920, 30, 6.0
 WORK = os.path.join(TOOLS, 'work', 'stick_toilet')
@@ -57,6 +57,24 @@ def grow(t, t0, t1, top, start=None):
 
 
 MILESTONES = [10_000, 100_000, 1_000_000]
+
+# the free (left) arm: (time, shoulder, elbow, wiggle) — between keys the angles ease; `wiggle` swings the forearm a
+# little (a wave) so the hand is never frozen
+ARM_KEYS = [(0.0, 135, 25, 24), (1.4, 135, 25, 24), (1.9, 100, 75, 6), (3.1, 100, 75, 6), (3.6, 160, -60, 30), (4.8, 160, -60, 30)]
+
+
+def arm_at(t):
+    keys = ARM_KEYS
+    if t <= keys[0][0]: k0 = k1 = keys[0]; u = 0
+    elif t >= keys[-1][0]: k0 = k1 = keys[-1]; u = 0
+    else:
+        j = max(i for i, k in enumerate(keys) if k[0] <= t)
+        k0, k1 = keys[j], keys[j + 1]
+        u = ease((t - k0[0]) / (k1[0] - k0[0]))
+    s = k0[1] + (k1[1] - k0[1]) * u
+    e = k0[2] + (k1[2] - k0[2]) * u
+    wig = k0[3] + (k1[3] - k0[3]) * u
+    return s + 0.3 * wig * math.sin(t * 9), e + wig * math.sin(t * 9)
 
 
 def views_at(t):
@@ -129,27 +147,26 @@ def frame(i):
     cv.rrect((-20, 1340, W + 20, H + 20), 0, fill=(246, 247, 250))
     floor(cv, 1340)
     seat = (400, 1080)
+    window(cv, (70, 300, 330, 560), t)
+    lamp(cv, 700, 370, 1.1, t)
+    washer(cv, (640, 1000, 900, 1335), t)
+    paper_roll(cv, (720, 860), 0.9)
     toilet(cv, seat, 2.1)
-    # the guy: films himself and talks, bouncing more and more as the numbers climb; the free hand waves, gives
-    # thumbs-up and points; at the end — both arms up, victory
+    # the guy: films himself and talks, bouncing more and more as the numbers climb. The free hand goes smoothly through
+    # a few gestures (keyframes, eased): a wave, a thumbs-up to the camera, a fist pump; at the end — both arms up
     hype = min(1.0, t / 4.0)
     bounce = abs(math.sin(t * (6 + 6 * hype))) * (6 + 22 * hype)
-    k = 0.5 + 0.5 * math.sin(t * 8.0)
     pose = dict(POSES['sit_phone'])
     pose['lean'] = -6 + 6 * math.sin(t * 3.4)
     pose['head'] = 9 * math.sin(t * 5.1)
     pose['face'] = 'o' if (int(t * 7) % 3 == 0) else 'grin'
     pose['look'] = -0.7
-    if t < 1.6:                                                  # waving at the phone
-        pose['sL'], pose['eL'] = 140 + 25 * k, 30 - 40 * k
-    elif t < 3.2:                                                # pointing at the phone, jabbing
-        pose['sL'], pose['eL'] = -95 + 12 * k, -10
-    elif t < 4.8:                                                # fist pumping
-        pose['sL'], pose['eL'] = 150 + 15 * k, -150 + 60 * k
-    else:                                                        # victory: both arms up, the phone too
-        v = ease((t - 4.8) / 0.25)
+    sL, eL = arm_at(t)
+    pose['sL'], pose['eL'] = sL, eL
+    if t > 4.8:                                                  # victory: both arms up, the phone too
+        v = ease((t - 4.8) / 0.3)
         pose = lerp_pose(pose, dict(pose, sL=138, eL=12, sR=-138, eR=-12, face='grin', look=0, head=0, lean=0), v)
-    GUY.draw(cv, pose, (seat[0] + 36, seat[1] - 26 - bounce), held=lambda c, h, a: phone(c, h, a, 2.8))
+    GUY.draw(cv, pose, (seat[0] + 36, seat[1] - 26 - bounce), held=lambda c, h, a: phone_side(c, h, 2.8, face=1))
     # hearts floating up the right side, like a live stream
     for (t0, x, sc) in HEARTS:
         age = t - t0
