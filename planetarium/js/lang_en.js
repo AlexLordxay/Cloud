@@ -48,7 +48,7 @@ Object.assign(EN, {
     "from the USGS digital elevation model (GPL-2.0+); Earth at night, oceans and clouds —",
   ". Фобос і Деймос показано з умовною текстурою. Положення планет — за елементами орбіт JPL (найточніші для 1800–2050 рр.); супутники, крім Місяця й галілеєвих, розставлено умовно.":
     ". Phobos and Deimos have a stand-in texture. Planet positions come from JPL orbital elements (most accurate for 1800–2050); moons other than the Moon and the Galilean ones are placed approximately.",
-  "Про проєкт, джерела й подяки →": "About the project, sources and thanks (in Ukrainian) →",
+  "Про проєкт, джерела й подяки →": "About the project, sources and thanks →",
   "Групи тіл": "Groups of bodies",
   "Планети": "Planets",
   "Комети": "Comets",
