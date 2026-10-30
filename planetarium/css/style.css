@@ -67,12 +67,14 @@ button { font: inherit; color: inherit; }
 }
 .logo-star { position: relative; display: inline-block; width: 0; }
 .logo-star::after {
-  content: "✦"; position: absolute; left: -0.17em; top: -2.2em; transform: translateX(-50%);   /* em of the small star: ≈ over the "ı" */
+  /* em of the small star: ≈ over the "ı". Centred with width + margin, not a transform: the logo's gradient (background-clip: text)
+     also paints this glyph, but untransformed — a moved or scaled star showed as two (white + gradient) */
+  content: "✦"; position: absolute; left: -0.17em; top: -2.2em; width: 1em; margin-left: -0.5em; text-align: center;
   font: normal 400 0.36em/1 system-ui, sans-serif; color: #fff; -webkit-text-fill-color: #fff;
   text-shadow: 0 0 6px rgba(190, 215, 255, 0.95), 0 0 14px rgba(156, 194, 255, 0.6);
   animation: twinkle 4.5s ease-in-out infinite;
 }
-@keyframes twinkle { 0%, 100% { opacity: 1; transform: translateX(-50%) scale(1); } 50% { opacity: 0.55; transform: translateX(-50%) scale(0.78); } }
+@keyframes twinkle { 0%, 100% { text-shadow: 0 0 6px rgba(190, 215, 255, 0.95), 0 0 14px rgba(156, 194, 255, 0.6); } 50% { text-shadow: 0 0 2px rgba(190, 215, 255, 0.5), 0 0 5px rgba(156, 194, 255, 0.25); } }
 .brand > span:not(.logo) { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
 .controls {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
