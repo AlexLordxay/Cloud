@@ -38,6 +38,8 @@
   звучить правильно. Голос: elevenlabs_v4, dialogue з voice_type 'element', voice_id `0f4f5bee-93b8-4f7a-9d99-218e3ebf2464`,
   stability 0.45, similarity_boost 0.9; MP3 завантажувати curl. Склейка — `voice_all.mp3` (частини в `scene.json`), збірка `./make.sh zodiac_lib`.
   Баланс Higgsfield ≈ 48,6 кр.
+  **30.10 записано 4 варіанти гачка** (0,23 кр. кожен, баланс ≈ 47,7): `scenes/zodiac_lib/hook_variants/v1–v4.mp3` (порядок як вище),
+  відео для вибору — `videos/zodiac_lib_hooks.mp4` (`hook_variants/build.py`). Чекаємо номер від автора → вставити замість початку `newA.mp3`.
 - **«Місяць упав» (`scenes/moonfall`) — v4 готово, `videos/moonfall.mp4`:** без рук і без візора, кадр = голова; деталізований удар
   (кора кришиться Voronoi, пилові хмари з гравітацією, іскри/струмені/дим/уламки, ударне кільце, bloom у `post.py`); звук входу в атмосферу
   й удару (`sfx.py`), дихання `breath.py` 0, сигнали скафандра. Музики нема — автор: «потім переробимо» (запропонувати 2–3 варіанти органа).
