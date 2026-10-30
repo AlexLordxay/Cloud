@@ -19,7 +19,8 @@
   Домен додано в Cloudflare (Free). NS Cloudflare: lana.ns.cloudflare.com, vern.ns.cloudflare.com → вписати в HostiQ → Workers → nebozvid → Domains →
   Custom domain → замінити адреси workers.dev у мета-тегах index.html на https://nebozvid.com.ua/.
   Зміни в main переносимо лише після «так» автора: `git push origin HEAD:main`. Далі — домен nebozvid.com.ua (Custom domains).
-- **Тестова версія для автора: https://claude.ai/artifact/87EQm3PuXEGG2dxK3rNqrv** (claude.ai artifact).
+- **Тестова версія для автора (з 30.10, з UA/EN): https://claude.ai/artifact/RN26pgGuvLCnUwn3UuPXrh** (стара 87EQm3PuXEGG2dxK3rNqrv —
+  без перекладу; оновити її не дало: треба перечитати всі 5649 рядків. Нову зібрано: сторінка + 485 файлів з `root: planetarium`, 3 публікації ≤58 МБ).
   Порядок роботи: зміни → робоча гілка → викласти на це посилання → автор перевіряє на iPhone → «так» → `git push origin HEAD:main`.
   Файл для артефакту: `node -e 'process.stdout.write(require("./videos/tools/site").sitePage())'`, потім узяти від `<title>`
   і прибрати рядки `</head>`, `<body>`, `</body>`, `</html>`; текстури — окремі файли артефакту (ліміт 511 файлів, зайнято 485).

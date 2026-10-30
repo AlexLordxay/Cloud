@@ -46,9 +46,13 @@ function setupLangButton() {
   btn.innerHTML = EN_ON ? 'UA<span class="lang-long"> · Українська</span>' : 'EN<span class="lang-long"> · English</span>';
   btn.title = EN_ON ? "Українська" : "English";
   btn.lang = EN_ON ? "uk" : "en";
+  // the choice is saved and the page reloads; the address gets ?lang only when it already has one or storage is blocked
   btn.addEventListener("click", () => {
-    const u = new URL(location.href);
-    u.searchParams.set("lang", EN_ON ? "uk" : "en");
+    const next = EN_ON ? "uk" : "en", u = new URL(location.href);
+    let saved = false;
+    try { localStorage.setItem(LANG_KEY, next); saved = localStorage.getItem(LANG_KEY) === next; } catch (e) { /* storage blocked */ }
+    if (saved && !u.searchParams.has("lang")) { location.reload(); return; }
+    u.searchParams.set("lang", next);
     location.href = u.href;
   });
 }
