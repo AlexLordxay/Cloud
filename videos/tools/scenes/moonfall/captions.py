@@ -25,6 +25,11 @@ SUBSCRIBE_Y = 560
 END_CARD = 43.5
 END_TITLE = 'Більше космосу —\nна сайті'
 
+# CLEAN=1 (the author, 30.10): a clean cut — only the Небозвід logo; no captions, readouts, credits, button or end card
+CLEAN = os.environ.get('CLEAN') == '1'
+if CLEAN:
+    CAPTIONS, CREDITS, SUBSCRIBE_AT, END_CARD = [], [], None, 999.0
+
 FPS, W, H = 30, 1080, 1920
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRAMES = os.path.abspath(os.path.join(HERE, '../../work/moonfall/frames'))
@@ -68,7 +73,7 @@ def DRAW(img, t, g):
     st = _state(t)
     d = ImageDraw.Draw(img)
     # the Moon while it is still small: a thin ring and its name
-    if st and st.get('front') and 3.2 < t < 16.0:
+    if st and st.get('front') and 3.2 < t < 16.0 and not CLEAN:
         mx, my, mr = st['mx'] * W, st['my'] * H, st['mr'] * H
         al = _fade(t, 3.4, 15.6, 0.6) * (1 - _sm((mr - 18) / 20))
         if al > 0:
@@ -87,7 +92,7 @@ def DRAW(img, t, g):
     if 1.62 < t < 1.95:                                            # the rewind starts with a blink
         img.alpha_composite(Image.new('RGBA', img.size, (255, 255, 255, int(150 * _fade(t, 1.62, 1.95, 0.12)))))
     # the readouts, up top under the logo
-    if st:
+    if st and not CLEAN:
         tp = st.get('tp', 0)
         al = _fade(t, -1, 35.4, 0.4)
         if al > 0:
