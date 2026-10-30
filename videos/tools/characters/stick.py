@@ -124,6 +124,7 @@ class Figure:
     width: float = 0                     # line width (0: from size)
     face_col: tuple = BG
     dress: tuple = None                  # a dress colour (front views)
+    beard: tuple = None                  # a beard colour
 
     def parts(self, pose, at):
         """Joint positions for a pose; `at` = the pelvis."""
@@ -189,6 +190,22 @@ class Figure:
                 cv.ellipse((ox - r * 0.2, oy - r * 0.17, ox + r * 0.2, oy + r * 0.17), fill=self.accent, col=self.col, w=w * 0.45)
             tip = (bx + back * r * 0.75, by + r * 2.0)
             cv.line([(tip[0] - r * 0.12, tip[1] - r * 0.12), (tip[0] + r * 0.12, tip[1] + r * 0.12)], w * 0.7, self.col)
+        if self.hair == 'dreads':                               # dreadlocks: thick rope-like strands, mostly at the back
+            sway = math.sin(pose.get('t', 0) * 2.3)
+            back = -1 if pose.get('look', 0) >= 0 else 1
+            for k in range(8):
+                a0 = math.radians(back * (35 + k * 17))         # from the top over the back of the head
+                sx, sy = c[0] + math.sin(a0) * r * 0.9, c[1] - math.cos(a0) * r * 0.9
+                ln = r * (1.35 + 0.3 * ((k * 5) % 3))
+                pts = [(sx, sy)]
+                for j in range(1, 6):
+                    u = j / 5
+                    pts.append((sx + back * r * (0.25 + 0.05 * k) * u + math.sin(u * 4 + k + sway) * r * 0.07, sy + ln * u))
+                cv.line(pts, w * 1.5, self.col)
+                cv.line(pts, w * 0.85, self.accent)
+                for j in (2, 4):                               # the rope's bands
+                    px, py = pts[j]
+                    cv.line([(px - w * 0.5, py), (px + w * 0.5, py)], w * 0.35, self.col)
         if self.hair == 'ponytail':                             # a tail swinging behind the head
             tail = [(c[0] - r * 0.8, c[1] - r * 0.4), (c[0] - r * 1.5, c[1] + r * 0.1), (c[0] - r * 1.3, c[1] + r * 0.9)]
             cv.line(tail, w * 1.6, self.accent)
@@ -196,8 +213,14 @@ class Figure:
         cv.circle(c, r, w=w * 0.85, col=self.col)
         if self.hair in ('ponytail', 'bun'):                     # a fringe
             cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 195, 345, w * 1.2, self.accent)
+        elif self.hair == 'dreads':                             # a thick cap on top, the strands start from it
+            cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 180, 360, w * 1.9, self.accent)
+            cv.arc((c[0] - r * 1.04, c[1] - r * 1.04, c[0] + r * 1.04, c[1] + r * 1.04), 180, 360, w * 0.5, self.col)
         elif self.hair == 'braid':                              # hair combed back: a cap over the top of the head
             cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 185, 355, w * 1.5, self.accent)
+        if self.beard:                                          # a short beard along the jaw
+            k = r - w * 0.8                                     # a thin band inside the jaw line (inside the outline)
+            cv.arc((c[0] - k, c[1] - k, c[0] + k, c[1] + k), 25, 155, w * 0.75, self.beard)
         # the face: two dots and a mouth, shifted where the eyes look
         lx = pose.get('look', 0) * r * 0.35
         e = r * 0.11
@@ -278,17 +301,20 @@ def window(cv, box, t=0.0, sky=(196, 226, 255), body=None, night=0.0, clouds=Tru
     x0, y0, x1, y1 = box
     cv.rrect(box, 14, fill=sky, col=INK, w=7)
     if night > 0.3:
-        for k in range(14):                                       # stars
+        for k in range(22):                                       # stars
             sx, sy = x0 + 14 + (k * 53) % (x1 - x0 - 28), y0 + 14 + (k * 37) % (y1 - y0 - 28)
-            cv.circle((sx, sy), 2.5, col=(255, 255, 240))
+            cv.circle((sx, sy), 3.5, col=(255, 255, 240))
     if body:
         bx, by, kind = body
-        if x0 + 20 < bx < x1 - 20 and y0 + 20 < by < y1 - 20:
+        if x0 + 30 < bx < x1 - 30 and y0 + 30 < by < y1 - 30:
             if kind == 'sun':
-                cv.circle((bx, by), 26, col=(255, 200, 60))
+                cv.circle((bx, by), 38, col=(255, 200, 60))
+                for k in range(8):
+                    a = k * math.pi / 4
+                    cv.line([(bx + math.cos(a) * 48, by + math.sin(a) * 48), (bx + math.cos(a) * 62, by + math.sin(a) * 62)], 5, (240, 170, 40))
             else:
-                cv.circle((bx, by), 22, col=(240, 240, 225))
-                cv.circle((bx + 10, by - 6), 19, col=sky)        # a crescent
+                cv.circle((bx, by), 34, col=(244, 242, 220))
+                cv.circle((bx + 15, by - 9), 29, col=sky)        # a crescent
     cx = x0 + ((t * 18) % (x1 - x0 + 160)) - 80               # the cloud drifts across
     cc = tuple(int(255 - (255 - 120) * night) for _ in range(3))
     for dx, dy, r in ((0, 0, 28), (30, -12, 34), (64, 2, 26)) if clouds else ():

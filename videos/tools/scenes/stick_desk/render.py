@@ -18,7 +18,7 @@ WORK = os.path.join(TOOLS, 'work', 'stick_desk')
 OUT = os.path.join(TOOLS, '..', 'stick_desk.mp4')
 T_WORK, T_PUB, T_PLAY = 3.4, 3.4, 4.3                   # editing until 3.4 s; the button 3.4–4.3; the video after
 BRAID = (92, 60, 38)
-HERO = Figure(size=720, hair='braid', accent=BRAID)
+HERO = Figure(size=720, hair='dreads', accent=BRAID, beard=(120, 84, 56))
 MON = (330, 470, 1050, 930)                              # the monitor's screen (x0, y0, x1, y1)
 CLIP = sorted(os.listdir(os.path.join(WORK, 'clip'))) if os.path.isdir(os.path.join(WORK, 'clip')) else []
 THUMBS = [Image.open(os.path.join(WORK, f'thumb_{k}.jpg')) for k in ('0.5', '1.5', '2.5')]
@@ -49,17 +49,17 @@ def frame(i):
     tiles(cv, 0, 1520, step=120, col=(232, 234, 240))
     cv.rrect((-20, 1520, W + 20, H + 20), 0, fill=(238, 232, 222))
     floor(cv, 1520)
-    wb = (60, 150, 300, 380)
+    wb = (70, 110, 390, 410)
     bx = by = None
     if body:
         u, kind = body
         bx = wb[0] + 10 + u * (wb[2] - wb[0] - 20)
-        by = wb[3] - 30 - math.sin(u * math.pi) * (wb[3] - wb[1] - 70)
+        by = wb[3] - 45 - math.sin(u * math.pi) * (wb[3] - wb[1] - 110)
     window(cv, wb, t, sky=sky, body=(bx, by, body[1]) if body else None, night=night)
     curtains(cv, wb)
     hours = 9 + (t / T_WORK) * 48 if t < T_WORK else 9 + 48 + (t - T_WORK) * 0.02
     wall_clock(cv, (930, 240), 95, hours)
-    lamp(cv, 620, 260, 0.9, t)
+    lamp(cv, 640, 250, 0.9, t)
     # the desk, the monitor, the keyboard, the mugs
     desk_y = 1075
     cv.rrect((300, desk_y, 1100, desk_y + 30), 6, fill=(205, 160, 110), col=INK, w=7)
@@ -94,6 +94,8 @@ def frame(i):
         stare = t - T_PLAY
         pose['face'] = 'grin' if stare < 1.3 else ('flat' if stare < 2.6 else 'sad')
         pose['head'] = 4 + min(12, max(0, stare - 2.6) * 10)                                   # the head drops a little
+    pose['look'] = pose.get('look', 0.7) * 0.35                  # three-quarters: we see his face
+    pose['t'] = t
     HERO.draw(cv, pose, (seat[0] + 10, seat[1] - 14))
     # the caption at the bottom: the days of editing, then the wait
     if t < T_WORK:
