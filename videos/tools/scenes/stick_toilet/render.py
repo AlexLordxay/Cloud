@@ -7,6 +7,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 TOOLS = os.path.abspath(os.path.join(os.path.dirname(__file__), '../..'))
 sys.path.insert(0, TOOLS)
+from characters.feed import draw_feed, _heart as fheart
 from characters.stick import Canvas, Figure, POSES, lerp_pose, ease, phone, toilet, tiles, floor, INK, PINK, SS
 
 W, H, FPS, DUR = 1080, 1920, 30, 6.0
@@ -58,6 +59,8 @@ GUY = Figure(size=760)
 COMMENTS = [(1.2, 'ахахах 😂'), (1.7, 'ЛЕГЕНДА'), (2.1, 'ще!!! 🔥'), (2.5, 'лайк не дивлячись'), (2.9, 'хто тут з туалету? 🚽'),
             (3.25, 'шедевр 😍'), (3.55, 'ору 🤣🤣'), (3.85, 'підписався!'), (4.1, '🔥🔥🔥'), (4.35, 'король контенту 👑'),
             (4.6, 'ахахах'), (4.8, 'ще одне!!'), (5.0, '😂😂😂')]
+FEED_COMMENTS = [(t0, n, x) for (t0, x), n in zip(COMMENTS, ['@ira_k', '@maks.ua', '@sonechko', '@den4ik', '@olya.v', '@taras_1',
+    '@nastya', '@vovan', '@kateryna', '@bodya', '@lilu', '@ostap', '@marta.m'])]
 random.seed(3)
 HEARTS = [(random.uniform(0.8, 5.6), random.uniform(640, 1020), random.uniform(0.8, 1.3)) for _ in range(46)]
 
@@ -100,12 +103,12 @@ def text_with_emoji(cv, xy, s, f, fill=INK):
 def frame(i):
     t = i / FPS
     cv = Canvas(W, H)
-    # the bathroom: tiled wall, floor, the toilet
-    tiles(cv, 0, 1700)
-    cv.rrect((-20, 1700, W + 20, H + 20), 0, fill=(244, 246, 250))
-    floor(cv, 1700)
-    seat = (400, 1470)
-    toilet(cv, seat, 1.85)
+    # the bathroom: tiled wall, floor, the toilet (the lower part of the frame is the feed's: author, comments)
+    tiles(cv, 0, 1250)
+    cv.rrect((-20, 1250, W + 20, H + 20), 0, fill=(246, 247, 250))
+    floor(cv, 1250)
+    seat = (430, 1030)
+    toilet(cv, seat, 1.75)
     # the guy: films himself, talks (mouth), bobs, the free arm gestures; more and more excited
     k = 0.5 + 0.5 * math.sin(t * 7.0)
     pose = dict(POSES['sit_phone'])
@@ -115,34 +118,17 @@ def frame(i):
     pose['sL'] = 55 + 45 * k * min(1, t / 1.2)                     # the free hand waves about as he talks
     pose['eL'] = 50 - 70 * k
     pose['look'] = -0.7
-    GUY.draw(cv, pose, (seat[0] + 30, seat[1] - 22), held=lambda c, h, a: phone(c, h, a, 2.6))
-    # the counters, top right
-    views, likes, cmts = grow(t, 0.6, 5.4, 2_400_000), grow(t, 0.8, 5.5, 418_000), grow(t, 1.0, 5.5, 31_200)
-    y0 = 150
-    for n, (icon, val) in enumerate([(eye, views), (heart, likes), (bubble_icon, cmts)]):
-        y = y0 + n * 105
-        pulse = 1 + 0.12 * max(0, math.sin(t * 14 + n)) * (val > 10)
-        cv.rrect((560, y - 44, 1040, y + 44), 44, fill=(255, 255, 255), col=(225, 228, 236), w=3)
-        if icon is heart: heart(cv, (620, y + 4), 52 * pulse)
-        else: icon(cv, (620, y), 52 * pulse)
-        cv.d.text((680 * SS, y * SS), fmt(val), font=F_BIG, fill=INK, anchor='lm')
-    # hearts floating up from the bottom right
+    GUY.draw(cv, pose, (seat[0] + 30, seat[1] - 22), held=lambda c, h, a: phone(c, h, a, 2.4))
+    # hearts floating up the right side, like a live stream
     for (t0, x, sc) in HEARTS:
         age = t - t0
         if 0 <= age < 1.6:
-            y = 1650 - age * 700
-            heart(cv, (x + 30 * math.sin(age * 5 + x), y), 46 * sc * (1 - age / 2.2), col=RED if int(x) % 3 else PINK)
-    # comments pop in on the right, newest at the bottom, older ones slide up and fade
-    shown = [(t0, s) for t0, s in COMMENTS if t >= t0]
-    for j, (t0, s) in enumerate(reversed(shown[-6:])):
-        age = t - t0
-        pop = ease(min(1, age / 0.18))
-        y = 1080 - j * 82 - (1 - pop) * 30
-        if y < 520: continue
-        tw = cv.d.textlength(s, font=F_CMT) / SS + 40 * s.count('😂') + 60
-        x0 = 1040 - tw
-        cv.rrect((x0, y - 32, 1040, y + 32), 32, fill=(240, 242, 248) if j else (255, 236, 240), col=(225, 228, 236), w=2)
-        text_with_emoji(cv, (x0 + 26, y), s, F_CMT)
+            y = 1400 - age * 650
+            fheart(cv, (x - 60 + 30 * math.sin(age * 5 + x), y), 52 * sc * (1 - age / 2.2), RED if int(x) % 3 else PINK)
+    stats = dict(views=grow(t, 0.4, 5.4, 2_400_000), likes=grow(t, 0.6, 5.5, 418_000), comments=grow(t, 0.8, 5.5, 31_200),
+                 saves=grow(t, 1.0, 5.5, 52_700), shares=grow(t, 1.0, 5.5, 88_100))
+    draw_feed(cv, t, stats, user='@korol_unitazu', caption='день з життя легенди 🚽 #рек #топ', comments=FEED_COMMENTS,
+              liked=t > 0.6, progress=t / DUR, avatar=0)
     # fade in / out at the edges
     img = cv.image()
     k = min(1.0, t / 0.25, (DUR - t) / 0.3)
