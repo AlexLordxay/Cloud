@@ -53,6 +53,7 @@
     <button class="btn" id="quality" type="button">Якість: авто</button>
     <button class="btn support-btn" id="supportBtn" type="button" hidden>✦ Підтримати</button>
     <label class="speed" for="speed">Час <input id="speed" type="range" min="0" max="6" step="1" value="0"><output id="speedOut">реальний</output></label>
+    <button class="btn lang-btn" id="langBtn" type="button">EN</button>
     <a class="btn about-link" href="/about/">Про проєкт</a>
     <!-- The project in the social networks: quiet outline icons, the same @nebozvid everywhere. -->
     <div class="socials">
@@ -156,6 +157,9 @@
   <span id="loadText">Завантажуємо карти поверхонь…</span>
 </div>
 
+<script src="js/i18n.js"></script>
+<script src="js/lang_en.js"></script>
+<script>startI18n();</script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
@@ -176,9 +180,9 @@ function showFallback(reason, detail) {
   loaderEl.classList.remove("done");
   loaderEl.innerHTML = `<div class="fallback">
     <span class="logo" role="img" aria-label="Небозвід"><span aria-hidden="true">Небозвı<span class="logo-star"></span>д</span></span>
-    <p>${detail || FALLBACK[reason] || FALLBACK.error}</p>
-    <button type="button" class="more" id="reload">${eco ? "Оновити в економному режимі" : "Оновити сторінку"}</button>
-    <img src="og.jpg" alt="Так виглядає Небозвід: Сатурн з кільцями" width="1200" height="630">
+    <p>${detail || T(FALLBACK[reason] || FALLBACK.error)}</p>
+    <button type="button" class="more" id="reload">${T(eco ? "Оновити в економному режимі" : "Оновити сторінку")}</button>
+    <img src="og.jpg" alt="${T("Так виглядає Небозвід: Сатурн з кільцями")}" width="1200" height="630">
   </div>`;
   document.getElementById("reload").addEventListener("click", () => {
     if (eco) try { localStorage.setItem("planetarium.quality", "eco"); } catch (e) { /* not saved */ }
@@ -206,7 +210,7 @@ addEventListener("unhandledrejection", startFailed);
 // A slow connection: say so, so the loading screen doesn't look stuck.
 setTimeout(() => {
   const t = document.getElementById("loadText");
-  if (t && !loaderEl.classList.contains("done")) t.textContent += " З'єднання повільне — ще трохи…";
+  if (t && !loaderEl.classList.contains("done")) t.textContent += T(" З'єднання повільне — ще трохи…");
 }, 20000);
 </script>
 <script src="js/data.js"></script>

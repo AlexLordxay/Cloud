@@ -30,5 +30,15 @@ a { justify-self: center; margin-top: 10px; padding: 11px 22px; border-radius: 9
   <div class="logo" role="img" aria-label="Небозвід">Небозвід</div>
   <p>Такої сторінки немає — схоже, вона загубилася десь за поясом Койпера.</p>
   <a href="/">До Сонячної системи ✦</a>
+<script src="/js/i18n.js"></script>
+<script>
+// English site (js/i18n.js): the same three lines in English.
+if (EN_ON) {
+  document.documentElement.lang = "en";
+  document.title = "Page not found — Nebozvid";
+  document.querySelector("p").textContent = "There's no such page — looks like it got lost somewhere beyond the Kuiper belt.";
+  document.querySelector("a").textContent = "To the Solar System ✦";
+}
+</script>
 </body>
 </html>

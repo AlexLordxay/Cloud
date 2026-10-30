@@ -191,6 +191,11 @@ const OVERVIEW = {
   desc: "Планети, карликові планети й комети стоять там, де вони є насправді на дату вгорі ліворуч. «Зараз» повертає до поточного моменту, повзунок «Час» прискорює рух. Розміри й відстані не в масштабі: у справжніх пропорціях більшість планет були б меншими за піксель.",
   fact: "1 астрономічна одиниця (а. о.) — це середня відстань від Землі до Сонця, приблизно 149,6 млн км.",
 };
+// English site: the bodies' names, stats, texts and buttons through the dictionary (js/i18n.js, js/lang_en.js).
+if (EN_ON) {
+  const tr = v => typeof v === "string" ? T(v) : Array.isArray(v) ? v.map(tr) : v;
+  for (const b of BODIES.concat(OVERVIEW)) for (const k of ["name", "short", "kind", "dText", "stats", "desc", "voice", "fact", "actions"]) if (b[k] != null) b[k] = tr(b[k]);
+}
 
 /* ---------- Helpers & texture list ---------- */
 const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;

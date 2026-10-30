@@ -44,6 +44,7 @@ body {
 main { max-width: 680px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 28px) 20px 64px; }
 .back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 14px; }
 .back:hover { color: var(--fg); }
+.top { display: flex; justify-content: space-between; gap: 12px; }
 .logo {
   font: italic 700 64px/1 "Cormorant", Georgia, serif; margin: 28px 0 4px; display: inline-block; padding: 0.08em 0.06em 0.12em 0;
   background: linear-gradient(100deg, #f7c66b 0%, #f39a8b 52%, #9cc2ff 100%); -webkit-background-clip: text; background-clip: text;
@@ -70,7 +71,7 @@ footer { margin-top: 48px; font-size: 13px; color: var(--muted); }
 </head>
 <body>
 <main>
-  <a class="back" href="/">← До Небозводу</a>
+  <div class="top"><a class="back" href="/">← До Небозводу</a><a class="back" href="?lang=en" lang="en">EN · English</a></div>
 
   <div class="logo" role="img" aria-label="Небозвід">Небозвід</div>
   <p class="lead">Сонячна система в 3D на реальних даних. Планети, супутники й комети стоять там, де вони є насправді, — на будь-яку дату з 1800 по 2200 рік. Українською, безкоштовно й без реклами.</p>
@@ -119,5 +120,67 @@ footer { margin-top: 48px; font-size: 13px; color: var(--muted); }
 
   <footer>© 2026 Небозвід · Alex (Lord-xay) · nebozvid.com.ua</footer>
 </main>
+<!-- The English page (js/i18n.js: ?lang=en or the last choice) takes the place of the Ukrainian one. -->
+<template id="mainEn">
+<main lang="en">
+  <div class="top"><a class="back" href="/">← Back to Nebozvid</a><a class="back" href="?lang=uk" lang="uk">UA · Українська</a></div>
+
+  <div class="logo" role="img" aria-label="Nebozvid">Небозвід</div>
+  <p class="lead">The Solar System in 3D from real data. Planets, moons and comets are where they really are — on any date from 1800 to 2200. Made in Ukraine, free and without ads. <i>Nebozvid</i> is an old Ukrainian word for the sky, the firmament.</p>
+
+  <h2>Who makes it</h2>
+  <p>Hi, I'm Alex, also known as Lord-xay. Nebozvid began with a simple wish: to see the sky not as a picture in a textbook, but alive. To turn Saturn around and look closely at its rings, to peek under Titan's orange haze, to see where the Moon's shadow will fall on 2 August 2027.</p>
+  <p>I also wanted the sky overhead to stop being just a pretty picture. So that on an evening walk with someone you love, or lying in a meadow under the stars, you could do more than admire it in silence — you could say: that bright “star” is actually Jupiter, and the meteors in October are dust from Halley's Comet that Earth flies through every year. The sky feels closer when you know what's in it.</p>
+  <p>I wanted it to be open to everyone — right from a phone, with no sign-up and no subscriptions. There are no ads here and nobody tracks you: just space that you can turn and explore yourself. I hope that someone who opens Nebozvid will, for the first time, want to look up at night.</p>
+
+  <h2>How it works</h2>
+  <ul>
+    <li><b>Planet positions</b> are calculated from NASA JPL orbital elements (most accurate for 1800–2050), the Moon's from Jean Meeus's formulas, and the Galilean moons' from their real periods. Eclipses and shadows follow the real geometry.</li>
+    <li><b>Sizes and distances are not to scale.</b> In true proportions most planets would be smaller than a pixel, so distances are compressed, but the order and shape of the orbits are kept.</li>
+    <li><b>Surfaces</b> are real maps from spacecraft. The moving clouds, storms, lightning, auroras and the living Sun are simulations based on real observations. Where no spacecraft took pictures (parts of Pluto, Charon and Triton), the surface is an artist's rendering — the body's description says so.</li>
+    <li><b>Sounds</b> are synthesised after real recordings: the Sun's oscillations, the wind on Mars, the radio waves of Jupiter and Saturn. The background music is original, by Lord-xay.</li>
+  </ul>
+
+  <h2>Sources and thanks</h2>
+  <div class="card small">
+    <p>Surface maps: <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> (CC BY 4.0), based on NASA data.</p>
+    <p>Titan — the Cassini VIMS/ISS infrared map (Seignovert et al. 2019, via pyvims, BSD-3).</p>
+    <p>Other moons, Ceres and Pluto — NASA/JPL/USGS mosaics (Galileo, Cassini, Voyager, Dawn, New Horizons), some in approximate colour.</p>
+    <p>Detailed Earth up close — NASA Blue Marble and Black Marble (via freetiler, NASA open data).</p>
+    <p>The Moon's relief — the <a href="https://github.com/CelestiaProject/CelestiaContent" target="_blank" rel="noopener">Celestia</a> normal map from the USGS digital elevation model (GPL-2.0+).</p>
+    <p>Earth at night, oceans and clouds — <a href="https://github.com/mrdoob/three.js/tree/dev/examples/textures/planets" target="_blank" rel="noopener">three.js</a>; 3D engine — <a href="https://threejs.org" target="_blank" rel="noopener">three.js</a> (MIT).</p>
+    <p style="margin:0">Planet positions — “Approximate Positions of the Planets” (E. M. Standish, NASA JPL); the Moon — “Astronomical Algorithms” (J. Meeus). Fonts — Cormorant, Unbounded, Commissioner (SIL OFL).</p>
+  </div>
+
+  <h2>Privacy</h2>
+  <p>Nebozvid collects no personal data and uses no cookies. Visits are counted anonymously (Cloudflare Web Analytics — no tracking of individual people). Your settings, such as the graphics quality, are stored only in your browser.</p>
+
+  <h2>Support</h2>
+  <p>Nebozvid is free and has no ads. If you like it, you can support its growth: new planets and comets, videos, versions in other languages. Any amount helps — thank you! ✦ (Payments go through a Monobank jar, in Ukrainian hryvnias; any bank card, Apple Pay or Google Pay works.)</p>
+  <p><a class="open" style="margin-top:4px" href="/#support">✦ Support Nebozvid</a></p>
+
+  <h2>Contact and social media</h2>
+  <p>Ideas, questions or a bug on the site — <a href="https://t.me/nebozvid?direct" target="_blank" rel="noopener">write on Telegram</a> (English is fine). New videos and events — on social media (mostly in Ukrainian):</p>
+  <div class="socials">
+    <a href="https://t.me/nebozvid" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4 3 11.2l6.2 2.2L18 7.2l-6.9 7.4V20l3.5-3.6 4 3L21 4z"/></svg>Telegram</a>
+    <a href="https://instagram.com/nebozvid" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="0.6" fill="currentColor" stroke="none"/></svg>Instagram</a>
+    <a href="https://www.tiktok.com/@nebozvid" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2.8v12a4.2 4.2 0 1 1-4.2-4.2"/><path d="M14 2.8c.5 2.9 2.6 4.8 5.6 5"/></svg>TikTok</a>
+    <a href="https://www.youtube.com/@nebozvid" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.2 9.3v5.4l4.6-2.7z" fill="currentColor" stroke="none"/></svg>YouTube</a>
+  </div>
+
+  <a class="open" href="/">Open Nebozvid ✦</a>
+
+  <footer>© 2026 Nebozvid · Alex (Lord-xay) · nebozvid.com.ua</footer>
+</main>
+</template>
+<script src="/js/i18n.js"></script>
+<script>
+if (EN_ON) {
+  document.querySelector("main").replaceWith(document.getElementById("mainEn").content.cloneNode(true));
+  document.documentElement.lang = "en";
+  document.title = "About — Nebozvid";
+  document.querySelector('meta[name="description"]').content = "Nebozvid — the Solar System in 3D from real data, free and without ads. Who makes it, how it works, sources and thanks.";
+}
+</script>
 </body>
 </html>

@@ -79,6 +79,7 @@ button { font: inherit; color: inherit; }
 .socials { display: flex; align-items: center; gap: 2px; padding-left: 8px; margin-left: 2px; border-left: 1px solid var(--line); }
 .socials a { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 50%; color: var(--muted); transition: color .2s, background .2s; }
 .about-link { display: none !important; }
+.lang-long { display: none; }
 .socials a:hover { color: var(--fg); background: rgba(255,255,255,0.07); }
 .socials svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .btn {
@@ -330,6 +331,7 @@ body.touring .info, body.touring .dock, body.touring .catalog, body.touring .wel
   .controls .speed { padding: 10px 12px; justify-content: space-between; }
   .controls .speed input { width: 90px; }
   .about-link { display: flex !important; text-decoration: none; }
+  .lang-long { display: inline; }
   .controls .support-btn:not([hidden]) { display: flex !important; }
   .socials .support-icon { display: none !important; }
   .socials .about-icon { display: none; }

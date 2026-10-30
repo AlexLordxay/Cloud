@@ -31,6 +31,8 @@ const TOUR = [
     text: "Березень 1997-го. Ядро завбільшки 60 км, тож півтора року її було видно без телескопа — рекорд." },
   { id: null, title: "Уся Сонячна система", text: "Планети стоять так, як зараз на небі. Тепер досліджуй сам: торкнись будь-якої планети." },
 ];
+// English site: the stops' titles and texts through the dictionary (js/i18n.js, js/lang_en.js).
+if (EN_ON) for (const st of TOUR) for (const k of ["title", "text", "under"]) if (st[k]) st[k] = T(st[k]);
 const tour = { on: false, i: 0, paused: false, held: 0, last: 0, dur: 0, half: 0, under: false, past: false };
 const tourEl = $("tour");
 
@@ -48,8 +50,8 @@ function tourStep(i) {
   $("tourTitle").textContent = st.title;
   $("tourText").textContent = st.text;
   $("tourPrev").disabled = tour.i === 0;
-  $("tourNext").textContent = tour.i === TOUR.length - 1 ? "Готово" : "›";
-  $("tourNext").setAttribute("aria-label", tour.i === TOUR.length - 1 ? "Завершити екскурсію" : "Далі");
+  $("tourNext").textContent = tour.i === TOUR.length - 1 ? T("Готово") : "›";
+  $("tourNext").setAttribute("aria-label", T(tour.i === TOUR.length - 1 ? "Завершити екскурсію" : "Далі"));
   // the text card fades in anew for each stop
   tourEl.classList.remove("show"); void tourEl.offsetWidth; tourEl.classList.add("show");
   // comets: off to a year when they were active; back to today when the tour moves on
@@ -81,7 +83,7 @@ function setTourPaused(p) {
   tour.paused = p;
   controls.autoRotate = !p && !reduceMotion;
   $("tourPause").textContent = p ? "▶" : "❚❚";
-  $("tourPause").setAttribute("aria-label", p ? "Продовжити" : "Пауза");
+  $("tourPause").setAttribute("aria-label", T(p ? "Продовжити" : "Пауза"));
   tourEl.classList.toggle("paused", p);
 }
 // Tour music (js/audio.js): on by default, the choice is remembered. The site's own music steps aside meanwhile.
