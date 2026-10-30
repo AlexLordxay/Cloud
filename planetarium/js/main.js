@@ -23,12 +23,12 @@ function jumpTo(ms, rate, label) {
   setLive(false);
   if (rate != null) setRate(rate);
   if (state.paused) $("pause").click();
-  if (label) showToast(`${label}: ${new Date(state.simMs).toLocaleDateString("uk-UA", { day: "numeric", month: "long", year: "numeric" })} Час іде зі швидкістю ${RATES[state.rate][1]}.`, 5000);
+  if (label) showToast(T("{0}: {1} Час іде зі швидкістю {2}.", label, new Date(state.simMs).toLocaleDateString(LOC, { day: "numeric", month: "long", year: "numeric" }), RATES[state.rate][1]), 5000);
 }
-const fmtNum = (x, d) => x.toFixed(d).replace(".", ",");
+const fmtNum = (x, d) => EN_ON ? x.toFixed(d) : x.toFixed(d).replace(".", ",");
 function fmtAU(au) {
   const far = au * 149.6 >= 1000;
-  return `${fmtNum(au, au < 0.1 ? 3 : au < 10 ? 2 : 1)} а. о. (${far ? fmtNum(au * 0.1496, 2) + " млрд" : Math.round(au * 149.6).toLocaleString("uk-UA") + " млн"} км)`;
+  return T("{0} а. о. ({1} км)", fmtNum(au, au < 0.1 ? 3 : au < 10 ? 2 : 1), far ? fmtNum(au * 0.1496, 2) + T(" млрд") : Math.round(au * 149.6).toLocaleString(LOC) + T(" млн"));
 }
 let liveAt = 0;
 function updateLive(force) {
@@ -38,16 +38,16 @@ function updateLive(force) {
   const el = $("live"), b = state.index >= 0 ? BODIES[state.index] : null, E = byId.earth;
   let txt = "";
   if (b && E.auVec) {
-    if (b.id === "sun") txt = `Зараз від Землі: ${fmtAU(E.au)}`;
-    else if (b.id === "moon") txt = `Зараз від Землі: ${Math.round(state.moonKm).toLocaleString("uk-UA")} км`;
-    else if (!b.parent) txt = `Зараз від Сонця: ${fmtAU(b.au)}` + (b.id === "earth" ? "" : `\nВід Землі: ${fmtAU(b.auVec.distanceTo(E.auVec))}`);
-    if ((b.id === "earth" || b.id === "sun") && eclipse.solar) txt += `\nЗараз ${eclipse.solar}`;
-    if ((b.id === "moon" || b.id === "earth") && eclipse.lunar) txt += `\nЗараз ${eclipse.lunar}`;
+    if (b.id === "sun") txt = T("Зараз від Землі: {0}", fmtAU(E.au));
+    else if (b.id === "moon") txt = T("Зараз від Землі: {0}", Math.round(state.moonKm).toLocaleString(LOC) + " " + T("км"));
+    else if (!b.parent) txt = T("Зараз від Сонця: {0}", fmtAU(b.au)) + (b.id === "earth" ? "" : "\n" + T("Від Землі: {0}", fmtAU(b.auVec.distanceTo(E.auVec))));
+    if ((b.id === "earth" || b.id === "sun") && eclipse.solar) txt += "\n" + T("Зараз {0}", eclipse.solar);
+    if ((b.id === "moon" || b.id === "earth") && eclipse.lunar) txt += "\n" + T("Зараз {0}", eclipse.lunar);
     if (b.id === "mars") {
-      const ls = Math.round(marsLs(b.auVec)) % 360, q = ["весна", "літо", "осінь", "зима"][Math.floor(ls / 90)];
-      txt += `\nСезон: ${q} у північній півкулі (Ls ${ls}°)`;
-      if (marsU.globalDust.value > 0.5) txt += "\nЗараз глобальна пилова буря";
-      else if (ls > 180 && ls < 330) txt += "\nСезон пилових бур";
+      const ls = Math.round(marsLs(b.auVec)) % 360, q = T(["весна", "літо", "осінь", "зима"][Math.floor(ls / 90)]);
+      txt += "\n" + T("Сезон: {0} у північній півкулі (Ls {1}°)", q, ls);
+      if (marsU.globalDust.value > 0.5) txt += "\n" + T("Зараз глобальна пилова буря");
+      else if (ls > 180 && ls < 330) txt += "\n" + T("Сезон пилових бур");
     }
   }
   el.textContent = txt;
@@ -84,14 +84,14 @@ function setActive(b) {
 // The address bar follows the view, so a copied link opens what was on screen.
 // Comets open near the Sun, with the coma and tails out and the camera closer (`zoom`), as in the tour,
 // rather than as a cold speck far away.
-const HALLEY = { body: "halley", date: "1986-01-20T12:00:00Z", rate: 3, zoom: 0.5, label: "Останній прихід комети Галлея" };
-const CG67P = { body: "cg67p", date: "2015-07-20T00:00:00Z", rate: 3, zoom: 0.3, label: "Комета 67P біля Сонця" };
-const HALEBOPP = { body: "halebopp", date: "1997-03-22T00:00:00Z", rate: 3, zoom: 0.6, label: "Велика комета 1997 року" };
+const HALLEY = { body: "halley", date: "1986-01-20T12:00:00Z", rate: 3, zoom: 0.5, label: T("Останній прихід комети Галлея") };
+const CG67P = { body: "cg67p", date: "2015-07-20T00:00:00Z", rate: 3, zoom: 0.3, label: T("Комета 67P біля Сонця") };
+const HALEBOPP = { body: "halebopp", date: "1997-03-22T00:00:00Z", rate: 3, zoom: 0.6, label: T("Велика комета 1997 року") };
 const LINKS = {
   "67p": CG67P, cg67p: CG67P,
   "hale-bopp": HALEBOPP, halebopp: HALEBOPP,
   halley: HALLEY, orionids: HALLEY,
-  eclipse: { body: "earth", date: "2027-08-02T09:10:00Z", rate: 1, label: "Затемнення 2 серпня 2027" },
+  eclipse: { body: "earth", date: "2027-08-02T09:10:00Z", rate: 1, label: T("Затемнення 2 серпня 2027") },
 };
 const SLUG = { cg67p: "67p" };
 function linkTarget(hash) {
@@ -147,7 +147,7 @@ $("overview").addEventListener("click", showOverview);
 $("pause").addEventListener("click", () => {
   state.paused = !state.paused;
   $("pause").setAttribute("aria-pressed", String(state.paused));
-  $("pause").textContent = state.paused ? "Далі" : "Пауза";
+  $("pause").textContent = state.paused ? (EN_ON ? "Resume" : "Далі") : T("Пауза");
 });
 $("orbits").addEventListener("click", () => {
   state.orbits = !state.orbits;
@@ -195,21 +195,21 @@ function applyQuality(nextEco) {
   }
   // Maps: updateHiRes drops the 4096 px versions in economy mode and brings them back on approach otherwise.
 }
-const Q_LABEL = { auto: "авто", high: "висока", eco: "економна" };
+const Q_LABEL = { auto: T("авто"), high: T("висока"), eco: T("економна") };
 function updateQualityButton() {
-  $("quality").textContent = `Якість: ${Q_LABEL[qualitySetting]}`;
-  $("quality").title = eco ? "Зараз: економна графіка" : "Зараз: повна графіка";
+  $("quality").textContent = T("Якість: {0}", Q_LABEL[qualitySetting]);
+  $("quality").title = T(eco ? "Зараз: економна графіка" : "Зараз: повна графіка");
 }
 $("quality").addEventListener("click", () => {
   qualitySetting = { auto: "high", high: "eco", eco: "auto" }[qualitySetting];
   try { localStorage.setItem(Q_KEY, qualitySetting); } catch (e) { /* not saved */ }
   applyQuality(qualitySetting === "eco" || (qualitySetting === "auto" && (detectLowEnd() || autoDegraded)));
   updateQualityButton();
-  showToast({
-    auto: `Якість: авто. Сайт сам обирає за пристроєм; зараз ${eco ? "економна" : "повна"} графіка.`,
+  showToast(T({
+    auto: eco ? "Якість: авто. Сайт сам обирає за пристроєм; зараз економна графіка." : "Якість: авто. Сайт сам обирає за пристроєм; зараз повна графіка.",
     high: "Якість: висока. Карти 4096 пікселів і всі ефекти.",
     eco: "Якість: економна. Легші карти, нижча роздільність і спрощене Сонце — для телефонів і слабких комп'ютерів.",
-  }[qualitySetting], 5000);
+  }[qualitySetting]), 5000);
 });
 let toastTimer = 0;
 function showToast(text, ms) {
@@ -222,26 +222,26 @@ let musicExplained = false;
 $("music").addEventListener("click", async () => {
   if (!music) {
     music = createMusicPlayer();
-    if (!music) { showToast("Цей браузер не підтримує звук на вебсторінках.", 5000); return; }
+    if (!music) { showToast(T("Цей браузер не підтримує звук на вебсторінках."), 5000); return; }
   }
   const on = await music.toggle();
   $("music").setAttribute("aria-pressed", String(on));
   if (on && !musicExplained) {
     musicExplained = true;
-    showToast("Фонова музика — композиція в дусі космічних саундтреків, створена автором: Lord-xay.", 6000);
+    showToast(T("Фонова музика — композиція в дусі космічних саундтреків, створена автором: Lord-xay."), 6000);
   }
 });
 let soundExplained = false;
 $("sound").addEventListener("click", async () => {
   if (!sunAudio) {
     sunAudio = createSunAudio();
-    if (!sunAudio) { showToast("Цей браузер не підтримує звук на вебсторінках.", 5000); return; }
+    if (!sunAudio) { showToast(T("Цей браузер не підтримує звук на вебсторінках."), 5000); return; }
   }
   const on = await sunAudio.toggle();
   $("sound").setAttribute("aria-pressed", String(on));
   if (on && !soundExplained) {
     soundExplained = true;
-    showToast("У космосі тиша: звук там не поширюється. Біля Сонця чути його справжні коливання, прискорені в 42 000 разів, а біля Марса, Юпітера, Сатурна й Землі — звуки за мотивами реальних записів апаратів.", 9000);
+    showToast(T("У космосі тиша: звук там не поширюється. Біля Сонця чути його справжні коливання, прискорені в 42 000 разів, а біля Марса, Юпітера, Сатурна й Землі — звуки за мотивами реальних записів апаратів."), 9000);
   }
 });
 // Phone menu: open/close from the button, close when tapping elsewhere.
@@ -270,7 +270,7 @@ function setSupport(open) {
 }
 if (JAR_URL) {
   $("supportSums").innerHTML = SUPPORT_SUMS.map(n => `<a href="${JAR_URL}?a=${n}" target="_blank" rel="noopener">${n} ₴</a>`).join("")
-    + `<a class="own" href="${JAR_URL}" target="_blank" rel="noopener">Своя сума</a>`;
+    + `<a class="own" href="${JAR_URL}" target="_blank" rel="noopener">${T("Своя сума")}</a>`;
   $("supportBtn").hidden = $("supportIcon").hidden = $("supportLine").hidden = false;
   for (const id of ["supportBtn", "supportIcon", "supportLink"]) $(id).addEventListener("click", () => setSupport(true));
   $("supportClose").addEventListener("click", () => setSupport(false));
@@ -284,7 +284,7 @@ const INFO_KEY = "planetarium.infoOpen";
 function setInfoOpen(open, remember) {
   infoEl.classList.toggle("open", open);
   $("more").setAttribute("aria-expanded", String(open));
-  $("more").textContent = open ? "Згорнути" : "Детальніше";
+  $("more").textContent = T(open ? "Згорнути" : "Детальніше");
   if (remember) try { localStorage.setItem(INFO_KEY, open ? "1" : "0"); } catch (e) { /* not saved */ }
 }
 let infoStartOpen = innerWidth > 720;
@@ -344,7 +344,7 @@ function showWelcome() {
     ["🤏", "<b>Два пальці</b> — наблизити, <b>один</b> — обертати"],
     ["📅", "<b>Дата вгорі</b> — небо будь-якого дня"],
   ];
-  $("welcomeList").innerHTML = rows.map(([i, t]) => `<li><span class="ico" aria-hidden="true">${i}</span><span>${t}</span></li>`).join("");
+  $("welcomeList").innerHTML = rows.map(([i, t]) => `<li><span class="ico" aria-hidden="true">${i}</span><span>${T(t)}</span></li>`).join("");
   const el = $("welcome");
   el.hidden = false;
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("show")));
@@ -434,7 +434,7 @@ function watchFrameRate() {
       autoDegraded = true;
       applyQuality(true);
       updateQualityButton();
-      showToast("Пристрій не встигав, тому графіка перемкнулася на економну. Змінити можна кнопкою «Якість».", 6000);
+      showToast(T("Пристрій не встигав, тому графіка перемкнулася на економну. Змінити можна кнопкою «Якість»."), 6000);
     }
   }
 }
@@ -667,7 +667,7 @@ function loadTextures() {
     tex[k] = t;
     done++;
     $("barFill").style.width = `${(done / FIRST_MAPS.length) * 100}%`;
-    $("loadText").textContent = `Завантажено карт: ${done} з ${FIRST_MAPS.length}`;
+    $("loadText").textContent = T("Завантажено карт: {0} з {1}", done, FIRST_MAPS.length);
   }))).then(() => tex);
 }
 // 4096 px maps only where they show: a body in view whose disc is over ~420 device pixels across its radius
@@ -719,7 +719,7 @@ async function build() {
   try {
     tex = await loadTextures();
   } catch (err) {
-    showFallback("textures", `Не вдалося завантажити карту поверхні (${err.message}). Онови сторінку. Якщо відкриваєш файл локально, запусти його через вебсервер, наприклад: python3 -m http.server`);
+    showFallback("textures", T("Не вдалося завантажити карту поверхні ({0}). Онови сторінку. Якщо відкриваєш файл локально, запусти його через вебсервер, наприклад: python3 -m http.server", err.message));
     return;
   }
   const jd0 = jdOf(state.simMs);

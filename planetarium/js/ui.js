@@ -6,7 +6,7 @@
 const $ = id => document.getElementById(id);
 const chipsEl = $("chips"), tagsEl = $("tags"), infoEl = $("info"), moonsEl = $("moons"), moonListEl = $("moonList");
 // Seconds of simulated time per real second.
-const RATES = [[1, "реальний"], [60, "1 хв/с"], [3600, "1 год/с"], [86400, "1 доба/с"], [604800, "1 тижд/с"], [2629800, "1 міс/с"], [31557600, "1 рік/с"]];
+const RATES = [[1, "реальний"], [60, "1 хв/с"], [3600, "1 год/с"], [86400, "1 доба/с"], [604800, "1 тижд/с"], [2629800, "1 міс/с"], [31557600, "1 рік/с"]].map(([r, s]) => [r, T(s)]);
 
 function makeChip(b) {
   const chip = document.createElement("button");
@@ -37,7 +37,7 @@ BODIES.forEach((b, i) => {
 // Catalogue: planets (dwarfs below), moons grouped by their planet, comets.
 const catalogEl = $("catalog");
 function catItem(b, list) {
-  const label = b.comet ? b.name.replace(/^Комета /, "") : b.name;
+  const label = b.comet ? b.name.replace(/^(Комета|Comet) /, "") : b.name;
   const chip = document.createElement("button");
   chip.className = "chip"; chip.type = "button";
   chip.innerHTML = `<i style="background:${b.dot};color:${b.dot}"></i>${label}${b.short && b.short !== label ? ` <small>${b.short}</small>` : ""}`;
@@ -76,7 +76,7 @@ for (const t of catalogEl.querySelectorAll(".cat-tabs button")) t.addEventListen
 
 function fmtRatio(d, ref, refName) {
   const r = d / ref;
-  const s = r >= 10 ? Math.round(r).toString() : r.toFixed(r < 1 ? 2 : 1).replace(".", ",");
+  const s = r >= 10 ? Math.round(r).toString() : r.toFixed(r < 1 ? 2 : 1).replace(".", EN_ON ? "." : ",");
   return `${s} × ${refName}`;
 }
 function renderInfo(b) {
@@ -86,8 +86,8 @@ function renderInfo(b) {
   let rows = data.stats;
   if (b) {
     const isMoon = b.parent && b.id !== "moon";
-    const note = b.comet ? "ядро" : b.id === "earth" ? "еталон для порівняння" : isMoon ? fmtRatio(b.d, MOON_D, "Місяця") : fmtRatio(b.d, EARTH_D, "Землі");
-    rows = [["Діаметр", b.dText || (b.d.toLocaleString("uk-UA") + " км"), note]].concat(b.stats);
+    const note = b.comet ? T("ядро") : b.id === "earth" ? T("еталон для порівняння") : isMoon ? fmtRatio(b.d, MOON_D, T("Місяця")) : fmtRatio(b.d, EARTH_D, T("Землі"));
+    rows = [[T("Діаметр"), b.dText || (b.d.toLocaleString(LOC) + " " + T("км")), note]].concat(b.stats);
   }
   $("stats").innerHTML = rows.map(r => `<div><dt>${r[0]}</dt><dd>${r[1]}${r[2] ? `<small>${r[2]}</small>` : ""}</dd></div>`).join("");
   $("desc").textContent = data.desc;
@@ -118,7 +118,7 @@ function renderInfo(b) {
   moonListEl.innerHTML = "";
   moonsEl.hidden = !(family && family.moons);
   if (family && family.moons) {
-    $("moonsLabel").textContent = b.parent ? `Система: ${family.name}` : "Супутники";
+    $("moonsLabel").textContent = b.parent ? T("Система: {0}", family.name) : T("Супутники");
     const list = b.parent ? [family].concat(family.moons) : family.moons;
     for (const m of list) {
       const c = makeChip(m);

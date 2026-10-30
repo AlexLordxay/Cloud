@@ -599,17 +599,17 @@ function lazyMap(file, key) {
 }
 const SURFACES = {
   venus: {
-    u: venusU, labels: ["Показати поверхню (радар Magellan)", "Сховати поверхню"], wait: "Завантажуємо радарну карту…",
+    u: venusU, labels: [T("Показати поверхню (радар Magellan)"), T("Сховати поверхню")], wait: T("Завантажуємо радарну карту…"),
     load: () => lazyMap("venus_surface.jpg", "venusSurface").then(t => { venusU.surfMap.value = t; }),
   },
   titan: {
-    u: titanU, labels: ["Зазирнути під серпанок (інфрачервоний Cassini)", "Повернути серпанок"], wait: "Завантажуємо карту Cassini…",
+    u: titanU, labels: [T("Зазирнути під серпанок (інфрачервоний Cassini)"), T("Повернути серпанок")], wait: T("Завантажуємо карту Cassini…"),
     load: () => Promise.all([lazyMap("titan_surface.jpg", "titanSurface"), lazyMap("titan_lakes.png", "titanLakes")])
       .then(([t, l]) => { titanU.surfMap.value = t; titanU.lakeMap.value = l; }),
   },
 };
 for (const k in SURFACES) Object.assign(SURFACES[k], { on: false, loading: false, failed: false, target: 0 });
-function surfaceLabel(sv) { return sv.loading ? sv.wait : sv.failed ? "Не вдалося завантажити карту. Спробувати ще раз" : sv.labels[sv.on ? 1 : 0]; }
+function surfaceLabel(sv) { return sv.loading ? sv.wait : sv.failed ? T("Не вдалося завантажити карту. Спробувати ще раз") : sv.labels[sv.on ? 1 : 0]; }
 // The button may be rebuilt while a map loads (switching bodies), so it is looked up by id when the text changes.
 function refreshSurfaceButton(id) { const btn = document.getElementById("surface-" + id); if (btn) btn.textContent = surfaceLabel(SURFACES[id]); }
 function toggleSurface(id) {
@@ -993,17 +993,17 @@ function updateShadows(moonKm) {
     earthU.eCone.value.set(rm, (rs + rm) / dsm, (rs - rm) / dsm);
     const v = tAU.copy(M).negate(), al = v.dot(axis), perp = v.addScaledVector(axis, -al).length();
     const rp = rm + al * (rs + rm) / dsm, ru = rm - al * (rs - rm) / dsm;
-    if (al > 0 && perp < 1 + Math.abs(ru)) eclipse.solar = ru > 0 ? "повне сонячне затемнення" : "кільцеве сонячне затемнення";
-    else if (al > 0 && perp < 1 + rp) eclipse.solar = "часткове сонячне затемнення";
+    if (al > 0 && perp < 1 + Math.abs(ru)) eclipse.solar = T(ru > 0 ? "повне сонячне затемнення" : "кільцеве сонячне затемнення");
+    else if (al > 0 && perp < 1 + rp) eclipse.solar = T("часткове сонячне затемнення");
     // Lunar eclipse: Earth's shadow cone pointing away from the Sun (umbra widened ~2% by the atmosphere).
     const dse = S.length(), anti = lunarU.lAnti.value.copy(S).divideScalar(-dse);
     lunarU.lmCenter.value.copy(M);
     lunarU.lCone.value.set(rm, (rs - 1) / dse, (rs + 1) / dse);
     const al2 = M.dot(anti), perp2 = tAU.copy(M).addScaledVector(anti, -al2).length();
     const ru2 = 1.02 - al2 * (rs - 1) / dse, rp2 = 1.02 + al2 * (rs + 1) / dse;
-    if (al2 > 0 && perp2 < ru2 - rm) eclipse.lunar = "повне місячне затемнення";
-    else if (al2 > 0 && perp2 < ru2 + rm) eclipse.lunar = "часткове місячне затемнення";
-    else if (al2 > 0 && perp2 < rp2 + rm) eclipse.lunar = "півтіньове місячне затемнення";
+    if (al2 > 0 && perp2 < ru2 - rm) eclipse.lunar = T("повне місячне затемнення");
+    else if (al2 > 0 && perp2 < ru2 + rm) eclipse.lunar = T("часткове місячне затемнення");
+    else if (al2 > 0 && perp2 < rp2 + rm) eclipse.lunar = T("півтіньове місячне затемнення");
   } else {
     earthU.eMoon.value.set(1e6, 0, 0);
     lunarU.lmCenter.value.set(1e6, 0, 0);
