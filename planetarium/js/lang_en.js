@@ -183,6 +183,52 @@ Object.assign(EN, {
   "часткове місячне затемнення": "a partial lunar eclipse",
   "півтіньове місячне затемнення": "a penumbral lunar eclipse",
 
+  /* ---------- The tour (js/tour.js) ---------- */
+  "Готово": "Done",
+  "Продовжити": "Resume",
+  "Наша зоря. У ньому 99,86 % маси всієї Сонячної системи, а його світло летить до Землі 8 хвилин 20 секунд.":
+    "Our star. It holds 99.86 % of the mass of the whole Solar System, and its light takes 8 minutes 20 seconds to reach Earth.",
+  "Найгарячіша планета: +464 °C, гарячіше, ніж на Меркурії. Суцільні хмари із сірчаної кислоти ховають поверхню.":
+    "The hottest planet: +464 °C, hotter than Mercury. A solid layer of sulphuric acid clouds hides the surface.",
+  "А так виглядає поверхня під хмарами — радарна карта апарата Magellan: вулкани, лавові рівнини, гори.":
+    "And this is the surface under the clouds — the radar map from the Magellan spacecraft: volcanoes, lava plains, mountains.",
+  "Єдиний відомий світ із життям. Удень над океанами пливуть хмари, а на нічному боці світяться міста.":
+    "The only known world with life. By day clouds drift over the oceans, and on the night side the cities glow.",
+  "Завжди повернутий до нас одним боком. Кратери — сліди ударів за мільярди років. Тут ходили 12 людей.":
+    "It always shows us the same side. The craters are scars of impacts over billions of years. Twelve people have walked here.",
+  "Тут найвища гора Сонячної системи — вулкан Олімп, у два з половиною рази вищий за Еверест. А пилові бурі часом накривають усю планету.":
+    "Home to the tallest mountain in the Solar System — the volcano Olympus Mons, two and a half times taller than Everest. And dust storms sometimes cover the whole planet.",
+  "Найбільша планета. Велика червона пляма — буря, ширша за Землю, яку спостерігають уже понад 150 років.":
+    "The largest planet. The Great Red Spot is a storm wider than Earth, watched for over 150 years.",
+  "Найвулканічніший світ: сотні діючих вулканів. Надра Іо розігрівають припливи від сусіда-велетня Юпітера.":
+    "The most volcanic world: hundreds of active volcanoes. Io's interior is heated by tides from its giant neighbour, Jupiter.",
+  "Під кригою — солоний океан, і води в ньому більше, ніж на всій Землі. Одне з найкращих місць для пошуку життя.":
+    "Under the ice lies a salty ocean with more water than on all of Earth. One of the best places to look for life.",
+  "Кільця з льоду й каміння мають майже 300 тисяч кілометрів у поперечнику, а завтовшки подекуди лише десятки метрів.":
+    "Its rings of ice and rock are almost 300,000 km across, yet in places only tens of metres thick.",
+  "Єдиний супутник зі щільною атмосферою. Ззовні — гладка помаранчева куля: поверхню ховає густий смог.":
+    "The only moon with a thick atmosphere. From outside it is a smooth orange ball: dense smog hides the surface.",
+  "А під серпанком — дюни, гори й моря з рідкого метану біля полюса. Це інфрачервона карта апарата Cassini.":
+    "And under the haze — dunes, mountains and seas of liquid methane near the pole. This is the infrared map from the Cassini spacecraft.",
+  "Крижаний супутник, з тріщин якого б’ють гейзери води. Вони живлять одне з кілець Сатурна.":
+    "An icy moon with geysers of water bursting from its cracks. They feed one of Saturn's rings.",
+  "Лежить на боці: вісь нахилена на 98°. Тому на кожному полюсі 42 роки триває день і 42 роки — ніч.":
+    "It lies on its side: its axis is tilted by 98°. So each pole has 42 years of day and 42 years of night.",
+  "Найвітряніша планета: вітри до 2000 км/год. Його спершу обчислили на папері, а вже потім побачили в телескоп.":
+    "The windiest planet: winds up to 2,000 km/h. It was first calculated on paper and only then seen through a telescope.",
+  "Карликова планета із «серцем» з азотного льоду. Апарат New Horizons пролетів повз нього 2015 року.":
+    "A dwarf planet with a “heart” of nitrogen ice. The New Horizons spacecraft flew past it in 2015.",
+  "Комета 67P": "Comet 67P",
+  "Липень 2015-го, комета біля Сонця. Її відкрили в Києві, а 2014 року на неї вперше в історії сів апарат — Philae.":
+    "July 2015, the comet near the Sun. It was discovered in Kyiv, and in 2014 a spacecraft landed on a comet for the first time ever — Philae.",
+  "Січень 1986-го, останній прихід. Повертається раз на 76 років, наступного разу — 2061-го. Її пил дає метеори Оріоніди.":
+    "January 1986, its last visit. It returns every 76 years; next time in 2061. Its dust gives us the Orionid meteors.",
+  "Березень 1997-го. Ядро завбільшки 60 км, тож півтора року її було видно без телескопа — рекорд.":
+    "March 1997. Its nucleus is 60 km across, so it could be seen without a telescope for a year and a half — a record.",
+  "Уся Сонячна система": "The whole Solar System",
+  "Планети стоять так, як зараз на небі. Тепер досліджуй сам: торкнись будь-якої планети.":
+    "The planets are where they are in the sky right now. Now explore on your own: tap any planet.",
+
   /* ---------- The bodies (js/data.js) ---------- */
   // Shared labels
   "Вік": "Age",
