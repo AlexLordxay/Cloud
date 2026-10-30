@@ -61,6 +61,9 @@ function startI18n() {
   setupLangButton();
   if (!EN_ON) return;
   document.documentElement.lang = "en";
+  // the phone writes the date field in its own language (iOS: «17 лист. 2026 р.»), so the English date lies over it
+  const dt = document.getElementById("dateText");
+  if (dt) { dt.hidden = false; dt.parentNode.classList.add("own"); }
   document.title = T(document.title);
   const desc = document.querySelector('meta[name="description"]');
   if (desc) desc.content = T(desc.content);

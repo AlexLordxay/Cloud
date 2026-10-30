@@ -164,6 +164,8 @@ $("now").addEventListener("click", () => {
   setLive(true);
   if (state.paused) $("pause").click();
 });
+// English site: the date over the field (js/i18n.js), e.g. "17 Nov 2026"
+const fmtDay = new Intl.DateTimeFormat(LOC, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 $("date").addEventListener("change", e => {
   if (!e.target.value) return;
   const [y, m, d] = e.target.value.split("-").map(Number);
@@ -563,7 +565,10 @@ function tick() {
 
   // Clock readout.
   const ds = isoDate(state.simMs), ts = fmtTime.format(state.simMs);
-  if (ds !== lastDate && document.activeElement !== $("date")) { $("date").value = ds; lastDate = ds; }
+  if (ds !== lastDate && document.activeElement !== $("date")) {
+    $("date").value = ds; lastDate = ds;
+    if (EN_ON) $("dateText").textContent = fmtDay.format(new Date(ds + "T12:00:00Z"));
+  }
   if (ts !== lastClock) { $("clockTime").textContent = ts; lastClock = ts; }
   updateLive(false);
 
