@@ -109,10 +109,20 @@ def _eye(cv, c, s, col=ICON):
 
 def draw_feed(cv, t, stats, user='@user', caption='', comments=(), liked=True, progress=0.0, avatar=0):
     W, H = cv.w, cv.h
-    # the views pill, top left
-    cv.rrect((36, 70, 36 + 300, 70 + 76), 38, fill=(255, 255, 255), col=(226, 229, 236), w=3)
-    _eye(cv, (88, 108), 50)
-    cv.d.text((130 * SS, 108 * SS), fmt(stats.get('views', 0)), font=font(44, 800), fill=INK, anchor='lm')
+    # the views: big, top centre — the number is the story. `pop` (0..1) bumps it when a milestone is passed
+    v = stats.get('views', 0)
+    pop = stats.get('pop', 0.0)
+    sc = 1 + 0.25 * pop
+    f = font(int(92 * sc), 900)
+    txt = fmt(v)
+    tw = cv.d.textlength(txt, font=f) / SS
+    iw = 96 * sc
+    x0 = W / 2 - (tw + iw + 24) / 2
+    cv.rrect((x0 - 34, 120 - 70 * sc, x0 + iw + 24 + tw + 34, 120 + 70 * sc), 70 * sc, fill=(255, 255, 255), col=(226, 229, 236), w=4)
+    _eye(cv, (x0 + iw / 2, 120), iw * 0.9)
+    cv.d.text(((x0 + iw + 24) * SS, 122 * SS), txt, font=f, fill=INK, anchor='lm')
+    if stats.get('label'):
+        cv.d.text((W / 2 * SS, (120 + 70 * sc + 34) * SS), stats['label'], font=font(30, 600), fill=MUTED, anchor='mm')
     # the right column: avatar with "+", heart, comments, bookmark, share — counts under each
     x = W - 92
     y = H * 0.40

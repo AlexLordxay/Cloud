@@ -49,20 +49,41 @@ def fmt(n):
     return str(int(n))
 
 
-def grow(t, t0, t1, top):
-    """A counter that starts slow and explodes (exponential), from 0 to `top` between t0 and t1."""
+def grow(t, t0, t1, top, start=None):
+    """A counter racing up on a log scale from `start` (default top/2000) to `top` between t0 and t1 — busy from frame 0."""
     x = min(1.0, max(0.0, (t - t0) / (t1 - t0)))
-    return top * (math.exp(6 * x) - 1) / (math.exp(6) - 1)
+    a = math.log10(start or top / 2000)
+    return 10 ** (a + (math.log10(top) - a) * x ** 1.15)
 
 
-GUY = Figure(size=760)
-COMMENTS = [(1.2, 'ахахах 😂'), (1.7, 'ЛЕГЕНДА'), (2.1, 'ще!!! 🔥'), (2.5, 'лайк не дивлячись'), (2.9, 'хто тут з туалету? 🚽'),
-            (3.25, 'шедевр 😍'), (3.55, 'ору 🤣🤣'), (3.85, 'підписався!'), (4.1, '🔥🔥🔥'), (4.35, 'король контенту 👑'),
+MILESTONES = [10_000, 100_000, 1_000_000]
+
+
+def views_at(t):
+    return grow(t, 0.0, 5.2, 2_400_000, start=1200)
+
+
+def milestone_pop(t):
+    """0..1 bump just after the views pass 10K, 100K, 1M."""
+    best = 0.0
+    for m in MILESTONES:
+        lo, hi = 0.0, 5.2                                        # when were they passed (bisection)
+        for _ in range(30):
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if views_at(mid) < m else (lo, mid)
+        age = t - hi
+        if 0 <= age < 0.35: best = max(best, math.sin(age / 0.35 * math.pi))
+    return best
+
+
+GUY = Figure(size=900)
+COMMENTS = [(-1.0, 'де ти це знімаєш 😂'), (-0.5, 'ору'), (0.2, 'ахахах 😂'), (0.8, 'ЛЕГЕНДА'), (1.4, 'ще!!! 🔥'), (2.0, 'лайк не дивлячись'), (2.6, 'хто тут з туалету? 🚽'),
+            (3.1, 'шедевр 😍'), (3.5, 'ору 🤣🤣'), (3.85, 'підписався!'), (4.1, '🔥🔥🔥'), (4.35, 'король контенту 👑'),
             (4.6, 'ахахах'), (4.8, 'ще одне!!'), (5.0, '😂😂😂')]
 FEED_COMMENTS = [(t0, n, x) for (t0, x), n in zip(COMMENTS, ['@ira_k', '@maks.ua', '@sonechko', '@den4ik', '@olya.v', '@taras_1',
-    '@nastya', '@vovan', '@kateryna', '@bodya', '@lilu', '@ostap', '@marta.m'])]
+    '@nastya', '@vovan', '@kateryna', '@bodya', '@lilu', '@ostap', '@marta.m', '@yulia', '@petro'])]
 random.seed(3)
-HEARTS = [(random.uniform(0.8, 5.6), random.uniform(640, 1020), random.uniform(0.8, 1.3)) for _ in range(46)]
+HEARTS = [(random.uniform(-0.5, 5.8), random.uniform(640, 1020), random.uniform(0.8, 1.3)) for _ in range(46)]
 
 
 def heart(cv, c, s, col=RED):
@@ -104,36 +125,43 @@ def frame(i):
     t = i / FPS
     cv = Canvas(W, H)
     # the bathroom: tiled wall, floor, the toilet (the lower part of the frame is the feed's: author, comments)
-    tiles(cv, 0, 1250)
-    cv.rrect((-20, 1250, W + 20, H + 20), 0, fill=(246, 247, 250))
-    floor(cv, 1250)
-    seat = (430, 1030)
-    toilet(cv, seat, 1.75)
-    # the guy: films himself, talks (mouth), bobs, the free arm gestures; more and more excited
-    k = 0.5 + 0.5 * math.sin(t * 7.0)
+    tiles(cv, 0, 1340)
+    cv.rrect((-20, 1340, W + 20, H + 20), 0, fill=(246, 247, 250))
+    floor(cv, 1340)
+    seat = (400, 1080)
+    toilet(cv, seat, 2.1)
+    # the guy: films himself and talks, bouncing more and more as the numbers climb; the free hand waves, gives
+    # thumbs-up and points; at the end — both arms up, victory
+    hype = min(1.0, t / 4.0)
+    bounce = abs(math.sin(t * (6 + 6 * hype))) * (6 + 22 * hype)
+    k = 0.5 + 0.5 * math.sin(t * 8.0)
     pose = dict(POSES['sit_phone'])
-    pose['lean'] = -4 + 4 * math.sin(t * 3.2)
-    pose['head'] = 6 * math.sin(t * 4.1)
-    pose['face'] = 'o' if (int(t * 6) % 3 == 0) else 'grin'
-    pose['sL'] = 55 + 45 * k * min(1, t / 1.2)                     # the free hand waves about as he talks
-    pose['eL'] = 50 - 70 * k
+    pose['lean'] = -6 + 6 * math.sin(t * 3.4)
+    pose['head'] = 9 * math.sin(t * 5.1)
+    pose['face'] = 'o' if (int(t * 7) % 3 == 0) else 'grin'
     pose['look'] = -0.7
-    GUY.draw(cv, pose, (seat[0] + 30, seat[1] - 22), held=lambda c, h, a: phone(c, h, a, 2.4))
+    if t < 1.6:                                                  # waving at the phone
+        pose['sL'], pose['eL'] = 140 + 25 * k, 30 - 40 * k
+    elif t < 3.2:                                                # pointing at the phone, jabbing
+        pose['sL'], pose['eL'] = -95 + 12 * k, -10
+    elif t < 4.8:                                                # fist pumping
+        pose['sL'], pose['eL'] = 150 + 15 * k, -150 + 60 * k
+    else:                                                        # victory: both arms up, the phone too
+        v = ease((t - 4.8) / 0.25)
+        pose = lerp_pose(pose, dict(pose, sL=138, eL=12, sR=-138, eR=-12, face='grin', look=0, head=0, lean=0), v)
+    GUY.draw(cv, pose, (seat[0] + 36, seat[1] - 26 - bounce), held=lambda c, h, a: phone(c, h, a, 2.8))
     # hearts floating up the right side, like a live stream
     for (t0, x, sc) in HEARTS:
         age = t - t0
         if 0 <= age < 1.6:
             y = 1400 - age * 650
             fheart(cv, (x - 60 + 30 * math.sin(age * 5 + x), y), 52 * sc * (1 - age / 2.2), RED if int(x) % 3 else PINK)
-    stats = dict(views=grow(t, 0.4, 5.4, 2_400_000), likes=grow(t, 0.6, 5.5, 418_000), comments=grow(t, 0.8, 5.5, 31_200),
-                 saves=grow(t, 1.0, 5.5, 52_700), shares=grow(t, 1.0, 5.5, 88_100))
+    stats = dict(views=views_at(t), pop=milestone_pop(t), likes=grow(t, 0.0, 5.3, 418_000), comments=grow(t, 0.0, 5.3, 31_200),
+                 saves=grow(t, 0.0, 5.3, 52_700), shares=grow(t, 0.0, 5.3, 88_100))
     draw_feed(cv, t, stats, user='@korol_unitazu', caption='день з життя легенди 🚽 #рек #топ', comments=FEED_COMMENTS,
-              liked=t > 0.6, progress=t / DUR, avatar=0)
+              liked=True, progress=t / DUR, avatar=0)
     # fade in / out at the edges
-    img = cv.image()
-    k = min(1.0, t / 0.25, (DUR - t) / 0.3)
-    if k < 1: img = Image.blend(Image.new('RGB', img.size, (255, 255, 255)), img, max(0.0, k))
-    return img
+    return cv.image()                                           # no fades: the first frame is the hook, the end cuts
 
 
 def sound():
@@ -143,13 +171,22 @@ def sound():
     y = np.zeros(n)
     tt = np.arange(n) / sr
     for t0, _ in COMMENTS:
+        if t0 < 0: continue
         k = int(t0 * sr)
         m = int(0.08 * sr)
         e = np.exp(-np.arange(m) / (0.012 * sr))
         y[k:k + m] += 0.35 * e * np.sin(2 * np.pi * (900 + 600 * random.random()) * np.arange(m) / sr)
+    for m in MILESTONES:                                         # a bright "ding" when the views pass 10K, 100K, 1M
+        lo, hi = 0.0, 5.2
+        for _ in range(30):
+            mid = (lo + hi) / 2
+            lo, hi = (mid, hi) if views_at(mid) < m else (lo, mid)
+        k = int(hi * sr); m2 = int(0.6 * sr)
+        tt2 = np.arange(m2) / sr
+        y[k:k + m2] += 0.5 * np.exp(-tt2 / 0.18) * (np.sin(2 * np.pi * 1318 * tt2) + 0.5 * np.sin(2 * np.pi * 1976 * tt2))
     rng = np.random.default_rng(1)
     noise = np.convolve(rng.standard_normal(n), np.ones(40) / 40, mode='same')
-    y += 0.12 * noise * np.clip((tt - 0.6) / 4.8, 0, 1) ** 2 * np.clip((DUR - tt) / 0.3, 0, 1)
+    y += 0.12 * noise * np.clip((tt + 0.5) / 5.0, 0, 1) ** 2
     y = y / max(1e-6, np.abs(y).max()) * 0.7
     from scipy.io import wavfile
     path = os.path.join(WORK, 'sound.wav')
