@@ -90,6 +90,8 @@ POSES = {
     # sitting (on a toilet, a chair): the thighs forward, the shins down; phone held up in front of the face
     'sit_phone': dict(NEUTRAL, hL=-82, kL=82, hR=-88, kR=88, sL=-150, eL=95, sR=-130, eR=85, face='grin', look=-0.6),
     'sit_sad': dict(NEUTRAL, hL=-82, kL=82, hR=-88, kR=88, lean=-14, head=-22, sL=-60, eL=40, sR=-50, eR=30, face='sad', look=-0.5),
+    # sitting at a desk, facing right, hands forward on the keyboard
+    'sit_desk': dict(NEUTRAL, hL=82, kL=-82, hR=88, kR=-88, lean=8, head=4, sL=48, eL=6, sR=54, eR=2, face='smile', look=0.7),
     # selfie from behind, bent forward (the "booty" video)
     'twerk': dict(NEUTRAL, lean=-48, head=30, hL=4, kL=-14, hR=14, kR=-18, sL=-30, eL=10, sR=-205, eR=-15, face='grin', look=-0.9),
 }
@@ -178,13 +180,24 @@ class Figure:
 
     def _head(self, cv, J, pose, w):
         c, r = J['head'], J['hr']
+        if self.hair == 'braid':                                # a braid hanging from the back of the head
+            back = -1 if pose.get('look', 0) >= 0 else 1        # the back of the head is opposite to where he looks
+            bx, by = c[0] + back * r * 0.85, c[1] - r * 0.05
+            for k in range(6):                                  # plaits: alternating little ovals going down
+                ox = bx + back * (r * 0.12 * k) + (r * 0.1 if k % 2 else -r * 0.1)
+                oy = by + r * 0.32 * k
+                cv.ellipse((ox - r * 0.2, oy - r * 0.17, ox + r * 0.2, oy + r * 0.17), fill=self.accent, col=self.col, w=w * 0.45)
+            tip = (bx + back * r * 0.75, by + r * 2.0)
+            cv.line([(tip[0] - r * 0.12, tip[1] - r * 0.12), (tip[0] + r * 0.12, tip[1] + r * 0.12)], w * 0.7, self.col)
         if self.hair == 'ponytail':                             # a tail swinging behind the head
             tail = [(c[0] - r * 0.8, c[1] - r * 0.4), (c[0] - r * 1.5, c[1] + r * 0.1), (c[0] - r * 1.3, c[1] + r * 0.9)]
             cv.line(tail, w * 1.6, self.accent)
         cv.circle(c, r, fill=self.face_col, col=self.col)
         cv.circle(c, r, w=w * 0.85, col=self.col)
-        if self.hair:                                           # a fringe
+        if self.hair in ('ponytail', 'bun'):                     # a fringe
             cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 195, 345, w * 1.2, self.accent)
+        elif self.hair == 'braid':                              # hair combed back: a cap over the top of the head
+            cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 185, 355, w * 1.5, self.accent)
         # the face: two dots and a mouth, shifted where the eyes look
         lx = pose.get('look', 0) * r * 0.35
         e = r * 0.11
@@ -259,14 +272,28 @@ def phone_side(cv, hand, scale=1.0, face=1, screen=(150, 200, 250)):
     cv.circle((cx, top + 22 * scale), 3 * scale, col=(120, 130, 150))
 
 
-def window(cv, box, t=0.0):
-    """A bathroom window: a frame with a cross, sky and a slowly drifting cloud."""
+def window(cv, box, t=0.0, sky=(196, 226, 255), body=None, night=0.0, clouds=True):
+    """A window: a frame with a cross, sky and a slowly drifting cloud. body = (x, y, kind) puts the Sun ('sun') or the
+    Moon ('moon') in the sky; night (0..1) dims the clouds and lights the stars."""
     x0, y0, x1, y1 = box
-    cv.rrect(box, 14, fill=(196, 226, 255), col=INK, w=7)
+    cv.rrect(box, 14, fill=sky, col=INK, w=7)
+    if night > 0.3:
+        for k in range(14):                                       # stars
+            sx, sy = x0 + 14 + (k * 53) % (x1 - x0 - 28), y0 + 14 + (k * 37) % (y1 - y0 - 28)
+            cv.circle((sx, sy), 2.5, col=(255, 255, 240))
+    if body:
+        bx, by, kind = body
+        if x0 + 20 < bx < x1 - 20 and y0 + 20 < by < y1 - 20:
+            if kind == 'sun':
+                cv.circle((bx, by), 26, col=(255, 200, 60))
+            else:
+                cv.circle((bx, by), 22, col=(240, 240, 225))
+                cv.circle((bx + 10, by - 6), 19, col=sky)        # a crescent
     cx = x0 + ((t * 18) % (x1 - x0 + 160)) - 80               # the cloud drifts across
-    for dx, dy, r in ((0, 0, 28), (30, -12, 34), (64, 2, 26)):
+    cc = tuple(int(255 - (255 - 120) * night) for _ in range(3))
+    for dx, dy, r in ((0, 0, 28), (30, -12, 34), (64, 2, 26)) if clouds else ():
         if x0 + 10 < cx + dx < x1 - 10:
-            cv.circle((cx + dx, y0 + (y1 - y0) * 0.38 + dy), r, col=(255, 255, 255))
+            cv.circle((cx + dx, y0 + (y1 - y0) * 0.38 + dy), r, col=cc)
     cv.rrect(box, 14, col=INK, w=7)
     cv.line([((x0 + x1) / 2, y0), ((x0 + x1) / 2, y1)], 7)
     cv.line([(x0, (y0 + y1) / 2), (x1, (y0 + y1) / 2)], 7)
@@ -316,3 +343,57 @@ def paper_roll(cv, c, s=1.0):
     cv.rrect((x - 34 * s, y - 34 * s, x + 34 * s, y + 30 * s), 12 * s, fill=(255, 255, 255), col=INK, w=6)
     cv.rrect((x + 18 * s, y, x + 34 * s, y + 80 * s), 4 * s, fill=(255, 255, 255), col=INK, w=5)
     cv.ellipse((x - 12 * s, y - 14 * s, x + 12 * s, y + 10 * s), col=INK, w=5)
+
+
+def curtains(cv, box, open_=0.0, col=(250, 214, 140)):
+    """Curtains on both sides of a window box (drawn after the window); a rod above."""
+    x0, y0, x1, y1 = box
+    cv.line([(x0 - 60, y0 - 26), (x1 + 60, y0 - 26)], 8)
+    w = 70
+    for side in (-1, 1):
+        xa = x0 - 50 if side < 0 else x1 - w + 50
+        pts = [(xa, y0 - 26), (xa + w, y0 - 26)]
+        for k in range(9):                                       # a wavy lower edge, gathered to the side
+            yy = y0 - 26 + (y1 - y0 + 80) * k / 8
+            pts.append((xa + w + 10 * math.sin(k * 1.4) - (12 if side > 0 else 0), yy))
+        pts += [(xa - 6 * side, y1 + 54)]
+        cv.poly(pts, fill=col, col=INK, w=5)
+        for k in (0.33, 0.66):
+            cv.line([(xa + w * k, y0 - 20), (xa + w * k + 6 * math.sin(k * 9), y1 + 40)], 3, (215, 170, 100))
+
+
+def wall_clock(cv, c, r, hours):
+    """A round wall clock; `hours` (any real number) sets both hands."""
+    cv.circle(c, r, fill=(255, 255, 255), col=INK)
+    cv.circle(c, r, w=8, col=INK)
+    for k in range(12):
+        a = k * math.pi / 6
+        cv.line([(c[0] + math.sin(a) * r * 0.78, c[1] - math.cos(a) * r * 0.78), (c[0] + math.sin(a) * r * 0.88, c[1] - math.cos(a) * r * 0.88)], 4)
+    ah, am = hours / 12 * 2 * math.pi, (hours % 1) * 2 * math.pi
+    cv.line([c, (c[0] + math.sin(ah) * r * 0.5, c[1] - math.cos(ah) * r * 0.5)], 8)
+    cv.line([c, (c[0] + math.sin(am) * r * 0.75, c[1] - math.cos(am) * r * 0.75)], 5)
+    cv.circle(c, 7, col=INK)
+
+
+def office_chair(cv, seat, s=1.0):
+    """An office chair seen from the side, facing right; `seat` = the middle of the seat top."""
+    x, y = seat
+    cv.rrect((x - 75 * s, y, x + 75 * s, y + 24 * s), 10 * s, fill=(90, 96, 120), col=INK, w=6)
+    cv.rrect((x - 95 * s, y - 230 * s, x - 70 * s, y + 10 * s), 10 * s, fill=(90, 96, 120), col=INK, w=6)     # the back
+    cv.line([(x, y + 24 * s), (x, y + 150 * s)], 9)
+    cv.line([(x - 80 * s, y + 175 * s), (x + 80 * s, y + 175 * s)], 9)
+    cv.line([(x, y + 150 * s), (x - 70 * s, y + 175 * s)], 7)
+    cv.line([(x, y + 150 * s), (x + 70 * s, y + 175 * s)], 7)
+    for dx in (-80, 80):
+        cv.circle((x + dx * s, y + 186 * s), 12 * s, col=INK)
+
+
+def mug(cv, base, s=1.0, steam=0.0):
+    """A mug standing at `base` (bottom middle); optional steam (0..1)."""
+    x, y = base
+    cv.rrect((x - 26 * s, y - 56 * s, x + 26 * s, y), 8 * s, fill=(255, 255, 255), col=INK, w=5)
+    cv.arc((x + 14 * s, y - 46 * s, x + 46 * s, y - 16 * s), 270, 90, 5)
+    cv.rrect((x - 20 * s, y - 50 * s, x + 20 * s, y - 40 * s), 3 * s, fill=(120, 80, 50))
+    if steam > 0:
+        for k in (-8, 8):
+            cv.line([(x + k * s, y - 66 * s), (x + (k + 6) * s, y - 82 * s), (x + k * s, y - 98 * s)], 3, (190, 190, 200))
