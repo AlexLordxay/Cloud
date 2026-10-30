@@ -1,6 +1,7 @@
 # Stick cartoon, our hero (dreadlocks, a beard) at the desk, in two parts (the author, 30.10):
 #   A (~4 s): days and nights fly by in the window, the clock spins, mugs pile up; he edits — frames of his real videos
 #             jump on the monitor. He does not publish yet.          -> videos/stick_desk_a.mp4
+#   C (~3.2 s): between the girl and the bush — still editing, days 2–3, more mugs, more tired. -> videos/stick_desk_c.mp4
 #   B (~8.4 s): still working (days 3–4); at last he wipes his forehead («фух»), his eyes turn to stars, «Опублікувати»…
 #             his video plays (the Moon hitting the Earth), and the views crawl: 0… 1… 3. A cricket. The smile slides off.
 #                                                                      -> videos/stick_desk_b.mp4
@@ -22,10 +23,13 @@ PART = (sys.argv[1] if len(sys.argv) > 1 else 'a').lower()
 WORK = os.path.join(TOOLS, 'work', 'stick_desk')
 OUT = os.path.join(TOOLS, '..', f'stick_desk_{PART}.mp4')
 # the timeline of each part: work until T_WORK, then (B) wipe, stars, the button, the video
+# MUGS: (mugs at the start, at the end of the work); TIRED: his face while working (more tired part by part)
 if PART == 'a':
-    DUR, T_WORK, T_WIPE, T_STAR, T_PUB, T_PLAY, DAY0, DAYS = 4.0, 4.0, 99, 99, 99, 99, 0.0, 1.5
+    DUR, T_WORK, T_WIPE, T_STAR, T_PUB, T_PLAY, DAY0, DAYS, MUGS, TIRED = 4.0, 4.0, 99, 99, 99, 99, 0.0, 1.5, (0, 4), 0
+elif PART == 'c':                                         # between the girl and the bush: still at it (the author, 30.10)
+    DUR, T_WORK, T_WIPE, T_STAR, T_PUB, T_PLAY, DAY0, DAYS, MUGS, TIRED = 3.2, 3.2, 99, 99, 99, 99, 1.5, 1.0, (4, 7), 1
 else:
-    DUR, T_WORK, T_WIPE, T_STAR, T_PUB, T_PLAY, DAY0, DAYS = 8.4, 1.8, 1.8, 2.6, 3.2, 4.1, 2.0, 1.0
+    DUR, T_WORK, T_WIPE, T_STAR, T_PUB, T_PLAY, DAY0, DAYS, MUGS, TIRED = 8.4, 1.8, 1.8, 2.6, 3.2, 4.1, 2.5, 1.0, (7, 9), 1
 BROWN = (92, 60, 38)
 HERO = Figure(size=720, hair='dreads', accent=BROWN, beard=(120, 84, 56))
 MON = (440, 590, 1000, 930)                               # the monitor's screen (smaller, the author)
@@ -76,8 +80,7 @@ def frame(i):
     cv.rrect((MON[0] - 20, MON[1] - 20, MON[2] + 20, MON[3] + 20), 20, fill=(40, 42, 54), col=INK, w=8)
     screen(cv, t)
     cv.rrect((400, desk_y - 18, 580, desk_y), 5, fill=(230, 232, 238), col=INK, w=5)               # keyboard
-    m0 = 0 if PART == 'a' else 5
-    n_mugs = m0 + min(5, int(min(t, T_WORK) / T_WORK * 5.5)) if PART == 'a' else min(9, m0 + 1 + int(min(t, T_WORK) / T_WORK * 3.5))
+    n_mugs = MUGS[0] + min(MUGS[1] - MUGS[0], int(min(t, T_WORK) / T_WORK * (MUGS[1] - MUGS[0] + 0.99)))
     for k in range(n_mugs):                              # a row of mugs (two rows when there are many), the newest steaming
         mug(cv, (1062 - (k % 5) * 40, desk_y - (k // 5) * 48), 0.72, steam=1.0 if k == n_mugs - 1 and t < T_WORK else 0)
     # the hero
@@ -110,7 +113,8 @@ def hero_pose(t, day):
     typing['eL'] += 10 * math.sin(t * 38)
     typing['eR'] -= 10 * math.sin(t * 41 + 1)
     typing['head'] = 4 + 3 * math.sin(t * 2)
-    typing['face'] = 'smile' if day > 0.4 else 'flat'    # tired at night
+    typing['face'] = ('smile' if day > 0.4 else 'flat') if not TIRED else ('flat' if day > 0.4 else 'sad')   # tired at night
+    if TIRED: typing['head'] += 6                        # the head hangs a little lower
     if t < T_WORK:
         return typing
     if t < T_STAR:                                       # «фух»: sits back; the arm is drawn by wipe_arm
