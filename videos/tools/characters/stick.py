@@ -150,7 +150,7 @@ class Figure:
             legs[side] = (p, kn, ft)
         return dict(pelvis=p, chest=chest, neck=neck, head=head, hr=L['head'], arms=arms, legs=legs)
 
-    def draw(self, cv, pose, at, held=None):
+    def draw(self, cv, pose, at, held=None, over=(), arm_fn=None):
         """Draw the figure; `held` = a function(cv, hand_xy, angle) drawing a prop in the right hand (e.g. a phone)."""
         J = self.parts(pose, at)
         w = self.width or max(4.0, self.size * 0.032)   # bold lines (the author, 30.10)
@@ -172,11 +172,15 @@ class Figure:
                     fill=self.dress, col=self.dress)
         cv.line([J['pelvis'], J['neck']], w, self.col)
         for side in 'LR':
-            cv.line(J['arms'][side], w, self.col)
+            if side not in over:
+                cv.line(J['arms'][side], w, self.col)
         if held:
             sh, el, ha = J['arms']['R']
             held(cv, ha, math.degrees(math.atan2(ha[0] - el[0], ha[1] - el[1])))
         self._head(cv, J, pose, w)
+        for side in over:                                       # arms in front of the head (wiping the brow, …)
+            pts = arm_fn(J, side) if arm_fn else J['arms'][side]   # arm_fn(J, side) -> [shoulder, elbow, hand]
+            cv.line(pts, w, self.col)
         return J
 
     def _head(self, cv, J, pose, w):
@@ -214,7 +218,7 @@ class Figure:
         if self.hair in ('ponytail', 'bun'):                     # a fringe
             cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 195, 345, w * 1.2, self.accent)
         elif self.hair == 'dreads':                             # a thick cap on top, the strands start from it
-            cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 180, 360, w * 1.9, self.accent)
+            cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 195, 345, w * 1.15, self.accent)
             cv.arc((c[0] - r * 1.04, c[1] - r * 1.04, c[0] + r * 1.04, c[1] + r * 1.04), 180, 360, w * 0.5, self.col)
         elif self.hair == 'braid':                              # hair combed back: a cap over the top of the head
             cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 185, 355, w * 1.5, self.accent)
@@ -225,9 +229,16 @@ class Figure:
         lx = pose.get('look', 0) * r * 0.35
         e = r * 0.11
         for dx in (-0.35, 0.35):
-            cv.circle((c[0] + lx + dx * r, c[1] - r * 0.12), e, col=self.col)
+            ex, ey = c[0] + lx + dx * r, c[1] - r * 0.12
+            if pose.get('face') == 'stars':                     # starry eyes: a little golden four-point star each
+                k, q = r * 0.34 * (1 + 0.15 * math.sin(pose.get('t', 0) * 14)), r * 0.1
+                pts = [(ex, ey - k), (ex + q, ey - q), (ex + k, ey), (ex + q, ey + q), (ex, ey + k), (ex - q, ey + q), (ex - k, ey), (ex - q, ey - q)]
+                cv.poly(pts, fill=(255, 196, 30))
+            else:
+                cv.circle((ex, ey), e, col=self.col)
         mx, my, mw = c[0] + lx, c[1] + r * 0.35, r * 0.42
         face = pose.get('face', 'smile')
+        if face == 'stars': face = 'grin'
         if face in ('smile', 'grin'):
             fw = w * 0.6                                         # the face is drawn thinner than the body
             if face == 'smile':                                  # a thin, narrow arc (wide thick ones read as a moustache)
