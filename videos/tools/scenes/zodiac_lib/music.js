@@ -1,5 +1,5 @@
-// «Ти Терези?» — the Hoverla organ score (MUSIC.md) retimed: the hush before the planets of Gliese 581 (16.6 s), A major
-// blooming with them (18.2 s), the quiet figure for the claws of Scorpius and the question. Originally: "What if over Hoverla instead of the Moon…" — the video's own score, in the spirit of a space-film organ score (no
+// «Ти Терези?» — the Hoverla organ score (MUSIC.md) retimed: the hush before the planets of Gliese 581 (17.2 s), A major
+// blooming with them (18.8 s), the quiet figure for the claws of Scorpius and the question. Originally: "What if over Hoverla instead of the Moon…" — the video's own score, in the spirit of a space-film organ score (no
 // quotation): one organ, no bass, no drums. A clock-like eighth-note figure in A minor that groups in threes against the
 // bar, held chords that breathe in and out, stops and octaves added as the worlds grow, a sudden hush just before the
 // Sun, then the Sun lifts the music to A major, and the Moon brings back the quiet figure. Everything is synthesised.
@@ -179,7 +179,7 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const SUN = 18.2, HUSH = 16.6, MOON = 23.5, END = 39.0, E8 = BEAT / 2;
+    const SUN = 18.8, HUSH = 17.2, MOON = 24.1, END = 39.6, E8 = BEAT / 2;
     const FL = [[1, 1], [2, 0.35]];
     // one chord per 4 s: Am Am F F C | the Sun: A major | the Moon: Am
     const CH = { Am: [57, 60, 64], F: [53, 57, 60], C: [55, 60, 64], G: [55, 59, 62], A: [57, 61, 64] };
@@ -200,10 +200,10 @@ function createSceneMusic(ctx, dest) {
       const t0 = c * 3.4, t1 = c === 4 ? HUSH : t0 + 3.8, w = wave(t0 + 1.7);
       for (const m of CH[k]) organ(t0, t1, m + 12, c < 3 ? FL : REG_MID, 0.08 + 0.22 * w, 900 + 2500 * w, 1.8, 1.4);
     });
-    [[11.5, 4.2, 76]].forEach(([t0, len, m]) => organ(t0, t0 + len, m + 12, FL, 0.16, 3000, 1.5, 0.6));
+    [[12.1, 4.2, 76]].forEach(([t0, len, m]) => organ(t0, t0 + len, m + 12, FL, 0.16, 3000, 1.5, 0.6));
     organ(HUSH - 0.2, SUN + 0.5, 81, FL, 0.12, 2500, 0.3, 1.0);
     for (const m of [57, 61, 64, 69, 73, 76]) organ(SUN - 1.0, MOON + 0.5, m, REG_MID, 0.30, 3500, 2.5, 2.0);
-    play(SUN, MOON, t => 0.85 - 0.5 * Math.max(0, (t - 21.0) / 2.5));
+    play(SUN, MOON, t => 0.85 - 0.5 * Math.max(0, (t - 21.6) / 2.5));
     organ(SUN + 1.5, MOON, 85, FL, 0.16, 3000, 1.5, 1.0);
     play(MOON, END - 1.0, t => 0.25 * (1 - (t - MOON) / (END - MOON)));
     for (const m of CH.Am) organ(MOON, END, m + 12, FL, 0.12, 1500, 1.5, 1.0);
