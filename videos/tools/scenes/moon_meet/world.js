@@ -1,7 +1,7 @@
 // The Moon's terrain round a site (terrain_data.py), with stars and the Earth: the in-page code that builds them, shared
 // by terrain.js (the flights of "Знайомся: Місяць") and other scenes that stand on the same ground (e.g. moon_final).
 // moonWorld(shot, meta) -> the source of `async function buildMoon()`, which resolves to { scene, stars, earth, halo,
-// earthFrame, hb, sun }; the page serves three.min.js, /data/ (the site's files) and /site/ (the site's Earth maps).
+// earthFrame, hb, sun, og (the output curve's uniform) }; the page serves three.min.js, /data/ (the site's files) and /site/ (the site's Earth maps).
 // Units: km, x east, y up (heights exaggerated by meta.ex and bent to the Moon's curvature), z south.
 exports.moonWorld = (shot, meta) => `async function buildMoon() {
   const meta = ${JSON.stringify(meta)};
@@ -24,10 +24,12 @@ exports.moonWorld = (shot, meta) => `async function buildMoon() {
   const load = f => new Promise(r => new THREE.TextureLoader().load(f, t => { t.anisotropy = 16; r(t); }));
   const [col, nrm, shd] = await Promise.all([load('/data/colour.jpg'), load('/data/normal.png'), load('/data/shadow.png')]);
   const sun = new THREE.Vector3(...meta.sun).normalize();
+  // the output curve: 1/2.2 for the screen; 1 renders linear light (e.g. into an environment map for reflections)
+  const og = { value: 1 / 2.2 };
   const mat = new THREE.ShaderMaterial({
-    uniforms: { col: { value: col }, nrm: { value: nrm }, shd: { value: shd }, sun: { value: sun }, ex: { value: EX }, es: { value: ${shot.earthshine || 1} } },
+    uniforms: { col: { value: col }, nrm: { value: nrm }, shd: { value: shd }, sun: { value: sun }, ex: { value: EX }, es: { value: ${shot.earthshine || 1} }, og },
     vertexShader: 'varying vec2 vUv; varying vec3 vW; void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: \`uniform sampler2D col; uniform sampler2D nrm; uniform sampler2D shd; uniform vec3 sun; uniform float ex; uniform float es;
+    fragmentShader: \`uniform sampler2D col; uniform sampler2D nrm; uniform sampler2D shd; uniform vec3 sun; uniform float ex; uniform float es; uniform float og;
       varying vec2 vUv; varying vec3 vW;
       void main() {
         vec3 c = pow(texture2D(col, vUv).rgb, vec3(2.2));
@@ -43,7 +45,7 @@ exports.moonWorld = (shot, meta) => `async function buildMoon() {
         vec3 col = c * (vec3(1.0, 0.98, 0.95) * 2.3 * lit * s + vec3(0.010, 0.012, 0.016) * es);   // shadows: only earthshine
         vec2 e2 = min(vUv, 1.0 - vUv);
         col *= smoothstep(0.0, 0.18, min(e2.x, e2.y));                     // the patch's edges fade into the dark
-        gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+        gl_FragColor = vec4(pow(col, vec3(og)), 1.0);
       }\`,
   });
   const scene = new THREE.Scene();
@@ -69,10 +71,10 @@ exports.moonWorld = (shot, meta) => `async function buildMoon() {
     const [day, night, clouds, spec] = await Promise.all(['earth_day.jpg', 'earth_night.jpg', 'earth_clouds.png', 'earth_specular.jpg'].map(f => load('/site/' + f)));
     const U = { day: { value: day }, night: { value: night }, clouds: { value: clouds }, spec: { value: spec }, sun: { value: sun },
       A: { value: new THREE.Vector3() }, F: { value: new THREE.Vector3() }, E: { value: new THREE.Vector3() },
-      lon0: { value: 0 }, C: { value: new THREE.Vector3() }, R: { value: 1 } };
+      lon0: { value: 0 }, C: { value: new THREE.Vector3() }, R: { value: 1 }, og };
     const VS = 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }';
     earth = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 64), new THREE.ShaderMaterial({ uniforms: U, vertexShader: VS,
-      fragmentShader: \`uniform sampler2D day, night, clouds, spec; uniform vec3 sun, A, F, E, C; uniform float lon0;
+      fragmentShader: \`uniform sampler2D day, night, clouds, spec; uniform vec3 sun, A, F, E, C; uniform float lon0, og;
         varying vec3 vW;
         void main() {
           vec3 n = normalize(vW - C), V = normalize(cameraPosition - vW);
@@ -91,7 +93,7 @@ exports.moonWorld = (shot, meta) => `async function buildMoon() {
           // city lights only (the map's faint land colour is left out): the brightest specks, warm
           float lights = smoothstep(0.35, 0.9, dot(texture2D(night, uv).rgb, vec3(0.3, 0.59, 0.11)));
           col += vec3(1.0, 0.75, 0.45) * lights * 0.35 * (1.0 - dayK) * (1.0 - 0.8 * cl);
-          gl_FragColor = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+          gl_FragColor = vec4(pow(col, vec3(og)), 1.0);
         }\` }));
     // the atmosphere seen edge-on: a thin glow just outside the limb on the sunlit side
     halo = new THREE.Mesh(new THREE.SphereGeometry(1.06, 96, 48), new THREE.ShaderMaterial({ uniforms: U, vertexShader: VS,
@@ -112,7 +114,8 @@ exports.moonWorld = (shot, meta) => `async function buildMoon() {
     U.A.value.copy(Ax); U.F.value.copy(F0).addScaledVector(Ax, -F0.dot(Ax)).normalize();
     U.E.value.crossVectors(dir, Ax).normalize();
     U.lon0.value = (FACE[1] - FACE[2]) * Math.PI / 180;        // the middle of the disc: the place's longitude minus its offset
-    earthFrame = { dir, D: 8000, R: 8000 * Math.tan(0.95 * Math.PI / 180), U };
+    // shot.earthScale: drawn larger than life (1 = its real 1.9°)
+    earthFrame = { dir, D: 8000, R: 8000 * Math.tan(0.95 * Math.PI / 180) * ${shot.earthScale || 1}, U };
     earth.scale.setScalar(earthFrame.R); halo.scale.setScalar(earthFrame.R);
     scene.add(earth, halo);
   }
@@ -130,5 +133,5 @@ exports.moonWorld = (shot, meta) => `async function buildMoon() {
     const lg = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(MARK[0], y, MARK[1]), new THREE.Vector3(MARK[0], y + 2.5, MARK[1])]);
     scene.add(new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.8, depthTest: false })));
   }
-  return { scene, stars, earth, halo, earthFrame, hb, sun };
+  return { scene, stars, earth, halo, earthFrame, hb, sun, og };
 }`;

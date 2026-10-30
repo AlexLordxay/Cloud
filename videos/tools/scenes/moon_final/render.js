@@ -1,7 +1,7 @@
 // The finale of the stick cartoon ("що з цією планетою не так"): the Nebozvid astronaut on the real Moon, near the
-// south pole, walks a few steps toward the Earth hanging low over the hills, stops, looks at it, and lowers his head.
-// The camera starts a little way off (the relief and the Earth in view) and flies in smoothly behind him, closing to a
-// long lens so the Earth hangs just over his helmet.
+// south pole, walks a few steps toward the Earth hanging low over the hills, stops and looks at it. The camera starts
+// a little way behind him (the relief and the Earth in view), flies in over his sunlit right shoulder and round to his
+// face: the Earth and the black sky in his gold visor. Then he slowly lowers his head.
 //
 //   node scenes/moon_final/render.js stills 0,4,8   -> work/moon_final/still_<t>.jpg
 //   node scenes/moon_final/render.js video          -> work/moon_final/frames/f_00000.jpg …
@@ -9,21 +9,35 @@
 // Two passes each frame: (1) the far Moon of moon_meet (scenes/moon_meet/world.js: the LOLA/LROC relief of the site
 // 'south', the stars, the Earth where it really hangs, ~4.5° over the northern horizon), in km; (2) after clearing the
 // depth, the near ground in metres round the walk and the astronaut. The near ground is the same LOLA surface
-// (exaggerated and bent the same way, so it meets the far one) plus what 63 m cells can't hold: craters from 20 cm
-// to 80 m, rubble, boulders and the boot prints, fading out with distance. The Sun is the site's (6° up in the east):
-// the craters' shadows are worked out exactly for their bowls, the rocks' baked as ellipsoids, the figure's from a
-// shadow map onto a shadow-catching copy of the ground.
+// (exaggerated and bent the same way, so it meets the far one) plus what 63 m cells can't hold: broad swells, worn
+// craters from half a metre to 80 m, the regolith's grain (a tiling texture and bump, as in marswalk) and the boot
+// prints, fading out with distance. The Sun is the site's (6° up in the east): the craters' shadows are worked out
+// exactly for their bowls, the figure's come from a shadow map onto a shadow-catching copy of the ground.
 const fs = require('fs'), path = require('path'), http = require('http');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
 const { moonWorld } = require('../moon_meet/world');
 const TOOLS = path.resolve(__dirname, '../..'), WORK = path.join(TOOLS, 'work', 'moon_final');
 const DATA = path.join(TOOLS, 'work', 'moon_meet', 'south'), SITE_TEX = path.resolve(TOOLS, '../../planetarium/textures');
 const [mode = 'stills', list = '0'] = process.argv.slice(2);
-const W = 720, H = 1280, FPS = 30, DUR = 9.6;
+const W = 720, H = 1280, FPS = 30, DUR = 11.0;
+// the Earth drawn larger than life (the author, 31.10): twice its real 1.9° in the sky, 5.6 times in the visor
+const EARTH_SKY = 2, VISOR_EARTH = +(process.env.VISOR_EARTH || 5.6);
+// The walk ends (feet together) at ~5.2 s; then: eyes up to the Earth, a beat (the camera comes round to his face,
+// the Earth in his visor), the head sinks.
+const TIMING = { lookUp: [5.4, 6.2], down: [8.2, 9.8] };
+// [t, azimuth°, distance m, height m, fov°, look-at offset [x, height, z]] (see shoot() in the page)
+const CAM_KEYS = [
+  [0.0, -9.5, 30, 4.2, 36, [0, 0.6, -24]],
+  [3.0, -5, 14, 2.0, 30, [0, 1.1, -8]],
+  [5.0, 35, 6.0, 1.7, 30, [0, 1.3, -1]],
+  [6.6, 140, 3.0, 1.75, 30, [0, 1.75, -0.1]],
+  [7.6, 168, 2.3, 1.82, 28, [0, 1.97, -0.2]],
+  [DUR, 172, 2.05, 1.8, 28, [0, 1.97, -0.2]],
+];
 if (!fs.existsSync(path.join(DATA, 'meta.json'))) { console.log('first: python3 scenes/moon_meet/terrain_data.py south'); process.exit(1); }
 const meta = JSON.parse(fs.readFileSync(path.join(DATA, 'meta.json')));
 // the far Moon: the site's Earth (half lit, Ukraine on its lit side), as in moon_meet's last flight
-const shot = { site: 'south', mesh: 1600, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5 };
+const shot = { site: 'south', mesh: 1600, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5, earthScale: EARTH_SKY };
 // where he stands, km east and south of the patch centre: a level, sunlit plain, the hills to the north ~2.5° high
 // (found by scanning the patch: flat within ~25 m over 400 m, the Earth clear over the horizon)
 const SPOT = [68.10, 4.60];
@@ -59,37 +73,39 @@ async function setup() {
   // a crater's profile (d = distance / radius): a bowl a fifth as deep as it is wide, a raised rim, ejecta beyond
   const RIM = 0.055;
   const prof = d => d < 1 ? 0.2 * (d * d - 1) + RIM * Math.exp(-(((d - 1) / 0.22) ** 2)) : RIM * Math.exp(-(((d - 1) / 0.4) ** 2));
-  // the walk's strip (x ~ 0, from z ~ 9 to -1): the larger craters and the rocks kept off it
+  // the walk's strip (x ~ 0, from z ~ 9 to -1): the larger craters kept off it
   const pathMask = (x, z) => 1 - (1 - smooth((Math.abs(x) - 1.0) / 1.5)) * (1 - smooth((z - 10) / 3)) * (1 - smooth((-z - 1.5) / 2));
-  // the camera's corridor (from its start, 34 m south, to the walk): no big craters or boulders in the way
-  const corridor = (x, z) => { const u = Math.min(1, Math.max(0, (z - 2) / 34)), d = Math.abs(x + 5.5 * u); return smooth((d - 6) / 10) + smooth((z - 40) / 10) + smooth((-z - 4) / 8); };
+  // the camera's corridor (from its start, 30 m south, round his right side to the front): no big craters in the way
+  const corridor = (x, z) => { const u = Math.min(1, Math.max(0, (z - 2) / 30)), d = Math.abs(x + 5 * u); return Math.min(1, smooth((d - 7) / 10) + smooth((z - 38) / 10) + smooth((-z - 6) / 8)); };
   // craters on a grid of cells C (at most one per cell, radius r0…r1): adds to out[0] the height, multiplies out[1]
   // by the sunlight. A point in a bowl is lit if the ray to the Sun clears the rim on the sunward side.
   function craters(x, z, C, r0, r1, p, seed, k, out) {
+    if (k <= 0) return;
     const ci = Math.floor(x / C), cj = Math.floor(z / C);
     for (let i = ci - 1; i <= ci + 1; i++) for (let j = cj - 1; j <= cj + 1; j++) {
       if (hash2(i + seed, j) > p) continue;
       const cx = (i + hash2(i, j + seed)) * C, cz = (j + hash2(i - seed, j)) * C, r = r0 + (r1 - r0) * hash2(j, i + seed) ** 2;
       const px = x - cx, pz = z - cz, d = Math.hypot(px, pz) / r; if (d > 2.4) continue;
-      const amp = r * (0.45 + 0.55 * hash2(i + 3 * seed, j + 7)) * k;     // older ones shallower
+      const amp = r * (0.35 + 0.65 * hash2(i + 3 * seed, j + 7)) * k;     // older ones shallower, softer
       out[0] += amp * prof(d);
       if (d < 1.02) {
         const b = px * sx + pz * sz, c = px * px + pz * pz - r * r, tt = -b + Math.sqrt(Math.max(0, b * b - c));
         const clear = amp * prof(d) + tt * tanE - amp * RIM * 0.85;
-        out[1] *= smooth(clear / (0.04 * r + 0.01) + 0.5);
+        out[1] *= smooth(clear / (0.05 * r + 0.02) + 0.5);
       }
     }
   }
+  // as on Mars (marswalk): broad rolling swells, few small craters and those worn soft, the fine grain in the shader
   const out = [0, 1];
   function detail(x, z) {
     out[0] = 0; out[1] = 1;
-    const m = pathMask(x, z), r = Math.hypot(x, z - 4), fade = 1 - smooth((r - 700) / 900);
+    const m = pathMask(x, z), cor = corridor(x, z), r = Math.hypot(x, z - 4), fade = 1 - smooth((r - 700) / 900);
     if (fade <= 0) return out;
-    craters(x, z, 3.0, 0.15, 0.9, 0.55, 11, 0.35 + 0.65 * m, out);
-    craters(x, z, 11, 0.8, 4.5, 0.6, 23, m * Math.min(1, 0.25 + corridor(x, z)), out);
-    craters(x, z, 45, 4, 18, 0.65, 37, Math.min(1, smooth((r - 12) / 10) + 0.0) * Math.min(1, corridor(x, z)), out);
-    craters(x, z, 190, 18, 75, 0.7, 53, Math.min(1, corridor(x, z)) * smooth((r - 30) / 30), out);
-    out[0] += 0.12 * fbm(x * 0.35, z * 0.35, 3) + 0.025 * fbm(x * 2.2, z * 2.2, 2) * (0.5 + 0.5 * m);
+    craters(x, z, 5.0, 0.3, 1.1, 0.22, 11, 0.45 * (0.3 + 0.7 * m), out);
+    craters(x, z, 14, 1.2, 4.5, 0.4, 23, 0.8 * m * Math.min(1, 0.2 + cor), out);
+    craters(x, z, 45, 5, 18, 0.6, 37, smooth((r - 12) / 10) * cor, out);
+    craters(x, z, 190, 18, 75, 0.7, 53, cor * smooth((r - 30) / 30), out);
+    out[0] += 0.9 * fbm(x * 0.035 + 5, z * 0.035, 3) * (0.5 + 0.5 * cor) + 0.22 * fbm(x * 0.17, z * 0.17, 3) + 0.035 * fbm(x * 1.1, z * 1.1, 2) * (0.4 + 0.6 * m);
     out[0] *= fade; out[1] = 1 - (1 - out[1]) * fade;
     return out;
   }
@@ -104,8 +120,8 @@ async function setup() {
     const ang = (a + 0.5 * (k & 1)) / NA * 2 * Math.PI, x = CX + rings[k] * Math.cos(ang), z = CZ + rings[k] * Math.sin(ang), q = k * NA + a;
     const d = detail(x, z);
     pos[q * 3] = x; pos[q * 3 + 1] = dem(x, z) - BASE + d[0]; pos[q * 3 + 2] = z; lit[q] = d[1];
-    // the soil's brightness: patches of fresher (paler) and older (darker) regolith, fine mottling
-    alb[q] = 1 + 0.16 * fbm(x * 0.02 + 3, z * 0.02, 3) + 0.10 * fbm(x * 0.4, z * 0.4, 2);
+    // the soil's brightness: patches of fresher (paler) and older (darker) regolith
+    alb[q] = 1 + 0.16 * fbm(x * 0.02 + 3, z * 0.02, 3) + 0.08 * fbm(x * 0.3, z * 0.3, 2);
   }
   const idx = new Uint32Array((NR - 1) * NA * 6); let n = 0;
   for (let k = 0; k < NR - 1; k++) for (let a = 0; a < NA; a++) {
@@ -116,37 +132,29 @@ async function setup() {
   geo.setAttribute('position', new T.BufferAttribute(pos, 3)); geo.setAttribute('lit', new T.BufferAttribute(lit, 1)); geo.setAttribute('alb', new T.BufferAttribute(alb, 1));
   geo.setIndex(new T.BufferAttribute(idx, 1)); geo.computeVertexNormals();
 
-  // ---------------- rocks: rubble and a few boulders, their long shadows baked into the ground ----------------
-  let seed = 99; const rng = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const rockGeos = [0, 1, 2].map(s => {
-    const g = new T.SphereGeometry(1, 40, 28), P = g.attributes.position;
-    for (let i = 0; i < P.count; i++) {
-      const v = new T.Vector3().fromBufferAttribute(P, i), k = 1 + 0.28 * fbm(v.x * 1.7 + s * 5, v.y * 1.7 + v.z * 1.3, 3) + 0.1 * Math.abs(v.y);
-      v.multiplyScalar(k); v.y = Math.max(v.y * 0.75, -0.4); P.setXYZ(i, v.x, v.y, v.z);
+  // the regolith's fine texture, as in marswalk: tiling value noise with grit and small clods (brightness), and the
+  // same raised in a bump map; the shader lays it at two scales (2.2 m and 7.3 m, turned) so it never visibly repeats
+  const grit = document.createElement('canvas'), bump = document.createElement('canvas');
+  grit.width = grit.height = bump.width = bump.height = 1024;
+  { const g = grit.getContext('2d'), bg = bump.getContext('2d'), im = g.createImageData(1024, 1024);
+    const vp = (x, y, P) => {
+      const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = k => ((k % P) + P) % P;
+      const a = hash2(w(i), w(j)), b = hash2(w(i + 1), w(j)), c = hash2(w(i), w(j + 1)), d = hash2(w(i + 1), w(j + 1));
+      return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; };
+    for (let y = 0; y < 1024; y++) for (let x = 0; x < 1024; x++) {
+      const nn = 0.42 * vp(x / 32, y / 32, 32) + 0.3 * vp(x / 16, y / 16, 64) + 0.18 * vp(x / 8, y / 8, 128) + 0.1 * vp(x / 4, y / 4, 256);
+      const v = Math.min(255, Math.max(0, 175 + 150 * (nn - 0.5))), k = (y * 1024 + x) * 4;
+      im.data[k] = im.data[k + 1] = im.data[k + 2] = v; im.data[k + 3] = 255;
     }
-    g.computeVertexNormals(); return g;
-  });
-  const ROCKS = [];
-  for (let k = 0; k < 1500; k++) {
-    const rr = 1.5 + 160 * Math.pow(rng(), 1.8), ang = rng() * 2 * Math.PI, x = CX + rr * Math.cos(ang), z = CZ + rr * Math.sin(ang);
-    let s = Math.min(1.2, 0.03 / Math.pow(1 - 0.985 * rng(), 0.5));
-    if (pathMask(x, z) < 0.5 && s > 0.08) continue;
-    if (corridor(x, z) < 1 && s > 0.06 + 0.3 * corridor(x, z)) continue;
-    ROCKS.push([x, G(x, z) - s * 0.2, z, s, rng() * 6.28, (rng() * 3) | 0]);
-  }
-  for (const [cx, cy, cz, rs] of ROCKS) {                                  // each as an ellipsoid (s wide, 0.75 s high)
-    const Rr = [rs, 0.75 * rs, rs], L = [sun.x, sun.y, sun.z].map((v, k) => v / Rr[k]), LL = L[0] ** 2 + L[1] ** 2 + L[2] ** 2;
-    const len = (0.8 * rs + 0.3) / tanE, reach = len + rs;
-    const k0 = Math.max(0, rings.findIndex(r => r > Math.hypot(cx - CX, cz - CZ) - reach) - 1);
-    for (let k = k0; k < NR && rings[k] < Math.hypot(cx - CX, cz - CZ) + reach; k++) for (let a = 0; a < NA; a++) {
-      const q = k * NA + a, px = pos[q * 3] - cx; if (px > rs || px < -reach) continue;
-      const pz = pos[q * 3 + 2] - cz; if (Math.abs(pz) > rs * 1.1) continue;
-      const Q = [px / Rr[0], (pos[q * 3 + 1] - cy) / Rr[1], pz / Rr[2]];
-      const u = -(Q[0] * L[0] + Q[1] * L[1] + Q[2] * L[2]) / LL; if (u <= 0) continue;
-      const d = Math.hypot(Q[0] + L[0] * u, Q[1] + L[1] * u, Q[2] + L[2] * u);
-      lit[q] *= smooth((d - 0.8) / 0.25);
-    }
-  }
+    g.putImageData(im, 0, 0); bg.filter = 'blur(1px)'; bg.drawImage(grit, 0, 0); bg.filter = 'none';
+    let sd = 7; const rr = () => { sd = Math.imul(sd ^ (sd >>> 15), 2246822519) + 0x9e3779b9 | 0; return ((sd >>> 0) % 1e6) / 1e6; };
+    for (let i = 0; i < 3200; i++) {
+      const x = rr() * 1024, y = rr() * 1024, r = 1.0 + 5 * rr() ** 4, sh = 120 + 110 * rr(), e = r * (0.7 + 0.3 * rr()), rot = rr() * 3;
+      for (const ox of [-1024, 0, 1024]) for (const oy of [-1024, 0, 1024]) {
+        const gs = sh | 0; g.fillStyle = 'rgba(' + gs + ',' + gs + ',' + gs + ',0.8)'; g.beginPath(); g.ellipse(x + ox, y + oy, r, e, rot, 0, 6.3); g.fill();
+        bg.fillStyle = 'rgba(255,255,255,0.75)'; bg.beginPath(); bg.ellipse(x + ox, y + oy, r, e, rot, 0, 6.3); bg.fill(); }
+    } }
+  const tex = c => { const t = new T.CanvasTexture(c); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 16; return t; };
 
   // ---------------- the walk ----------------
   const a = window.__makeAstronaut(T); await a.ready;
@@ -155,8 +163,9 @@ async function setup() {
   const PR = w.prints.slice(0, 16);
 
   // the ground's light, as world.js lights the far relief (Lambert mixed with Lommel-Seeliger, shadows only lit by
-  // the earthshine), with the soil's mottling, the crater and rock shadows, and the boot prints pressed in
+  // the earthshine), with the soil's mottling and grain, the crater shadows, and the boot prints pressed in
   const U = { col: { value: null }, shd: { value: null }, sun: { value: sun }, es: { value: 2.5 }, tNow: { value: 0 },
+    rg: { value: tex(grit) }, rb: { value: tex(bump) },
     prints: { value: Array.from({ length: 16 }, (_, i) => PR[i] ? new T.Vector4(PR[i].x, PR[i].z, PR[i].side === 'L' ? -1 : 1, PR[i].t) : new T.Vector4(0, 0, 0, 1e9)) }, np: { value: PR.length },
     dxN: { value: DX * (N - 1) }, off: { value: new T.Vector2(X0, Z0) } };
   const load = f => new Promise(r => new T.TextureLoader().load(f, t => { t.anisotropy = 16; r(t); }));
@@ -164,16 +173,26 @@ async function setup() {
   const groundMat = new T.ShaderMaterial({ uniforms: U,
     vertexShader: \`attribute float lit; attribute float alb; varying float vLit, vAlb; varying vec3 vW, vN;
       void main() { vLit = lit; vAlb = alb; vN = normal; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }\`,
-    fragmentShader: \`uniform sampler2D col, shd; uniform vec3 sun; uniform float es, tNow, dxN; uniform vec2 off; uniform vec4 prints[16]; uniform int np;
+    fragmentShader: \`uniform sampler2D col, shd, rg, rb; uniform vec3 sun; uniform float es, tNow, dxN; uniform vec2 off; uniform vec4 prints[16]; uniform int np;
       varying float vLit, vAlb; varying vec3 vW, vN;
-      float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float vno(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
-        return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+      // the grain's slope at one scale: the bump map's differences, as metres of height per metre
+      vec2 slope(vec2 t, float size, float hgt) {
+        float e = 1.0 / 1024.0;
+        return vec2(texture2D(rb, t + vec2(e, 0.0)).r - texture2D(rb, t - vec2(e, 0.0)).r,
+                    texture2D(rb, t + vec2(0.0, e)).r - texture2D(rb, t - vec2(0.0, e)).r) / (2.0 * e * size) * hgt;
+      }
       void main() {
         vec2 uv = vec2((vW.x + off.x) / dxN + 0.5, 0.5 - (vW.z + off.y) / dxN);
-        float gr = 0.55 * vno(vW.xz * 9.0) + 0.3 * vno(vW.xz * 31.0) + 0.15 * vno(vW.xz * 2.3);
-        vec3 c = pow(texture2D(col, uv).rgb, vec3(2.2)) * vAlb * (0.84 + 0.32 * gr);
+        float dist = length(cameraPosition - vW);
+        mat2 rot = mat2(0.8, -0.6, 0.6, 0.8);
+        vec2 t1 = vW.xz / 2.2, t2 = rot * vW.xz / 7.3;
+        float gr = 0.6 * texture2D(rg, t1).r + 0.4 * texture2D(rg, t2).r;
+        vec3 c = pow(texture2D(col, uv).rgb, vec3(2.2)) * vAlb * mix(1.0, gr / 0.686, 0.75);
         vec3 n = normalize(vN);
+        vec2 sl = slope(t1, 2.2, 0.006) * (1.0 - smoothstep(5.0, 30.0, dist));
+        vec2 g2 = slope(t2, 7.3, 0.02) * (1.0 - smoothstep(15.0, 90.0, dist));
+        vec2 s2 = vec2(0.8 * g2.x - 0.6 * g2.y, 0.6 * g2.x + 0.8 * g2.y);   // back from the turned texture to x, z
+        n = normalize(n - vec3(sl.x + s2.x, 0.0, sl.y + s2.y));
         // the boot prints: a sole-shaped dent with cross treads, a little darker (the soil is compacted)
         for (int i = 0; i < 16; i++) {
           if (i >= np) break;
@@ -201,29 +220,6 @@ async function setup() {
     sg.setIndex(new T.BufferAttribute(idx.slice(0, KR * NA * 6), 1));
     const sm = new T.ShadowMaterial({ opacity: 0.9, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     const sh = new T.Mesh(sg, sm); sh.receiveShadow = true; sh.frustumCulled = false; scene.add(sh); }
-  // the rocks, lit the same way
-  const rockMat = new T.ShaderMaterial({ uniforms: { sun: U.sun, es: U.es },
-    vertexShader: \`attribute float shade; varying vec3 vW, vN; varying float vS;
-      void main() { vS = shade; mat4 m = modelMatrix * instanceMatrix; vec4 w = m * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(m) * normal); gl_Position = projectionMatrix * viewMatrix * w; }\`,
-    fragmentShader: \`uniform vec3 sun; uniform float es; varying vec3 vW, vN; varying float vS;
-      void main() {
-        vec3 n = normalize(vN), v = normalize(cameraPosition - vW);
-        float mu0 = max(dot(n, sun), 0.0), mu = max(dot(n, v), 0.05), lit = mix(mu0, 2.0 * mu0 / (mu0 + mu), 0.2);
-        vec3 c = vec3(0.20, 0.195, 0.19) * vS;
-        gl_FragColor = vec4(pow(c * (2.3 * lit + 0.03 * es), vec3(1.0 / 2.2)), 1.0);
-      }\` });
-  { const M4 = new T.Matrix4(), Qq = new T.Quaternion(), E = new T.Euler(), V = new T.Vector3(), SC = new T.Vector3();
-    for (let g = 0; g < 3; g++) {
-      const mine = ROCKS.filter(r => r[5] === g), im = new T.InstancedMesh(rockGeos[g], rockMat, mine.length);
-      const shade = new Float32Array(mine.length);
-      mine.forEach(([x, y, z, s, rot], i) => {
-        E.set(0.3 * Math.sin(rot * 3), rot, 0.3 * Math.cos(rot * 5)); Qq.setFromEuler(E);
-        SC.set(s * (0.8 + 0.4 * Math.abs(Math.sin(rot * 7))), s, s * (0.8 + 0.4 * Math.abs(Math.cos(rot * 11))));
-        M4.compose(V.set(x, y, z), Qq, SC); im.setMatrixAt(i, M4); shade[i] = 0.8 + 0.5 * Math.abs(Math.sin(rot * 13));
-      });
-      rockGeos[g].setAttribute('shade', new T.InstancedBufferAttribute(shade, 1));
-      im.frustumCulled = false; scene.add(im);
-    } }
 
   // ---------------- the astronaut's light ----------------
   scene.add(a.group);
@@ -232,9 +228,9 @@ async function setup() {
   key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0003; key.shadow.normalBias = 0.012;
   const SB = 2.2; Object.assign(key.shadow.camera, { left: -SB, right: SB, top: SB, bottom: -SB, near: 1, far: 120 });
   scene.add(key, key.target);
-  // a.lights: the shadow on his own suit from the Sun (fine texels); earthshine from the north, faint and blue; the
-  // sunlit ground below, grey
-  const fill = new T.DirectionalLight(0x9db8ff, 0.22); fill.position.set(0, 0.08, -1); scene.add(fill);
+  // earthshine from the north, faint and blue; the sunlit ground below, grey
+  // (from up high, so its glint on the visor stays clear of the Earth's reflection)
+  const fill = new T.DirectionalLight(0x9db8ff, 0.22); fill.position.set(-0.9, 1.0, -0.5); scene.add(fill);
   scene.add(new T.HemisphereLight(0x0a0c12, 0x8a8782, 0.16));
   a.rim.power.value = 4.0; a.rim.color.value.setRGB(0.25, 0.32, 0.45);
   const renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -250,59 +246,107 @@ async function setup() {
     const p = sunR.clone().multiplyScalar(snap(c.dot(sunR))).addScaledVector(sunU, snap(c.dot(sunU))).addScaledVector(sunF, c.dot(sunF));
     key.target.position.copy(p); key.position.copy(p).addScaledVector(sun, 60); key.target.updateMatrixWorld();
   }
+  // the far Moon (km) seen from a point of the near scene (m): stars round it, the Earth hung at its distance
+  function farAt(p, earthK) {
+    const f = new T.Vector3((X0 + p.x) / 1000, (BASE + p.y) / 1000, (Z0 + p.z) / 1000);
+    far.stars.position.copy(f);
+    far.earth.position.copy(f).addScaledVector(far.earthFrame.dir, far.earthFrame.D); far.halo.position.copy(far.earth.position);
+    const R = far.earthFrame.R * earthK;
+    far.earth.scale.setScalar(R); far.halo.scale.setScalar(R);
+    far.earthFrame.U.C.value.copy(far.earth.position); far.earthFrame.U.R.value = R;
+    return f;
+  }
+
+  // ---------------- the visor's reflection ----------------
+  // what the gold visor mirrors, from where his helmet will be when he stops: the far Moon, the sky and the Earth in
+  // linear light, rendered once into a cube. The Earth in it is ${VISOR_EARTH}× life size (a true 1.9° Earth would be a speck
+  // of a few pixels on the curved glass), and it is also laid over the gold by itself, in its own colours, the way the
+  // clear outer coat would show a bright Earth (under the gold film alone it would turn a dull olive)
+  w.update(w.end + 0.5); a.group.updateMatrixWorld(true);
+  const HEAD0 = a.joints.head.localToWorld(new T.Vector3(0, 0.16, 0));
+  const vm = a.materials.find(m => m.isMeshPhysicalMaterial && m.metalness === 1);
+  const terrain = far.scene.children.find(o => o.isMesh && o.material.uniforms && o.material.uniforms.nrm);
+  function cube(size, earthOnly) {
+    const rt = new T.WebGLCubeRenderTarget(size), cc = new T.CubeCamera(0.001, 20000, rt);
+    cc.position.copy(farAt(HEAD0, ${VISOR_EARTH / EARTH_SKY}));
+    const tm = terrain.material;
+    if (earthOnly) { terrain.material = new T.MeshBasicMaterial({ color: 0 }); far.stars.visible = false; }
+    far.og.value = 1;
+    renderer.autoClear = true; cc.update(renderer, far.scene); renderer.autoClear = false;
+    far.og.value = 1 / 2.2; terrain.material = tm; far.stars.visible = true;
+    return rt.texture;
+  }
+  vm.envMap = new T.PMREMGenerator(renderer).fromCubemap(cube(1024, false)).texture; vm.needsUpdate = true;
+  { const earthCube = cube(1024, true);
+    const ov = new T.ShaderMaterial({ uniforms: { env: { value: earthCube } }, transparent: true, depthWrite: false,
+      vertexShader: 'varying vec3 vW, vN; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }',
+      fragmentShader: \`uniform samplerCube env; varying vec3 vW, vN;
+        void main() {
+          vec3 r = reflect(normalize(vW - cameraPosition), normalize(vN));
+          vec3 e = textureCube(env, r).rgb * 1.15;
+          float k = clamp(max(e.r, max(e.g, e.b)) * 5.0, 0.0, 0.92);
+          gl_FragColor = vec4(pow(e / max(k, 1e-3) * min(k, 1.0), vec3(1.0 / 2.2)), k);
+        }\` });
+    let vis = null; a.group.traverse(o => { if (o.isMesh && o.material === vm) vis = o; });
+    const m = new T.Mesh(vis.geometry, ov);
+    m.position.copy(vis.position); m.quaternion.copy(vis.quaternion); m.scale.copy(vis.scale).multiplyScalar(1.004);
+    m.renderOrder = 2; vis.parent.add(m); }
+
+  // ---------------- the camera ----------------
+  // keys [t, azimuth round him (0 behind = south, 90 his right = east, 180 in front), distance, height over the ground
+  // beneath the camera, vertical fov, look-at offset from him (x, height over the ground, z)]; eased through with a
+  // monotone cubic, so nothing overshoots. Behind him at first, far and a little high, looking past him to the Earth;
+  // in over his right shoulder (the sunlit side) as he stops, round to the front, close, looking up at the visor.
+  const KEYS = ${JSON.stringify(CAM_KEYS)};
+  function pchip(xs, ys, x) {
+    const n = xs.length; if (x <= xs[0]) return ys[0]; if (x >= xs[n - 1]) return ys[n - 1];
+    const d = [], m = [];
+    for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+    for (let i = 0; i < n; i++) m.push(i === 0 ? d[0] : i === n - 1 ? d[n - 2] : d[i - 1] * d[i] <= 0 ? 0 : 2 / (1 / d[i - 1] + 1 / d[i]));
+    m[0] = 0; m[n - 1] = 0;                                  // starts and ends at rest
+    let i = 0; while (x > xs[i + 1]) i++;
+    const h = xs[i + 1] - xs[i], u = (x - xs[i]) / h, u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * ys[i] + (u3 - 2 * u2 + u) * h * m[i] + (-2 * u3 + 3 * u2) * ys[i + 1] + (u3 - u2) * h * m[i + 1];
+  }
+  const ch = k => KEYS.map(r => r[k]);
+  const TS = ch(0);
+  function reference(t) {                                    // his walk's calm line, averaged over ±0.4 s
+    let x = 0, z = 0; for (let k = -2; k <= 2; k++) { const p = w.track(t + 0.2 * k); x += p[0] / 5; z += p[1] / 5; } return [x, z];
+  }
+  function shoot(t) {
+    const [rx, rz] = reference(t), ph = pchip(TS, ch(1), t) * Math.PI / 180, d = pchip(TS, ch(2), t);
+    const cx = rx + d * Math.sin(ph), cz = rz + d * Math.cos(ph);
+    let gy = 0; for (const [dx, dz] of [[0, 0], [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]]) gy += G(cx + dx, cz + dz) / 5;
+    cam.position.set(cx, gy + pchip(TS, ch(3), t), cz);
+    cam.fov = pchip(TS, ch(4), t); cam.updateProjectionMatrix();
+    const lo = [0, 1, 2].map(k => pchip(TS, KEYS.map(r => r[5][k]), t));
+    cam.lookAt(rx + lo[0], G(rx, rz) + lo[1], rz + lo[2]);
+  }
 
   window.__frame = (t, C) => {
     // the figure: the walk, then at rest he lifts his eyes to the Earth, holds, and lets his head sink, shoulders falling
     const up = smooth((t - C.lookUp[0]) / (C.lookUp[1] - C.lookUp[0])), down = smooth((t - C.down[0]) / (C.down[1] - C.down[0]));
     w.update(t, { lean: -0.1 * down, crouch: 0.015 * down });
     const J = a.joints;
-    J.head.rotation.x += 0.2 * up * (1 - down) - 0.26 * down;
-    J.head.rotation.y += 0.5 * down; J.body.rotation.y += 0.12 * down;   // turning a little away from the Earth, toward us
+    J.head.rotation.x += 0.2 * up * (1 - down) - 0.3 * down;
+    J.head.rotation.y += 0.06 * down;
     J.body.rotation.x -= 0.06 * down;
     for (const sd of ['L', 'R']) { J['shoulder' + sd].rotation.z *= 1 - 0.5 * down; J['shoulder' + sd].rotation.x -= 0.06 * down; }
     a.group.updateMatrixWorld(true);
     U.tNow.value = t;
     aimSun(a.group.position.clone());
-    // the camera: the keys eased along, in metres from the spot; its far twin stands at the same place in km
-    // its height is over the ground beneath it (smoothed over a metre), so a hump never rises in front of the lens
-    let gy = 0; for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) gy += G(C.pos[0] + dx, C.pos[2] + dz) / 5;
-    cam.position.set(C.pos[0], C.pos[1] + gy, C.pos[2]); cam.fov = C.fov; cam.updateProjectionMatrix(); cam.lookAt(...C.look);
-    farCam.fov = C.fov; farCam.updateProjectionMatrix();
-    farCam.position.set((X0 + C.pos[0]) / 1000, (BASE + cam.position.y) / 1000, (Z0 + C.pos[2]) / 1000); farCam.quaternion.copy(cam.quaternion);
-    far.stars.position.copy(farCam.position);
-    if (far.earth) {
-      far.earth.position.copy(farCam.position).addScaledVector(far.earthFrame.dir, far.earthFrame.D); far.halo.position.copy(far.earth.position);
-      far.earthFrame.U.C.value.copy(far.earth.position); far.earthFrame.U.R.value = far.earthFrame.R;
-    }
+    shoot(t);
+    farCam.fov = cam.fov; farCam.updateProjectionMatrix();
+    farCam.position.copy(farAt(cam.position, 1)); farCam.quaternion.copy(cam.quaternion);
     renderer.clear(); renderer.render(far.scene, farCam);
     renderer.clearDepth(); renderer.render(scene, cam);
     return renderer.domElement.toDataURL('image/jpeg', 0.93);
   };
-  window.__info = { stop: w.end, prints: PR.length, profile: Array.from({ length: 9 }, (_, i) => +G(-2.2 * i / 8, 15 * i / 8).toFixed(2)) };
+  window.__info = { stop: w.end, prints: PR.length, head: HEAD0.toArray().map(v => +v.toFixed(2)) };
   window.ready = 1;
 }
 setup();
 </script></body></html>`;
-
-// ---------------- timing and the camera ----------------
-// The walk ends (feet together) at w.end (~5.2 s); then: eyes up to the Earth, a beat, the head sinks.
-const TIMING = { lookUp: [5.4, 6.2], down: [7.0, 8.4] };
-// camera keys [t, position (its y over the ground there), look-at, vertical fov] in metres from the spot (x east, y up, z south); the Earth is due
-// north, 4.5° up: at the end the camera is 15 m behind him and a little to his left, low, on a long lens, so the
-// Earth hangs over his helmet to the left and we see his helmet turn as it sinks
-const KEYS = [
-  [0.0, [-5.0, 4.2, 34], [0, 0.6, -20], 36],
-  [6.0, [-1.45, 0.5, 15.8], [1.1, 2.4, -40], 19],
-  [DUR, [-1.4, 0.48, 15.0], [1.1, 2.45, -40], 18],
-];
-function camAt(t) {
-  let i = 0; while (i < KEYS.length - 2 && t > KEYS[i + 1][0]) i++;
-  const [t0, p0, l0, f0] = KEYS[i], [t1, p1, l1, f1] = KEYS[i + 1];
-  let u = Math.min(1, Math.max(0, (t - t0) / (t1 - t0)));
-  if (i === 0) u = u * u * u * (u * (6 * u - 15) + 10);   // the fly-in: eased in and out
-  const mix = (a, b) => a.map((v, k) => v + (b[k] - v) * u);
-  return { pos: mix(p0, p1), look: mix(l0, l1), fov: f0 + (f1 - f0) * u, ...TIMING };
-}
 
 (async () => {
   fs.mkdirSync(WORK, { recursive: true });
@@ -320,12 +364,12 @@ function camAt(t) {
   const br = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist', '--enable-unsafe-swiftshader'] });
   const p = await br.newPage({ viewport: { width: W, height: H } });
   p.on('pageerror', e => console.log('pageerror:', e.message));
-  p.on('console', m => { if (m.type() === 'error' || m.text().startsWith('[')) console.log(m.text().slice(0, 300)); });
+  p.on('console', m => { if (m.type() === 'error' && !m.text().includes('GL Driver')) console.log(m.text().slice(0, 300)); });
   await p.goto(`http://127.0.0.1:${srv.address().port}/`);
   await p.waitForFunction(() => window.ready, null, { timeout: 600000, polling: 1000 });
   console.log('ready', JSON.stringify(await p.evaluate(() => window.__info)));
   const save = async (t, file) => {
-    const url = await p.evaluate(([t, c]) => window.__frame(t, c), [t, camAt(t)]);
+    const url = await p.evaluate(([t, c]) => window.__frame(t, c), [t, TIMING]);
     fs.writeFileSync(file, Buffer.from(url.split(',')[1], 'base64'));
   };
   if (mode === 'stills') {
