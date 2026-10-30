@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from PIL import Image, ImageDraw
 
 SS = 2                                   # supersampling
-INK = (238, 241, 248)                    # the lines
-BG = (10, 13, 26)                        # Небозвід night
+INK = (22, 22, 26)                       # the lines: near-black
+BG = (255, 255, 255)                     # paper white (the author, 30.10)
 SUN = (243, 185, 100)
 ICE = (156, 194, 255)
 PINK = (243, 140, 160)
@@ -126,7 +126,7 @@ class Figure:
     def parts(self, pose, at):
         """Joint positions for a pose; `at` = the pelvis."""
         s = self.size
-        L = dict(torso=0.30 * s, neck=0.05 * s, head=0.085 * s, up=0.16 * s, low=0.15 * s, thigh=0.21 * s, shin=0.21 * s)
+        L = dict(torso=0.30 * s, neck=0.05 * s, head=0.105 * s, up=0.16 * s, low=0.15 * s, thigh=0.21 * s, shin=0.21 * s)
         p = at
         lean = pose['lean']
         chest = _add(p, 180 + lean, L['torso'])
@@ -150,7 +150,7 @@ class Figure:
     def draw(self, cv, pose, at, held=None):
         """Draw the figure; `held` = a function(cv, hand_xy, angle) drawing a prop in the right hand (e.g. a phone)."""
         J = self.parts(pose, at)
-        w = self.width or max(3.0, self.size * 0.022)
+        w = self.width or max(4.0, self.size * 0.032)   # bold lines (the author, 30.10)
         bent = abs(pose['lean']) > 25
         for side in 'LR':
             cv.line(J['legs'][side], w, self.col)
@@ -182,52 +182,53 @@ class Figure:
             tail = [(c[0] - r * 0.8, c[1] - r * 0.4), (c[0] - r * 1.5, c[1] + r * 0.1), (c[0] - r * 1.3, c[1] + r * 0.9)]
             cv.line(tail, w * 1.6, self.accent)
         cv.circle(c, r, fill=self.face_col, col=self.col)
-        cv.circle(c, r, w=w, col=self.col)
+        cv.circle(c, r, w=w * 0.85, col=self.col)
         if self.hair:                                           # a fringe
-            cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 190, 350, w * 1.4, self.accent)
+            cv.arc((c[0] - r, c[1] - r, c[0] + r, c[1] + r), 195, 345, w * 1.2, self.accent)
         # the face: two dots and a mouth, shifted where the eyes look
         lx = pose.get('look', 0) * r * 0.35
-        e = r * 0.13
+        e = r * 0.11
         for dx in (-0.35, 0.35):
             cv.circle((c[0] + lx + dx * r, c[1] - r * 0.12), e, col=self.col)
         mx, my, mw = c[0] + lx, c[1] + r * 0.35, r * 0.42
         face = pose.get('face', 'smile')
         if face in ('smile', 'grin'):
-            cv.arc((mx - mw, my - mw * 0.9, mx + mw, my + mw * 0.6), 20, 160, w * (1.0 if face == 'smile' else 1.3), self.col)
+            fw = w * 0.6                                         # the face is drawn thinner than the body
+            cv.arc((mx - mw, my - mw * 0.9, mx + mw, my + mw * 0.6), 25, 155, fw * (1.0 if face == 'smile' else 1.25), self.col)
         elif face == 'sad':
-            cv.arc((mx - mw * 0.8, my - mw * 0.1, mx + mw * 0.8, my + mw * 1.0), 200, 340, w, self.col)
+            cv.arc((mx - mw * 0.8, my - mw * 0.1, mx + mw * 0.8, my + mw * 1.0), 205, 335, w * 0.6, self.col)
         elif face == 'o':
-            cv.circle((mx, my + r * 0.02), r * 0.15, w=w * 0.8, col=self.col)
+            cv.circle((mx, my + r * 0.02), r * 0.14, w=w * 0.5, col=self.col)
         else:                                                   # 'flat', 'meh'
-            cv.line([(mx - mw * 0.6, my + (r * 0.05 if face == 'meh' else 0)), (mx + mw * 0.6, my - (r * 0.05 if face == 'meh' else 0))], w * 0.8, self.col)
+            cv.line([(mx - mw * 0.6, my + (r * 0.05 if face == 'meh' else 0)), (mx + mw * 0.6, my - (r * 0.05 if face == 'meh' else 0))], w * 0.55, self.col)
 
 
 # ---------- props ----------
 
-def phone(cv, hand, ang, scale=1.0, screen=(40, 50, 80)):
+def phone(cv, hand, ang, scale=1.0, screen=(120, 170, 230)):
     """A phone in a hand, upright, its screen towards the viewer side."""
     w, h = 34 * scale, 60 * scale
     x, y = hand
-    cv.rrect((x - w / 2, y - h * 0.85, x + w / 2, y + h * 0.15), 7 * scale, fill=(25, 28, 40), col=INK, w=2.5 * scale)
+    cv.rrect((x - w / 2, y - h * 0.85, x + w / 2, y + h * 0.15), 7 * scale, fill=(25, 28, 40), col=INK, w=4 * scale)
     cv.rrect((x - w / 2 + 4 * scale, y - h * 0.85 + 6 * scale, x + w / 2 - 4 * scale, y + h * 0.15 - 6 * scale), 4 * scale, fill=screen)
 
 
 def toilet(cv, at, s=1.0, col=INK):
     """A toilet seen from the side; `at` = the middle of the seat top (where a sitting pelvis goes)."""
     x, y = at
-    w = 3.5 * s
-    cv.rrect((x + 40 * s, y - 150 * s, x + 95 * s, y - 10 * s), 10 * s, col=col, fill=(200, 210, 228), w=w)       # tank
-    cv.rrect((x - 85 * s, y - 8 * s, x + 70 * s, y + 18 * s), 9 * s, col=col, fill=(225, 232, 245), w=w)           # seat
+    w = 6 * s
+    cv.rrect((x + 40 * s, y - 150 * s, x + 95 * s, y - 10 * s), 10 * s, col=col, fill=(236, 240, 246), w=w)       # tank
+    cv.rrect((x - 85 * s, y - 8 * s, x + 70 * s, y + 18 * s), 9 * s, col=col, fill=(250, 251, 253), w=w)           # seat
     cv.poly([(x - 70 * s, y + 18 * s), (x + 60 * s, y + 18 * s), (x + 40 * s, y + 110 * s), (x - 30 * s, y + 110 * s)],
-            fill=(210, 220, 238), col=col, w=w)                                                                      # bowl
-    cv.rrect((x - 45 * s, y + 105 * s, x + 55 * s, y + 125 * s), 6 * s, col=col, fill=(200, 210, 228), w=w)          # foot
+            fill=(240, 243, 248), col=col, w=w)                                                                      # bowl
+    cv.rrect((x - 45 * s, y + 105 * s, x + 55 * s, y + 125 * s), 6 * s, col=col, fill=(236, 240, 246), w=w)          # foot
 
 
-def floor(cv, y, col=(60, 70, 100)):
+def floor(cv, y, col=(180, 184, 194)):
     cv.line([(0, y), (cv.w, y)], 3, col)
 
 
-def tiles(cv, y0, y1, step=90, col=(28, 34, 56)):
+def tiles(cv, y0, y1, step=90, col=(226, 230, 238)):
     """A bathroom wall of tiles between y0 and y1."""
     for y in range(int(y0), int(y1), step):
         cv.line([(0, y), (cv.w, y)], 2, col)
