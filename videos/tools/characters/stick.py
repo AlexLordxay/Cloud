@@ -241,8 +241,11 @@ class Figure:
         if face == 'stars': face = 'grin'
         if face in ('smile', 'grin'):
             fw = w * 0.6                                         # the face is drawn thinner than the body
-            if face == 'smile':                                  # a thin, narrow arc (wide thick ones read as a moustache)
-                cv.arc((mx - mw * 0.75, my - mw * 0.75, mx + mw * 0.75, my + mw * 0.55), 30, 150, fw, self.col)
+            if face == 'smile':                                  # a small closed smile: a thin filled crescent (arcs read as a moustache)
+                box = ((mx - mw * 0.55) * SS, (my - mw * 0.35) * SS, (mx + mw * 0.55) * SS, (my + mw * 0.45) * SS)
+                cv.d.pieslice(box, 0, 180, fill=self.col)
+                cv.d.pieslice(((mx - mw * 0.55) * SS, (my - mw * 0.35 - mw * 0.22) * SS, (mx + mw * 0.55) * SS, (my + mw * 0.45 - mw * 0.3) * SS),
+                              0, 180, fill=self.face_col)
             else:                                                # 'grin': an open laughing mouth, a filled half-circle
                 cv.d.pieslice(((mx - mw * 0.7) * SS, (my - mw * 0.6) * SS, (mx + mw * 0.7) * SS, (my + mw * 0.6) * SS), 0, 180, fill=self.col)
         elif face == 'sad':
