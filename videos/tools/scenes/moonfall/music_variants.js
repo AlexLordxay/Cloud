@@ -124,7 +124,8 @@ function createMoonMusic(ctx, dest, variant) {
 
   return {
     output: master,
-    start() { ({ 1: clock, 2: choral, 3: countdown })[variant](); },
+    // variant: 1–3 above, or a score function of its own, given the organ ({ organ, FL, REG_MID, REG_FULL, lv }) — e.g. moon_final
+    start() { if (typeof variant === 'function') variant({ organ, FL, REG_MID, REG_FULL, lv }); else ({ 1: clock, 2: choral, 3: countdown })[variant](); },
     scheduleUntil() {},
   };
 }

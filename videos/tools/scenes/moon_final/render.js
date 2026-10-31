@@ -19,10 +19,10 @@ const { moonWorld } = require('../moon_meet/world');
 const TOOLS = path.resolve(__dirname, '../..'), WORK = path.join(TOOLS, 'work', 'moon_final');
 const DATA = path.join(TOOLS, 'work', 'moon_meet', 'south'), SITE_TEX = path.resolve(TOOLS, '../../planetarium/textures');
 const [mode = 'stills', list = '0'] = process.argv.slice(2);
-const W = 720, H = 1280, FPS = 30, DUR = 11.0;
-// the Earth drawn larger than life (the author, 31.10): twice its real 1.9° in the sky, 15 times in the visor (5.6
-// was asked first, but on the curved glass it was a speck)
-const EARTH_SKY = 2, VISOR_EARTH = +(process.env.VISOR_EARTH || 15);
+const W = 720, H = 1280, FPS = 30, DUR = 13.0;
+// the Earth drawn larger than life (the author, 31.10): twice its real 1.9° in the sky, 20 times in the visor (5.6
+// was tried first, but on the curved glass it was a speck)
+const EARTH_SKY = 2, VISOR_EARTH = +(process.env.VISOR_EARTH || 20);
 // The walk ends (feet together) at ~5.2 s; then: eyes up to the Earth, a beat (the camera comes round to his face,
 // the Earth in his visor), the head sinks.
 const TIMING = { lookUp: [5.4, 6.2], down: [8.2, 9.8] };
@@ -263,7 +263,8 @@ async function setup() {
   // light, rendered once into a cube. The Earth in it is ${VISOR_EARTH}× life size (a true 1.9° Earth would be a speck of a
   // few pixels on the curved glass). The gold film alone would turn the grey Moon yellow, Mars-like (the author,
   // 31.10): so the cube is laid over the gold in its own colours, a little blurred (a visor, not a screen), stronger
-  // toward the rim where glass reflects more, the gold showing through faintly, with the Sun's glint
+  // toward the rim where glass reflects more, a hint of gold; it covers the gold entirely, so no glint of the Sun
+  // (the author: without it)
   w.update(w.end + 0.5); a.group.updateMatrixWorld(true);
   const HEAD0 = a.joints.head.localToWorld(new T.Vector3(0, 0.16, 0));
   const vm = a.materials.find(m => m.isMeshPhysicalMaterial && m.metalness === 1);
@@ -277,15 +278,14 @@ async function setup() {
   }
   const envCube = cube(512);
   vm.envMap = new T.PMREMGenerator(renderer).fromCubemap(envCube).texture; vm.needsUpdate = true;
-  { const ov = new T.ShaderMaterial({ uniforms: { env: { value: envCube }, sun: { value: sun } }, transparent: true, depthWrite: false,
+  { const ov = new T.ShaderMaterial({ uniforms: { env: { value: envCube } }, transparent: true, depthWrite: false,
       vertexShader: 'varying vec3 vW, vN; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }',
-      fragmentShader: \`uniform samplerCube env; uniform vec3 sun; varying vec3 vW, vN;
+      fragmentShader: \`uniform samplerCube env; varying vec3 vW, vN;
         void main() {
           vec3 v = normalize(vW - cameraPosition), n = normalize(vN), r = reflect(v, n);
           float f = pow(1.0 - max(dot(-v, n), 0.0), 3.0);
-          vec3 c = textureCube(env, r, 1.3).rgb * (0.6 + 0.4 * f);
-          c += vec3(1.0, 0.95, 0.85) * (pow(max(dot(r, sun), 0.0), 900.0) * 5.0 + pow(max(dot(r, sun), 0.0), 60.0) * 0.25);
-          gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 0.9);
+          vec3 c = textureCube(env, r, 1.3).rgb * (0.6 + 0.4 * f) * mix(vec3(1.0), vec3(1.0, 0.86, 0.62), 0.12);   // a hint of the gold
+          gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
         }\` });
     let vis = null; a.group.traverse(o => { if (o.isMesh && o.material === vm) vis = o; });
     const m = new T.Mesh(vis.geometry, ov);
