@@ -15,7 +15,7 @@ const [mode = 'stills', a1 = '1', a2] = process.argv.slice(2);
 const W = 720, H = 1280, FPS = 30, DUR = 72.3;
 if (!fs.existsSync(path.join(MOON, 'meta.json'))) { console.log('first: python3 scenes/moon_meet/terrain_data.py south'); process.exit(1); }
 const moonMeta = JSON.parse(fs.readFileSync(path.join(MOON, 'meta.json')));
-const moonShot = { site: 'south', mesh: 1600, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5, earthScale: 2 };
+const moonShot = { site: 'south', mesh: 1000, earth: [0, 4.5], earthFace: [49, 31, 40], earthLean: 28, earthshine: 2.5, earthScale: 2 };
 
 // The worlds. sun [compass azimuth: 0 = -z, the way he faces unless `face` turns him; 180 = toward the camera's view in
 // most shots], elevation°; sunC/amb: linear light on the ground; sky [zenith, horizon] and fog colour: gamma-encoded;
