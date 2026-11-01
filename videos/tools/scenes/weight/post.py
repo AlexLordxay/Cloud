@@ -4,8 +4,8 @@
 # settles, the voice (sped up 1.07) over the music (music.js), ducked under it, at -14 LUFS.
 #   python3 scenes/weight/post.py         ->  videos/weight.mp4
 #   python3 scenes/weight/post.py sound   ->  the same, the titled frames (work/weight/out) kept: only the sound redone
-# The voice: scenes/weight/voice_all.mp3 (the take with «кри́ла» re-recorded and laid in at 51.66 s, fix_krila.mp3),
-# or voice.mp3 if there is no fixed take.
+# The voice: scenes/weight/voice_all.mp3 — the take with «Причепи крила — і полетиш» (the model stressed «крилА», and with
+# stress marks read «прічіпі кріла») replaced by «Тут можна літати, як птах» (fix_bird.mp3) at 51.68 s; or voice.mp3.
 import os, subprocess, math
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -28,7 +28,7 @@ SHOTS = [
     (20.67, 27.54, 'ВЕНЕРА', 63.3, [(21.0, 24.0, 'майже як удома'), (24.0, 27.54, 'але тиск — як на глибині 900 м')]),
     (27.54, 32.69, 'ЮПІТЕР', 177, [(28.0, 32.69, 'ніби ще два мішки цементу')]),
     (32.69, 43.25, 'САТУРН', 74.5, [(33.0, 37.4, 'майже як на Землі'), (37.4, 43.25, 'хоча він у 95 разів масивніший')]),
-    (43.25, 50.64, 'ТИТАН', 9.7, [(43.6, 47.2, 'супутник Сатурна'), (47.2, 50.64, 'густе повітря: з крилами — полетиш')]),
+    (43.25, 50.64, 'ТИТАН', 9.7, [(43.6, 47.2, 'супутник Сатурна'), (47.2, 50.64, 'густе повітря: можна літати, як птах')]),
     (50.64, 54.34, 'ПЛУТОН', 4.4, [(51.0, 54.34, 'як кіт')]),
     (54.34, 57.91, 'СОНЦЕ', 1950, [(54.8, 57.91, 'як легковик')]),
     (57.91, 66.12, 'НЕЙТРОННА ЗІРКА', 9e12, [(58.4, 60.8, 'мільярди тонн'), (60.8, 66.12, 'чайна ложка її речовини важча\nза всіх людей на Землі разом')]),
