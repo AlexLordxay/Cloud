@@ -2,7 +2,10 @@
 # titles over the sky — the world's name, the kilograms rolling from the last world's number to this one's (as the
 # scale's own display does), a line with the twist — the source of the Moon's relief, the scale's beep as each number
 # settles, the voice (sped up 1.07) over the music (music.js), ducked under it, at -14 LUFS.
-#   python3 scenes/weight/post.py   ->  videos/weight.mp4
+#   python3 scenes/weight/post.py         ->  videos/weight.mp4
+#   python3 scenes/weight/post.py sound   ->  the same, the titled frames (work/weight/out) kept: only the sound redone
+# The voice: scenes/weight/voice_all.mp3 (the take with «кри́ла» re-recorded and laid in at 51.66 s, fix_krila.mp3),
+# or voice.mp3 if there is no fixed take.
 import os, subprocess, math
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -115,6 +118,12 @@ def beeps():
     wavfile.write(os.path.join(WORK, 'beeps.wav'), sr, (np.stack([y, y], 1) * 32767).astype(np.int16))
 
 
+def voice():
+    src = os.path.join(HERE, 'voice_all.mp3') if os.path.exists(os.path.join(HERE, 'voice_all.mp3')) else os.path.join(HERE, 'voice.mp3')
+    subprocess.run([FF, '-y', '-loglevel', 'error', '-i', src, '-af', 'atempo=1.07,apad=pad_dur=0.8', '-ar', '44100', '-ac', '2',
+                    os.path.join(WORK, 'voice.wav')], check=True)
+
+
 def encode():
     out = os.path.join(VIDEOS, 'weight.mp4')
     mix = ('[1:a]volume=0.55[m];[0:a]asplit=2[v][sc];[m][sc]sidechaincompress=threshold=0.04:ratio=4:attack=60:release=700[md];'
@@ -128,4 +137,7 @@ def encode():
 
 
 if __name__ == '__main__':
-    beeps(); frames(); encode()
+    import sys
+    voice(); beeps()
+    if 'sound' not in sys.argv[1:]: frames()
+    encode()
