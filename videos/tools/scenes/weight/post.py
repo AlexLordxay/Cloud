@@ -60,7 +60,7 @@ def text_layer(lines, font, size, y, spacing=1.12, alpha=255):
     sh = Image.new('L', (W, H), 0); ds = ImageDraw.Draw(sh)
     for k, line in enumerate(lines):
         w = d.textlength(line, font=f); x = (W - w) / 2; yy = y + k * size * spacing
-        d.text((x, yy), line, font=f, fill=(255, 255, 255, alpha)); ds.text((x, yy), line, font=f, fill=150)
+        d.text((x, yy), line, font=f, fill=(255, 255, 255, alpha)); ds.text((x, yy), line, font=f, stroke_width=max(2, size // 14), fill=210)
     halo = sh.filter(ImageFilter.GaussianBlur(size * 0.18))
     base = Image.new('RGBA', (W, H), (0, 0, 0, 0)); base.putalpha(halo)
     return Image.alpha_composite(base, lay)
@@ -77,6 +77,10 @@ def frames():
     names = [text_layer([s[2]], FONT, 54, 190, alpha=235) for s in SHOTS]
     subs = {(i, j): text_layer(line[2].split('\n'), FONT, 40, 462, spacing=1.3) for i, s in enumerate(SHOTS) for j, line in enumerate(s[4])}
     credit = text_layer([CREDIT[2]], FONT2, 26, 1575, alpha=200)
+    # over a bright sky (Mars, Venus, the gas giants, Titan, the Sun) a soft shade at the top keeps the titles readable
+    shade = Image.new('RGBA', (W, H), (0, 0, 0, 0)); sa = np.zeros((H, W), np.uint8)
+    sa[:760] = (np.clip(1 - np.arange(760) / 760.0, 0, 1) ** 1.6 * 120)[:, None].astype(np.uint8); shade.putalpha(Image.fromarray(sa))
+    BRIGHT = {'МАРС', 'ВЕНЕРА', 'ЮПІТЕР', 'САТУРН', 'ТИТАН', 'СОНЦЕ', 'А ТИ?'}
     cache = {}
     for f in range(n):
         t = f / FPS
@@ -84,6 +88,7 @@ def frames():
         s = SHOTS[i]; lt = t - s[0]
         im = Image.open(os.path.join(src, f'f_{f:05d}.jpg')).convert('RGB').resize((W, H), Image.LANCZOS).convert('RGBA')
         k = min(1.0, lt / 0.25)                        # each title comes in over a quarter second
+        if s[2] in BRIGHT: im = Image.alpha_composite(im, shade)
         im = Image.alpha_composite(im, fade(names[i], k))
         if s[3]:
             txt = fmt(value(i, lt))
@@ -113,7 +118,7 @@ def beeps():
 def encode():
     out = os.path.join(VIDEOS, 'weight.mp4')
     mix = ('[1:a]volume=0.55[m];[0:a]asplit=2[v][sc];[m][sc]sidechaincompress=threshold=0.04:ratio=4:attack=60:release=700[md];'
-           '[md][v][2:a]amix=inputs=3:normalize=0,loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=out:st=%.2f:d=1.0[a]' % (DUR - 1.0))
+           '[md][v][2:a]amix=inputs=3:normalize=0,volume=1.15,loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=out:st=%.2f:d=1.0[a]' % (DUR - 1.0))
     subprocess.run([FF, '-y', '-loglevel', 'error', '-i', os.path.join(WORK, 'voice.wav'), '-i', os.path.join(WORK, 'music.wav'),
                     '-i', os.path.join(WORK, 'beeps.wav'), '-framerate', str(FPS), '-i', os.path.join(WORK, 'out', 'f_%05d.jpg'),
                     '-filter_complex', mix, '-map', '3:v', '-map', '[a]', '-t', f'{DUR:.2f}',
