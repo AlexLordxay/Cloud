@@ -18,7 +18,7 @@ SENT = [
     (1.27, 3.56, 'Саме стільки ти протримаєшся на Венері.'),
     (3.94, 5.25, 'А на інших планетах?'),
     (5.62, 9.33, 'На Місяці спокійно: скафандр тримає, доки є кисень.'),
-    (9.81, 11.20, 'Години вісім.'),
+    (9.81, 11.20, 'Годин вісім.'),                      # re-recorded (fix_hours.mp3): the take said «Години»
     (11.61, 15.30, 'На Меркурії ґрунт розжарений до чотирьохсот тридцяти градусів.'),
     (15.70, 18.65, 'Хвилин десять — і скафандр не впорається з жаром.'),
     (19.09, 22.06, 'На Венері тиск — як майже кілометр під водою.'),
@@ -34,22 +34,38 @@ SENT = [
     (50.18, 51.01, 'Хвилин п\'ять.'),
     (51.44, 53.25, 'А на Сонці — ні секунди.'),
     (53.62, 57.62, 'І лише на одній планеті можна жити без скафандра — на нашій.'),
-    (58.01, 59.79, 'На якій планеті протримався б ти?'),
-    (60.26, 61.39, 'Пиши в коментарях.'),
+    (58.01, 61.39, 'Куди полетить космонавт далі — вирішуєш ти. Пиши в коментарях.'),   # replaced (fix_end.mp3), 2.11
 ]
+# re-recorded sentences: i -> (file, cut from, cut to, speech from, speech to) in that file. Sentence 4 keeps its old
+# slot (padded with silence) so nothing after it moves; the last one simply runs longer.
+FIX = {4: ('fix_hours.mp3', 4.30, 5.64, 4.52, 5.43), 19 + 1: ('fix_end.mp3', 0.0, 4.91, 0.03, 4.85)}
 # extra silence (s) after sentence i
 GAP = {2: 0.3, 6: 1.2, 8: 1.0, 12: 1.0, 15: 0.6, 17: 1.3, 18: 2.4, 19: 0.4}
 TAIL = 1.4
 
 
+def load(f):
+    raw = os.path.join(WORK, os.path.basename(f) + '.wav')
+    subprocess.run([FF, '-y', '-loglevel', 'error', '-i', os.path.join(HERE, f), '-ar', str(SR), '-ac', '1', raw], check=True)
+    sr, x = wavfile.read(raw); return x.astype(np.float32) / 32768
+
+
 def place():
-    raw = os.path.join(WORK, 'voice_raw.wav')
-    subprocess.run([FF, '-y', '-loglevel', 'error', '-i', os.path.join(HERE, 'voice.mp3'), '-ar', str(SR), '-ac', '1', raw], check=True)
-    sr, x = wavfile.read(raw); x = x.astype(np.float32) / 32768
+    x = load('voice.mp3')
     cuts = [0.0] + [(SENT[i][1] + SENT[i + 1][0]) / 2 for i in range(len(SENT) - 1)] + [len(x) / SR]
+    cuts[-1] = max(cuts[-1], SENT[-1][1] + 0.3)
     out, sents, shift = [], [], 0.0
     for i, (a, b, text) in enumerate(SENT):
         seg = x[int(cuts[i] * SR):int(cuts[i + 1] * SR)]
+        if i in FIX:
+            f, c0, c1, s0, s1 = FIX[i]; y = load(f)[int(c0 * SR):int(c1 * SR)]
+            lead = int((a - cuts[i]) * SR) - int((s0 - c0) * SR)          # its speech starts where the old one did
+            y = np.concatenate([np.zeros(max(0, lead), np.float32), y[max(0, -lead):]])
+            if i < len(SENT) - 1:                                          # keep the slot: pad or trim to the old length
+                y = np.concatenate([y, np.zeros(max(0, len(seg) - len(y)), np.float32)])[:len(seg)]
+                b = a + (s1 - s0)
+            else: b = a + (s1 - s0)
+            seg = y
         out.append(seg)
         sents.append({'i': i, 't0': round(a + shift, 3), 't1': round(b + shift, 3), 'text': text})
         g = GAP.get(i, 0.0)
