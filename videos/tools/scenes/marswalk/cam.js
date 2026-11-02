@@ -516,7 +516,7 @@
         m.material.opacity = 0.35 * Math.max(0, 1 - h / 0.15);
       }
     }
-    S = { T, scene, a, cam, sky, key, placeFlag, prints, dustU, aimSun, placeBlobs };
+    S = { T, scene, a, cam, sky, key, placeFlag, prints, dustU, aimSun, placeBlobs, flag, renderer: r.renderer, SKY };
   };
 
   // ---------------- the camera ----------------
@@ -571,11 +571,58 @@
     cam.lookAt(new T.Vector3(r[0] + l[0], r[1] + l[1], r[2] + l[2]));
   }
 
+  // ---------------- the visor's reflection (2.11.2026, the author: the gold visor showed a yellow planet under a black
+  // sky, but the sky there is the dusk's brown with the blue glow round the Sun) ----------------
+  // What the visor mirrors, from where his helmet is on the crest: the scene itself (the sky, the valley, the hill) in
+  // linear light, rendered once into a cube (the figure and the flag hidden). Laid over the gold in its own colours, as
+  // in moon_final: a little blurred (a visor, not a screen), stronger toward the rim, a hint of gold; the figure is not
+  // changed. Tone-mapped like the rest of the frame. Turned round so the glass shows the sunset (blue round the Sun) —
+  // facing the camera it would mirror the dark side of the sky.
+  function visorReflection(t) {
+    const { T, scene, a, flag, sky, SKY } = S, ren = S.renderer;
+    walk(a, T_LAST + 1.0); a.group.updateMatrixWorld(true);
+    const head = a.joints.head.localToWorld(new T.Vector3(0, 0.16, 0));
+    const rt = new T.WebGLCubeRenderTarget(512, { generateMipmaps: true, minFilter: T.LinearMipmapLinearFilter, type: T.HalfFloatType });
+    const cc = new T.CubeCamera(0.05, 20000, rt); cc.position.copy(head);
+    const vis0 = a.group.visible, fv0 = flag.visible; a.group.visible = false; flag.visible = false;
+    sky.position.copy(head); S.prints.forEach(m => { m.visible = false; });
+    const tm = ren.toneMapping; ren.toneMapping = T.NoToneMapping;
+    const ac = ren.autoClear; ren.autoClear = true; cc.update(ren, scene); ren.autoClear = ac; ren.toneMapping = tm;
+    a.group.visible = vis0; flag.visible = fv0;
+    const vm = a.materials.find(m => m.isMeshPhysicalMaterial && m.metalness === 1);
+    const sunV = new T.Vector3(-0.25, 0.14, -1).normalize(), phoV = new T.Vector3(0.42, 0.3, -1).normalize();
+    const ov = new T.ShaderMaterial({ uniforms: { env: { value: rt.texture }, sunD: { value: sunV }, phoD: { value: phoV } }, transparent: true, depthWrite: false,
+      vertexShader: 'varying vec3 vW, vN; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * viewMatrix * w; }',
+      fragmentShader: SKY + `
+        uniform samplerCube env; varying vec3 vW, vN;
+        void main() {
+          vec3 v = normalize(vW - cameraPosition), n = normalize(vN), r = reflect(v, n);
+          r = vec3(-r.x, r.y, -r.z);    // turned round: the visor shows the sunset he has been walking toward (an artist's liberty)
+          float f = pow(1.0 - max(dot(-v, n), 0.0), 3.0);
+          // the ground and the hills from the cube; the sky from the scene's own sky function, its blue glow round the
+          // Sun drawn a little wider (on the small curved glass the true glow would be a few pixels)
+          vec3 g = textureCube(env, r, 1.4).rgb * 1.5;
+          float a = acos(clamp(dot(normalize(r), sunD), -1.0, 1.0));
+          vec3 sk = skyCol(normalize(r)) * 1.6 + vec3(0.14, 0.32, 0.8) * exp(-a / 0.6) * 1.1 + vec3(0.5, 0.72, 1.0) * exp(-a / 0.16) * 1.3;
+          vec3 c = mix(g, sk, smoothstep(0.0, 0.1, r.y));
+          c *= (0.9 + 0.5 * f) * mix(vec3(1.0), vec3(1.0, 0.86, 0.62), 0.1);   // stronger toward the rim, a hint of the gold
+          gl_FragColor = vec4(c, 1.0);
+          #include <tonemapping_fragment>
+          #include <encodings_fragment>
+        }` });
+    let vis = null; a.group.traverse(o => { if (o.isMesh && o.material === vm) vis = o; });
+    const m = new T.Mesh(vis.geometry, ov);
+    m.position.copy(vis.position); m.quaternion.copy(vis.quaternion); m.scale.copy(vis.scale).multiplyScalar(1.004);
+    m.renderOrder = 2; vis.parent.add(m);
+    return m;
+  }
+
   window.__recCam = () => {};
   window.__recRender = () => {
     const r = window.__rec, ren = r.renderer;
     if (!S) { ren.render(r.scene, r.camera); return; }
     const { T, scene, a, cam, sky } = S, t = window.__vt() - (window.__t0 || 0);
+    if (!S.visorOv) S.visorOv = visorReflection(t);
     walk(a, t);
     S.placeFlag(t);
     // the end: it turns its head to the camera and gives a thumbs-up with the left hand (the flag is on its right)
