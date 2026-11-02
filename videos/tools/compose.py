@@ -240,7 +240,8 @@ def frame(sc, i, src):
         e = lambda delay: max(0.0, min(1.0, (t - sc.END_CARD - delay) / 0.6))
         draw_block(img, sc.END_TITLE, f_end1, 700, e(0.3), spacing=16)
         draw_logo(img, 120, 920, e(0.9), t)
-        draw_block(img, 'посилання в профілі', f_end2, 1050, e(0.9), fill=SUN)
+        link = getattr(sc, 'END_LINK', 'посилання в профілі')   # END_LINK in captions.py: '' for none
+        if link: draw_block(img, link, f_end2, 1050, e(0.9), fill=SUN)
         draw_block(img, 'автор: lord-xay', f_end3, 1130, e(1.5), fill=(200, 208, 224))
         # NEXT_TEASE in captions.py: what comes next, and the subscribe button (it gets tapped) under it
         tease = getattr(sc, 'NEXT_TEASE', None)
