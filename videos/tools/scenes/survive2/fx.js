@@ -41,7 +41,7 @@
 
   window.__astroFX = (T, a) => {
     const U = {
-      uHeat: { value: 0 }, uChar: { value: -1 }, uMelt: { value: -1 }, uFrost: { value: 0 }, uTime: { value: 0 },
+      uHeat: { value: 0 }, uGlowK: { value: 1 }, uChar: { value: -1 }, uMelt: { value: -1 }, uFrost: { value: 0 }, uTime: { value: 0 },
       uFig: { value: new T.Matrix4() }, uY: { value: new T.Vector2(-1, 1) }, uCore: { value: new T.Vector3() }, uReach: { value: 1 },
       uFrostCol: { value: new T.Color(0.80, 0.90, 1.0) },
     };
@@ -55,7 +55,7 @@
 
     const VERT_DECL = 'varying vec3 vFig;\nuniform mat4 uFig;\n';
     const VERT_BODY = '\n  vFig = (uFig * modelMatrix * vec4(transformed, 1.0)).xyz;\n';
-    const FRAG_DECL = `uniform float uHeat, uChar, uMelt, uFrost, uTime, uReach; uniform vec2 uY; uniform vec3 uCore, uFrostCol; varying vec3 vFig;
+    const FRAG_DECL = `uniform float uHeat, uGlowK, uChar, uMelt, uFrost, uTime, uReach; uniform vec2 uY; uniform vec3 uCore, uFrostCol; varying vec3 vFig;
       ${GLSL_NOISE}
       float fxBurn(vec3 p) { float h = (p.y - uY.x) / (uY.y - uY.x); return h + 0.34 * (fxF(p * 4.0) - 0.5) + 0.07 * (fxN(p * 21.0) - 0.5); }
     `;
@@ -68,14 +68,16 @@
         float n2 = fxN(vFig * 31.0), n3 = fxF(vFig * 9.0 + 4.0);
         fxCharK = smoothstep(uChar + 0.015, uChar - 0.05, b);
         // scorch: ahead of the char the white cloth yellows and browns with the heat, in blotches
-        float scorch = uHeat * smoothstep(0.75, 0.0, b - uChar) * (0.55 + 0.45 * n3);
+        float scorch = uHeat * (0.5 + 0.5 * n3) * (0.55 + 0.45 * smoothstep(0.75, 0.0, b - uChar));
         diffuseColor.rgb *= mix(vec3(1.0), vec3(0.3, 0.12, 0.04), clamp(scorch * 1.3, 0.0, 1.0));
         // the char: black with a brown-grey bloom of soot, blistered
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.022, 0.018) * (0.6 + 0.8 * n3), fxCharK);
         // the heat: the cloth glows, hottest just ahead of the char front, pulsing a little
         float near = 1.0 - smoothstep(0.0, 0.45, b - uChar);
-        float temp = uHeat * (0.38 + 0.28 * near + 0.18 * (n3 - 0.5)) * (1.0 - 0.55 * fxCharK);
-        fxGlow += fxBB(temp) * 0.7;
+        float temp = uHeat * (0.5 + 0.22 * near + 0.2 * (n3 - 0.5)) * (1.0 - 0.55 * fxCharK);
+        fxGlow += fxBB(temp) * 0.7 * uGlowK;
+        // hot spots: where the scorch is deepest the cloth smoulders
+        fxGlow += fxBB(0.55 + 0.2 * n2) * smoothstep(0.62, 0.8, scorch) * (1.0 - uGlowK) * 0.6 * (0.7 + 0.3 * sin(uTime * 7.0 + n2 * 30.0));
         // glowing cracks in the char (like burnt paper), flickering
         float vein = 1.0 - smoothstep(0.0, 0.025 + 0.02 * n2, abs(fxF(vFig * 13.0 + vec3(0.0, uTime * 0.25, 0.0)) - 0.5));
         vein = max(vein, 0.6 * smoothstep(0.72, 0.9, fxF(vFig * 24.0 - 3.0)));
