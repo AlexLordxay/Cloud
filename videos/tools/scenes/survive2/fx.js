@@ -62,7 +62,7 @@
     // after the colour is known: char, frost, the melt (discard) and the glow
     const FRAG_COL = `
       vec3 fxGlow = vec3(0.0); float fxCharK = 0.0, fxFrostK = 0.0;
-      {
+      if (uHeat > 0.0 || uChar > -0.9 || uMelt > -0.9) {        // (skipped when off: the same picture, far cheaper)
         float b = fxBurn(vFig);
         if (uMelt > -0.9 && b < uMelt) discard;
         float n2 = fxN(vFig * 31.0), n3 = fxF(vFig * 9.0 + 4.0);
@@ -77,26 +77,32 @@
         float temp = uHeat * (0.5 + 0.22 * near + 0.2 * (n3 - 0.5)) * (1.0 - 0.55 * fxCharK);
         fxGlow += fxBB(temp) * 0.7 * uGlowK;
         // hot spots: where the scorch is deepest the cloth smoulders
-        fxGlow += fxBB(0.55 + 0.2 * n2) * smoothstep(0.62, 0.8, scorch) * (1.0 - uGlowK) * 0.6 * (0.7 + 0.3 * sin(uTime * 7.0 + n2 * 30.0));
+        if (uGlowK < 1.0 && scorch > 0.62) fxGlow += fxBB(0.55 + 0.2 * n2) * smoothstep(0.62, 0.8, scorch) * (1.0 - uGlowK) * 0.6 * (0.7 + 0.3 * sin(uTime * 7.0 + n2 * 30.0));
         // glowing cracks in the char (like burnt paper), flickering
-        float vein = 1.0 - smoothstep(0.0, 0.025 + 0.02 * n2, abs(fxF(vFig * 13.0 + vec3(0.0, uTime * 0.25, 0.0)) - 0.5));
-        vein = max(vein, 0.6 * smoothstep(0.72, 0.9, fxF(vFig * 24.0 - 3.0)));
-        float flick = 0.7 + 0.3 * sin(uTime * 9.0 + n2 * 20.0);
-        fxGlow += fxCharK * vein * fxBB(0.62 + 0.12 * n2) * flick * 0.9;
+        if (fxCharK > 0.0) {
+          float vein = 1.0 - smoothstep(0.0, 0.025 + 0.02 * n2, abs(fxF(vFig * 13.0 + vec3(0.0, uTime * 0.25, 0.0)) - 0.5));
+          vein = max(vein, 0.6 * smoothstep(0.72, 0.9, fxF(vFig * 24.0 - 3.0)));
+          float flick = 0.7 + 0.3 * sin(uTime * 9.0 + n2 * 20.0);
+          fxGlow += fxCharK * vein * fxBB(0.62 + 0.12 * n2) * flick * 0.9;
+        }
         // the white-hot edge where it is about to go
         if (uMelt > -0.9) { float e = 1.0 - smoothstep(0.0, 0.03, b - uMelt); fxGlow += e * fxBB(0.66) * 1.3; diffuseColor.rgb *= 1.0 - 0.8 * e; }
+      }
+      if (uFrost > 0.0) {
         // the frost: from the extremities (far from the chest) inward, crystals and a white crust
         float d = length((vFig - uCore) * vec3(1.0, 0.8, 1.0)) / uReach;
         float fc = d + 0.35 * (fxF(vFig * 6.0) - 0.5), th = 1.2 - uFrost * 1.45;
         fxFrostK = smoothstep(th - 0.06, th + 0.02, fc) * step(0.001, uFrost);
         // ice: blue-grey glaze with white feathery crystals and darker cracks in it, the whole suit going cold blue first
         diffuseColor.rgb *= mix(vec3(1.0), vec3(0.7, 0.8, 0.95), smoothstep(0.0, 0.6, uFrost));
-        float cr = fxF(vFig * 38.0), feath = 1.0 - smoothstep(0.0, 0.07, abs(fxF(vFig * 70.0 + 2.0) - 0.5)), crack = 1.0 - smoothstep(0.0, 0.03, abs(fxF(vFig * 17.0 + 9.0) - 0.5));
-        vec3 ice = mix(vec3(0.22, 0.34, 0.5), vec3(0.72, 0.82, 0.92), 0.25 + 0.6 * cr) + 0.3 * feath;
-        ice *= 1.0 - 0.55 * crack;
-        float edge = (1.0 - smoothstep(th + 0.02, th + 0.14, fc)) * fxFrostK;   // the growing rim: bright rime
-        ice += 0.3 * edge;
-        diffuseColor.rgb = mix(diffuseColor.rgb, ice, fxFrostK);
+        if (fxFrostK > 0.0) {
+          float cr = fxF(vFig * 38.0), feath = 1.0 - smoothstep(0.0, 0.07, abs(fxF(vFig * 70.0 + 2.0) - 0.5)), crack = 1.0 - smoothstep(0.0, 0.03, abs(fxF(vFig * 17.0 + 9.0) - 0.5));
+          vec3 ice = mix(vec3(0.22, 0.34, 0.5), vec3(0.72, 0.82, 0.92), 0.25 + 0.6 * cr) + 0.3 * feath;
+          ice *= 1.0 - 0.55 * crack;
+          float edge = (1.0 - smoothstep(th + 0.02, th + 0.14, fc)) * fxFrostK;   // the growing rim: bright rime
+          ice += 0.3 * edge;
+          diffuseColor.rgb = mix(diffuseColor.rgb, ice, fxFrostK);
+        }
       }
     `;
     const FRAG_RM = `
@@ -106,7 +112,7 @@
     const FRAG_EMIT = `
       totalEmissiveRadiance += fxGlow;
       // the frost's glints: tiny facets that catch the light
-      totalEmissiveRadiance += fxFrostK * uFrostCol * pow(fxN(vFig * 260.0 + vViewPosition * 3.0), 16.0) * 2.0;
+      if (fxFrostK > 0.0) totalEmissiveRadiance += fxFrostK * uFrostCol * pow(fxN(vFig * 260.0 + vViewPosition * 3.0), 16.0) * 2.0;
     `;
     const patched = new Set();
     a.group.traverse(o => {
