@@ -76,6 +76,18 @@ window.__CFG = ${JSON.stringify(CFG)};</script>
   };
   if (mode === 'stills') {
     for (const t of a1.split(',').map(Number)) { const t0 = Date.now(); await save(t, path.join(WORK, `still_${t}.jpg`)); console.log('still', t, ((Date.now() - t0) / 1000).toFixed(1) + ' s', process.env.DBG ? await p.evaluate(() => JSON.stringify(window.__last)) : ''); }
+  } else if (mode === 'fill') {
+    // a shared queue: start at frame a1 (s), go round the whole film, render each frame nobody has (a lock file claims
+    // it, so several processes can fill the same folder side by side)
+    const dir = path.join(WORK, a3 || 'frames'); fs.mkdirSync(dir, { recursive: true });
+    const N = Math.round(DUR * FPS), s0 = Math.round((+a1 || 0) * FPS);
+    for (let k = 0; k < N; k++) {
+      const i = (s0 + k) % N, f = path.join(dir, `f_${String(i).padStart(5, '0')}.jpg`), lock = f + '.lock';
+      if (fs.existsSync(f)) continue;
+      try { fs.closeSync(fs.openSync(lock, 'wx')); } catch (e) { continue; }
+      await save(i / FPS, f + '.tmp'); fs.renameSync(f + '.tmp', f); fs.unlinkSync(lock);
+      if (i % 30 === 0) console.log('frame', i);
+    }
   } else {
     const dir = path.join(WORK, a3 || 'frames'); fs.mkdirSync(dir, { recursive: true });
     const i0 = Math.round((+a1 || 0) * FPS), i1 = Math.min(Math.round(DUR * FPS), a2 ? Math.round(+a2 * FPS) : Infinity);

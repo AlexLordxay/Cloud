@@ -122,7 +122,10 @@ def frames():
     src = os.path.join(WORK, 'frames'); out = os.path.join(WORK, 'out'); os.makedirs(out, exist_ok=True)
     n = int(round(DUR * FPS))
     for f in range(n):
-        titled(Image.open(os.path.join(src, f'f_{f:05d}.jpg')), f / FPS, f).save(os.path.join(out, f'f_{f:05d}.jpg'), quality=93)
+        o, i = os.path.join(out, f'f_{f:05d}.jpg'), os.path.join(src, f'f_{f:05d}.jpg')
+        if 'keep' in sys.argv and os.path.exists(o) and os.path.getmtime(o) > os.path.getmtime(i): continue   # titled already
+        if not os.path.exists(i): continue
+        titled(Image.open(i), f / FPS, f).save(o, quality=93)
         if f % 300 == 0: print('titles', f, '/', n, flush=True)
 
 
@@ -144,4 +147,4 @@ if __name__ == '__main__':
             titled(Image.open(os.path.join(WORK, f'still_{a}.jpg')), float(a), 0).save(os.path.join(WORK, f'titled_{a}.jpg'), quality=90)
         sys.exit()
     if 'sound' not in sys.argv[1:]: frames()
-    encode()
+    if 'titles' not in sys.argv[1:]: encode()
