@@ -7,7 +7,7 @@ const fs = require('fs'), path = require('path');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
 const SC = JSON.parse(fs.readFileSync(path.join(__dirname, 'scene.json')));
 const T = SC.out ? SC.out.duration : SC.duration, OUT = path.resolve(__dirname, '../../work/puzzle_venus/music.wav');
-const S = Object.assign({}, SC.beats, SC.out && SC.out.answer === false ? { noAnswer: 1, cut: SC.out.cut[0] } : {});
+const S = Object.assign({}, SC.beats, SC.out && SC.out.answer === false ? { noAnswer: 1, cut: SC.beats.cut } : {});
 
 function score({ organ, FL, REG_MID, lv }, S, T) {
   // [start, notes, how full]

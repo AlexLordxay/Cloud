@@ -20,7 +20,7 @@ const worlds = {
     glowC: [0.05, 0.012, 0.0], expo: 0.8, grade: [1.0, 0.92, 0.82],
     keyC: [1, 0.76, 0.42], keyK: 0.7, hemi: [[1, 0.75, 0.42], [0.5, 0.35, 0.2], 1.3], rim: [0.6, 0.4, 0.15], blob: 0.35 },
 };
-const CFG = { W, H, worlds, beats: SC.beats, cam: SC.cam };
+const CFG = { W, H, worlds, beats: SC.beats, cam: SC.cam, sky: SC.sky };
 const page = `<!doctype html><html><body style="margin:0;background:#000">
 <script src="/three.min.js"></script><script src="/emblem.js"></script><script src="/astronaut.js"></script>
 <script>window.__CFG = ${JSON.stringify(CFG)};</script>

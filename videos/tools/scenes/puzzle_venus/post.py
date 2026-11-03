@@ -156,7 +156,7 @@ def titled(im, t):
         sh = Image.new('RGBA', (W, H), (0, 0, 0, 0)); sh.putalpha(Image.fromarray(sa)); _GLOBE['shade'] = sh
     img.alpha_composite(_GLOBE['shade'])
     C.draw_logo(img, 52, 92, 0.92, t)
-    ans, bye = B['ans'], B['bye']
+    ans, bye = B.get('ans', 0), B.get('bye', 0)
     # the question: big over the first seconds (on the very first frame), then small at the top until the answer
     kb = 1 - ease((t - B['c1'] + 0.3) / 0.3)
     if kb > 0:
@@ -171,8 +171,8 @@ def titled(im, t):
         clue(img, i, t, a)
     # the options
     for i in range(3):
-        t0 = B['opts'] + 0.2 + 0.45 * i
-        a = k_win(t, t0, ans + 0.9 if ANSWER else CUT[0] + 0.1, 0.25)
+        t0 = B['o%d' % (i + 1)] if 'o1' in B else B['opts'] + 0.2 + 0.45 * i      # each card as its name is said
+        a = k_win(t, t0, ans + 0.9 if ANSWER else B['cut'] + 0.1, 0.25)
         st = 0 if t < ans or not ANSWER else (1 if i == RIGHT else -1)
         option(img, i, t, a, st)
     # «write in the comments», until the countdown
@@ -199,7 +199,7 @@ def titled(im, t):
 
 def no_answer(img, t):
     # no answer in this video (it opens tomorrow's puzzle): a big «?», «Відповідь — завтра», the subscribe button
-    t0 = CUT[0]
+    t0 = B['cut']
     if t < t0: return
     k = k_in(t, t0, 0.25); s = 1 + 0.3 * (1 - ease((t - t0) / 0.35)) + 0.03 * math.sin((t - t0) * 3)
     text(img, '?', C.font('Unbounded.ttf', int(240 * s), 700), 540, 430, k, GOLD)

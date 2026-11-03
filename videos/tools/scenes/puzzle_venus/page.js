@@ -92,7 +92,7 @@
   // a gesture's weight: eased in at t0, out at t1
   const env = (t, t0, t1, f = 0.5) => ramp(t, t0, t0 + f) * (1 - ramp(t, t1 - f, t1));
 
-  let Wd = null, walker = null, skyPt = null;
+  let Wd = null, walker = null, skyPt = null, sunDir = null;
   async function build() {
     Wd = await GW.build('venus');
     Wd.fog = new T.FogExp2(new T.Color(...Wd.wd.fog[0].map(x => Math.pow(x, 2.2))), Wd.wd.fog[1]); Wd.near.fog = Wd.fog;
@@ -101,6 +101,13 @@
     const w0 = a.walk(Object.assign({}, o, { from: [0, 0] })), e = w0.track(1000);
     walker = a.walk(Object.assign({}, o, { from: [-e[0], -e[1]] }));
     Wd.near.add(holder);
+    // where the Sun is: no disc through the clouds, only a dim, wide glow in the haze (a soft sprite far off, unfogged)
+    sunDir = Wd.sun.clone().normalize();
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d'), gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gr.addColorStop(0, 'rgba(255,236,200,0.75)'); gr.addColorStop(0.25, 'rgba(255,222,165,0.32)'); gr.addColorStop(0.6, 'rgba(255,200,130,0.09)'); gr.addColorStop(1, 'rgba(255,190,120,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(cv), blending: T.AdditiveBlending, depthWrite: false, fog: false, transparent: true, opacity: 0.38 }));
+    sp.position.copy(sunDir).multiplyScalar(800); sp.scale.set(620, 620, 1); sp.renderOrder = -1; Wd.near.add(sp);
   }
   const V = (x, y, z) => new T.Vector3(x, y, z);
   function frame(t) {
@@ -119,10 +126,10 @@
     const lk = env(t, B.hook - 0.2, B.c1 + 0.4, 0.5);
     J.head.rotation.y += lk * 0.6 * Math.sin((t - B.hook) * 2.3); J.head.rotation.x -= lk * 0.08;
     // clue 1: he looks up and points at the orange sky
-    if (!skyPt) skyPt = V(-7, Wd.G(0, 0) + 6, -3);
+    if (!skyPt) skyPt = V(0, Wd.G(0, 0) + 1.6, 0).addScaledVector(sunDir, 12);    // he points at the glow
     const k1 = env(t, B.c1 + 0.3, B.c2 + 0.1, 0.7);
     if (k1 > 0) { a.lookAt(skyPt, k1); J.head.rotation.x -= 0.25 * k1; }
-    a.gestureAt(t, 'point', { start: B.c1 + 0.6, end: B.c2 - 0.1, fade: 0.6, target: skyPt, side: 'L' });
+    a.gestureAt(t, 'point', { start: B.c1 + 0.6, end: B.c2 - 0.1, fade: 0.6, target: skyPt });
     // clue 2: he looks down at the ground in front of his boots (the pressure: 900 m of water over him)
     const k2 = env(t, B.c2 + 0.2, B.c3 - 0.1, 0.7);
     if (k2 > 0) { J.head.rotation.x += (0.45 - J.head.rotation.x) * k2; J.head.rotation.y += 0.25 * Math.sin((t - B.c2) * 0.9) * k2; }
@@ -132,18 +139,29 @@
     const kh = env(t, B.c3 + 1.4, B.opts, 0.8);
     if (kh > 0) { J.shoulderR.rotation.x += 1.15 * kh; J.shoulderR.rotation.z += 0.15 * kh; J.elbowR.rotation.x += 1.5 * kh; J.wristR.rotation.x += 0.3 * kh; J.head.rotation.x -= 0.1 * kh; J.body.rotation.z += 0.03 * Math.sin(t * 3.1) * kh; }
     // the options, the countdown: he faces us, waits (a small sway); «write in the comments» — he points down
-    const kw = env(t, B.opts, B.end, 0.6);
-    if (kw > 0) { a.lookAt(cam.position, kw * 0.9); J.body.rotation.z += 0.025 * Math.sin((t - B.opts) * 1.6) * kw * (1 - k3); }
+    const kw = env(t, B.opts, B.end + 1, 0.6);
+    if (kw > 0) a.lookAt(cam.position, kw * 0.9);
     a.gestureAt(t, 'point', { start: B.write, end: B.n3 + 0.6, fade: 0.5, dir: [0.55, -0.7, -0.45], side: 'R' });
-    // the countdown: a small nod on each number
-    for (const n of [B.n3, B.n2, B.n1]) { const u = (t - n) / 0.5; if (u > 0 && u < 1) J.head.rotation.x += 0.1 * Math.sin(Math.PI * u); }
-    // the answer: thumbs up; then he waves goodbye
-    a.gestureAt(t, 'thumbsUp', { start: B.ans + 0.1, end: B.bye + 0.2, fade: 0.45, side: 'R' });
-    a.gestureAt(t, 'wave', { start: B.bye + 0.4, end: B.end + 1, fade: 0.5, side: 'R' });
+    // the countdown: he stands still and waits, looking at us
+    // «Підпишись»: he points up at the subscribe button over him, then lowers his arm
+    a.gestureAt(t, 'point', { start: B.sub + 0.1, end: B.sub + 2.3, fade: 0.6, target: V(0.9, Wd.G(0, 0) + 3.3, -2.2) });
     a.group.updateMatrixWorld(true);
     GW.place(Wd, bp.x, bp.z, 1);
-    // the camera looks at him (while he walks in, it follows)
-    cam.lookAt(bp.x * 0.85, Wd.G(0, 0) + ly, bp.z * 0.85);
+    // the camera looks at him (while he walks in, it follows); clue 1 — it goes round behind him, low, and tilts up past
+    // his raised hand to the sky and the glow of the Sun
+    const tgt = V(bp.x * 0.85, Wd.G(0, 0) + ly, bp.z * 0.85);
+    const SK = CFG.sky, ks = SK && t >= SK.t0 && t < SK.t1 ? 1 : 0;        // cuts in and out (a swoop showed empty sky)
+    if (ks > 0) {
+      // behind him as seen from the Sun, a little to the side of his pointing hand, low; aimed between the hand and the glow
+      const sh = V(sunDir.x, 0, sunDir.z).normalize(), sideV = V(-sh.z, 0, sh.x);
+      const wl = J.wristL.getWorldPosition(V(0, 0, 0)), wr = J.wristR.getWorldPosition(V(0, 0, 0)), hand = wl.y > wr.y ? wl : wr;
+      const sgn = Math.sign(hand.clone().sub(bp).dot(sideV)) || 1;
+      const p1 = bp.clone().addScaledVector(sh, -SK.back).addScaledVector(sideV, sgn * SK.side); p1.y = Wd.G(p1.x, p1.z) + SK.h;
+      const mx = SK.mix + 0.1 * ramp(t, SK.t0, SK.t1);       // a slow tilt up toward the glow through the shot
+      const dir = hand.clone().sub(p1).normalize().multiplyScalar(1 - mx).addScaledVector(sunDir, mx).normalize();
+      cam.position.lerp(p1, ks); tgt.lerp(p1.clone().addScaledVector(dir, 10), ks); cam.fov = lerp(cam.fov, SK.fov, ks); cam.updateProjectionMatrix();
+    }
+    cam.lookAt(tgt);
     Wd.U.glowK.value = 1;
     a.rim.color.value.setRGB(...(Wd.wd.rim || [0.2, 0.25, 0.35])); a.rim.power.value = 4.0;
     // the heat haze: a shimmer over everything, stronger while the heat is the clue
