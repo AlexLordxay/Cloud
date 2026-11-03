@@ -161,11 +161,18 @@
       const dir = hand.clone().sub(p1).normalize().multiplyScalar(1 - mx).addScaledVector(sunDir, mx).normalize();
       cam.position.lerp(p1, ks); tgt.lerp(p1.clone().addScaledVector(dir, 10), ks); cam.fov = lerp(cam.fov, SK.fov, ks); cam.updateProjectionMatrix();
     }
+    // the opening: a close-up of his visor (the orange sky in it, the heat shimmering), pulling back as he walks in
+    const OP = CFG.open, ko = OP ? 1 - ramp(t, OP.t0, OP.t1) : 0;
+    if (ko > 0) {
+      const hp = J.head.getWorldPosition(V(0, 0, 0)).add(V(0, 0.12, 0)), oa = OP.az * D;
+      const pc = hp.clone().add(V(-Math.sin(oa) * OP.d, OP.dy, -Math.cos(oa) * OP.d));
+      cam.position.lerp(pc, ko); tgt.lerp(hp.clone().add(V(0, OP.up, 0)), ko);       // aimed above the helmet: it sits under the titles cam.fov = lerp(cam.fov, OP.fov, ko); cam.updateProjectionMatrix();
+    }
     cam.lookAt(tgt);
     Wd.U.glowK.value = 1;
     a.rim.color.value.setRGB(...(Wd.wd.rim || [0.2, 0.25, 0.35])); a.rim.power.value = 4.0;
     // the heat haze: a shimmer over everything, stronger while the heat is the clue
-    const shimmer = 0.12 + 0.45 * env(t, B.c3, B.opts + 0.3, 0.8);
+    const shimmer = 0.12 + 0.45 * env(t, B.c3, B.opts + 0.3, 0.8) + (CFG.open ? 0.3 * (1 - ramp(t, CFG.open.t0, CFG.open.t1)) : 0);
     return { thr: 1.6, bloom: 0.45, expo: Wd.wd.expo || 1.0, vig: 0.4, grade: Wd.wd.grade || [1, 1, 1], shimmer };
   }
   window.__frame = async (t) => {

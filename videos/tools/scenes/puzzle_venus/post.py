@@ -39,6 +39,7 @@ f_cd = C.font('Unbounded.ttf', 150, 700)
 f_ans = C.font('Unbounded.ttf', 104, 700)
 f_sub = C.font('Commissioner.ttf', 40, 600)
 f_bye = C.font('Unbounded.ttf', 50, 600)
+f_end_a, f_end_b, f_end_c = C.font('Unbounded.ttf', 46, 600), C.font('Unbounded.ttf', 56, 700), C.font('Commissioner.ttf', 42, 600)
 
 CLUES = [('1', 'Небо оранжево-жовте, Сонця майже не видно', B['c1']),
          ('2', 'Тиск — як на глибині 900 м під водою', B['c2']),
@@ -162,7 +163,8 @@ def titled(im, t):
     if kb > 0:
         s = 1 + 0.06 * (1 - ease(t / 0.4))
         fq = f_q if s == 1 else C.font('Unbounded.ttf', int(96 * s), 700)
-        text(img, 'НА ЯКІЙ Я', fq, 540, 300, kb); text(img, 'ПЛАНЕТІ?', fq, 540, 420, kb, GOLD)
+        text(img, 'ВГАДАЄШ,', C.font('Unbounded.ttf', int(70 * s), 700), 540, 250, kb)
+        text(img, 'НА ЯКІЙ Я', fq, 540, 360, kb); text(img, 'ПЛАНЕТІ?', fq, 540, 475, kb, GOLD)
     text(img, 'НА ЯКІЙ Я ПЛАНЕТІ?', f_q2, 540, 200, k_win(t, B['c1'] - 0.2, ans + 0.6 if ANSWER else DUR_OUT + 1))
     # the clues, one by one; they make way for the options
     for i in range(3):
@@ -202,11 +204,12 @@ def no_answer(img, t):
     t0 = B['cut']
     if t < t0: return
     k = k_in(t, t0, 0.25); s = 1 + 0.3 * (1 - ease((t - t0) / 0.35)) + 0.03 * math.sin((t - t0) * 3)
-    text(img, '?', C.font('Unbounded.ttf', int(240 * s), 700), 540, 430, k, GOLD)
+    text(img, '?', C.font('Unbounded.ttf', int(200 * s), 700), 540, 400, k, GOLD)
     kz = k_in(t, t0 + 0.15, 0.35)
-    text(img, 'Відповідь —', f_bye, 540, 640, kz); text(img, 'ЗАВТРА', f_bye, 540, 715, kz, GOLD)
+    text(img, 'Правильну відповідь', f_end_a, 540, 565, kz); text(img, 'скажу ЗАВТРА', f_end_b, 540, 640, kz, GOLD)
+    text(img, 'у новій загадці', f_end_c, 540, 708, k_in(t, t0 + 0.5, 0.35))
     tb = OUT.get('subscribe', 33.6)
-    if t > tb: C.draw_subscribe(img, 540, 840, t - tb, DUR_OUT - tb + 1, align='center')
+    if t > tb: C.draw_subscribe(img, 540, 810, t - tb, DUR_OUT - tb + 1, align='center')
 
 
 def src_frame(t):

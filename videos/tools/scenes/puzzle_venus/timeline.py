@@ -7,7 +7,7 @@ import imageio_ffmpeg
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FF = imageio_ffmpeg.get_ffmpeg_exe()
-V, FIX = 'voice.mp3', 'fix_noanswer.mp3'
+V, FIX = 'voice.mp3', 'fix_tomorrow.mp3'
 # (beat it starts, file, from, to, pause after) — the pauses: ~0.5 s after «Підказка …:», ~1.1 s after each clue,
 # the options one by one, each as its card comes up
 PHRASES = [
@@ -25,7 +25,7 @@ PHRASES = [
     ('write', V, 21.6, 23.34, 0.6),    # Пиши відповідь у коментарях!
 ]
 COUNT = [(V, 23.68, 24.16), (V, 24.5, 25.1), (V, 25.46, 25.94)]   # Три. Два. Один. — 2 s each
-TAIL = [('cut', FIX, 0.0, 3.7, 0.45),  # Відповідь — завтра, на початку нової загадки.
+TAIL = [('cut', FIX, 0.0, 3.5, 0.65),  # Правильну відповідь скажу завтра, у новій загадці. (3.7 + 0.45 before: the beats stay)
         ('sub', V, 30.75, 32.55, 1.3)]  # Підпишись, щоб не пропустити!
 
 
