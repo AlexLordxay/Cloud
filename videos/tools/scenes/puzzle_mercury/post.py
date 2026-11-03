@@ -218,12 +218,12 @@ def no_answer(img, t):
     t0 = B['cut']
     if t < t0: return
     k = k_in(t, t0, 0.25); s = 1 + 0.3 * (1 - ease((t - t0) / 0.35)) + 0.03 * math.sin((t - t0) * 3)
-    text(img, '?', C.font('Unbounded.ttf', int(200 * s), 700), 540, 400, k, GOLD)
+    text(img, '?', C.font('Unbounded.ttf', int(200 * s), 700), 540, 370, k, GOLD)
     kz = k_in(t, t0 + 0.15, 0.35)
-    text(img, 'Правильну відповідь', f_end_a, 540, 565, kz); text(img, 'скажу ЗАВТРА', f_end_b, 540, 640, kz, GOLD)
-    text(img, 'у новій загадці', f_end_c, 540, 708, k_in(t, t0 + 0.5, 0.35))
+    text(img, 'Правильну відповідь', f_end_a, 540, 520, kz); text(img, 'скажу ЗАВТРА', f_end_b, 540, 592, kz, GOLD)
+    text(img, 'у новій загадці', f_end_c, 540, 655, k_in(t, t0 + 0.5, 0.35))
     tb = OUT.get('subscribe', 33.6)
-    if t > tb: C.draw_subscribe(img, 540, 810, t - tb, DUR_OUT - tb + 1, align='center')
+    if t > tb: C.draw_subscribe(img, 540, 760, t - tb, DUR_OUT - tb + 1, align='center')
 
 
 def src_frame(t):
