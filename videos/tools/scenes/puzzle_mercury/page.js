@@ -91,6 +91,30 @@
   const CAM = CFG.cam;
   // a gesture's weight: eased in at t0, out at t1
   const env = (t, t0, t1, f = 0.5) => ramp(t, t0, t0 + f) * (1 - ramp(t, t1 - f, t1));
+  // A natural point (3.11, the author: the library's point «screws» the arm like a robot's — it slerps the whole arm to a
+  // computed orientation, twisting it about its own axis on the way, and resets the wrist's palm-in turn, so the hand
+  // spins ~80° round the forearm; the arm locks straight and overshoots). Here the arm only SWINGS: the shortest turn from
+  // where it hangs to the target, eased (no overshoot), so it keeps its roll and the hand its palm-in turn; the elbow
+  // stays softly bent and follows a beat behind the shoulder, the index finger a beat behind that. The figure itself
+  // (characters/astronaut.js) is untouched — this only drives his joints, as the scene's other moves do.
+  const sm5 = x => (x = clamp(x), x * x * x * (x * (6 * x - 15) + 10));
+  const swing = new T.Quaternion(), qI = new T.Quaternion();
+  function natPoint(t, target, t0, t1, o = {}) {
+    const fin = o.fin || 0.75, fout = o.fout || 0.6;
+    const w = lag => sm5((t - t0 - lag) / fin) * (1 - sm5((t - t1 + fout - lag) / fout));
+    const kS = w(0), kE = w(0.09), kF = w(0.16);
+    if (Math.max(kS, kE, kF) <= 0) return;
+    const J = a.joints;
+    a.group.updateMatrixWorld(true);
+    const side = o.side || (J.body.worldToLocal(target.clone()).x < 0 ? 'L' : 'R');
+    const sh = J['shoulder' + side], par = sh.parent;
+    const d0 = V(0, -1, 0).applyQuaternion(sh.quaternion).normalize();
+    const d1 = par.worldToLocal(target.clone()).sub(sh.position).normalize();
+    swing.setFromUnitVectors(d0, d1);
+    sh.quaternion.premultiply(qI.identity().slerp(swing, kS));
+    const e = J['elbow' + side].rotation; e.x += ((o.elbow == null ? 0.24 : o.elbow) - e.x) * kE;
+    a.hand(side, 'point', kF);
+  }
 
   let Wd = null, walker = null, skyPt = null, sunDir = null;
   async function build() {
@@ -130,7 +154,7 @@
     if (!skyPt) skyPt = V(0, Wd.G(0, 0) + 1.6, 0).addScaledVector(sunDir, 12);    // he points at the glow
     const k1 = env(t, B.c1 + 0.3, B.c2 + 0.1, 0.7);
     if (k1 > 0) { a.lookAt(skyPt, k1); J.head.rotation.x -= 0.25 * k1; }
-    a.gestureAt(t, 'point', { start: B.c1 + 0.6, end: B.c2 - 0.1, fade: 0.6, target: skyPt });
+    natPoint(t, skyPt, CFG.pt1[0], CFG.pt1[1]);
     // clue 2: he looks down at the ground in front of his boots (the pressure: 900 m of water over him)
     const k2 = env(t, B.c2 + 0.2, B.c3 - 0.1, 0.7);
     if (k2 > 0 && CFG.clue2 === 'up') { J.head.rotation.x += (-0.42 - J.head.rotation.x) * k2; J.head.rotation.y += 0.3 * Math.sin((t - B.c2) * 0.8) * k2; }   // the black sky: he looks up and round
@@ -143,10 +167,10 @@
     // the options, the countdown: he faces us, waits (a small sway); «write in the comments» — he points down
     const kw = env(t, B.opts, B.end + 1, 0.6);
     if (kw > 0) a.lookAt(cam.position, kw * 0.9);
-    a.gestureAt(t, 'point', { start: B.write, end: B.n3 + 0.6, fade: 0.5, dir: [0.55, -0.7, -0.45], side: 'R' });
+    natPoint(t, V(1.15, Wd.G(0, 0) + 0.45, -1.5), B.write, B.n3 + 0.6, { side: 'R', fin: 0.6, fout: 0.5 });     // down to the comments
     // the countdown: he stands still and waits, looking at us
     // «Підпишись»: he points up at the subscribe button over him, then lowers his arm
-    a.gestureAt(t, 'point', { start: B.sub + 0.1, end: B.sub + 2.3, fade: 0.6, target: V(0.9, Wd.G(0, 0) + 3.3, -2.2) });
+    natPoint(t, V(0.9, Wd.G(0, 0) + 3.3, -2.2), B.sub + 0.1, B.sub + 2.3, { side: 'R' });                       // up at the subscribe button
     a.group.updateMatrixWorld(true);
     GW.place(Wd, bp.x, bp.z, 1);
     // the camera looks at him (while he walks in, it follows); clue 1 — it goes round behind him, low, and tilts up past

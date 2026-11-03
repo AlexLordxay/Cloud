@@ -28,7 +28,7 @@ const worlds = {
     keyC: [1, 0.76, 0.42], keyK: 0.7, hemi: [[1, 0.75, 0.42], [0.5, 0.35, 0.2], 1.3], rim: [0.6, 0.4, 0.15], blob: 0.35 },
 };
 const WORLD = SC.world || 'venus'; if (SC.sun) worlds[WORLD].sun = SC.sun;
-const CFG = { W, H, worlds, world: WORLD, beats: SC.beats, cam: SC.cam, sky: SC.sky, open: SC.open, clue2: SC.clue2 || 'down', glow: SC.glow !== false && WORLD === 'venus' };
+const CFG = { W, H, worlds, world: WORLD, beats: SC.beats, cam: SC.cam, sky: SC.sky, open: SC.open, clue2: SC.clue2 || 'down', pt1: SC.pt1, glow: SC.glow !== false && WORLD === 'venus' };
 const page = `<!doctype html><html><body style="margin:0;background:#000">
 <script src="/three.min.js"></script><script src="/emblem.js"></script><script src="/astronaut.js"></script>
 <script>window.__CFG = ${JSON.stringify(CFG)};</script>
