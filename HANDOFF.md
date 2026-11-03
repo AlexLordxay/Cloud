@@ -27,6 +27,14 @@
   Якщо зміна додає багато файлів (напр. WebP) — перевіряти на preview-адресі Cloudflare (Deployments → складання гілки).
 
 ## 3 листопада 2026 — НОВИЙ ЧАТ «Jarvis 2.2» ПОЧИНАЄ ЗВІДСИ
+- **3.11 (Jarvis 2.2): головоломка №1 «На якій я планеті?» (Венера)** — `scenes/puzzle_venus/` → `videos/puzzle_venus.mp4` (~37 с,
+  голос автора з інтонаціями — теги Eleven v4 `[mysterious]`, `[whispers]`, `[excited]`, `[cheerfully]`, 2,3 кр., баланс ≈ 35,3;
+  уривок голосу `videos/puzzle_venus_voice.mp4`). Світ — Венера з survive2 (`survive2/ground.js`), космонавт без змін; рухи:
+  входить і озирається → показує на небо → дивиться під ноги → прикриває візор від жару → показує вниз «у коментарі» → кивки на
+  відліку 3-2-1 (по 2 с, кільце) → 👍 → махає. Таймінг — `scene.json` `beats` (під голос), камера `cam`, голос `narration.parts`.
+  Кадри: 4 × `node scenes/puzzle_venus/render.js fill <с> - frames` (~17 кадрів/хв разом, ~65 хв); далі `python3 scenes/puzzle_venus/post.py`
+  (титри, глобус Венери, відлік, кнопка підписки, музика `music.js`, звуки `sfx.py`, −14 LUFS). Описи — `posts.md`.
+  Коментар Ірини (7 грудня, «хто я?») — відповідь: Змієносець (30.11–17.12); про Змієносця просили троє → кандидат на зодіак.
 - **Новий контейнер:** `cd videos/tools && npm install; pip install imageio-ffmpeg matplotlib scipy tifffile imagecodecs`.
   Гілка `claude/ukrainian-conversation-tvi8yz` (усе закомічено й запушено). Для сцен з Місяцем: `python3 scenes/moon_meet/terrain_data.py south`.
 - **Правила (незмінні):** українською, на «ви», коротко; перед новою роботою — питати; **перед роботою НАЗИВАТИ ЧАС** (автор засмутився
