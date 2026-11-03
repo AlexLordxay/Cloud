@@ -15,9 +15,12 @@ const DUR = SC.duration;
 
 // survive2's worlds, as they are (the Sun's place set per puzzle: scene.json "sun")
 const worlds = {
-  mercury: { R: 2439.7e3, sun: [174, 9], sunC: [3.4, 3.2, 3.0], amb: [0.012, 0.012, 0.015], alb: [0.22, 0.2, 0.18], Rmax: 4000,
-    ground: { craters: [[5.0, 0.3, 1.1, 0.3, 11], [14, 1.2, 4.5, 0.5, 23], [45, 5, 18, 0.7, 37], [190, 18, 75, 0.8, 53]], swell: 0.9, mountains: [140, 700, 800], rocks: 0.08 },
-    sky: [[0, 0, 0], [0, 0, 0]], sunDisc: [3.0, 2.9, 2.7], sunDeg: 1.6, sunGlow: 2.2, stars: 1200,
+  // Mercury (3.11, the author: «деталізованіша поверхня, сонце, колір»): the ground darker and warmer (albedo ~0.1, MESSENGER's
+  // brownish grey — it read nearly white), finer craters and more boulders near the feet; the Sun a crisp white disc ~1.6°
+  // (≈3× ours) with a smaller halo (the glare had swallowed the disc)
+  mercury: { R: 2439.7e3, sun: [174, 9], sunC: [3.4, 3.2, 3.0], amb: [0.012, 0.012, 0.015], alb: [0.1, 0.087, 0.072], grain: 1.0, Rmax: 4000,
+    ground: { craters: [[1.6, 0.08, 0.35, 0.35, 5], [5.0, 0.3, 1.1, 0.4, 11], [14, 1.2, 4.5, 0.55, 23], [45, 5, 18, 0.7, 37], [190, 18, 75, 0.8, 53]], swell: 0.9, mountains: [140, 700, 800], rocks: 0.3 },
+    sky: [[0, 0, 0], [0, 0, 0]], sunDisc: [0.75, 0.73, 0.7], sunDeg: 1.6, sunGlow: 0.35, stars: 1200,
     keyC: [1, 0.97, 0.93], keyK: 3.6, hemi: [[0.03, 0.03, 0.04], [0.32, 0.3, 0.27], 0.2], rim: [0.9, 0.85, 0.75], blob: 0.85 },
   venus: { R: 6051.8e3, sun: [-20, 55], sunC: [0.45, 0.32, 0.15], amb: [0.62, 0.42, 0.19], alb: [0.26, 0.23, 0.21], grain: 0.8, shadowHard: 0.2, Rmax: 2500,
     ground: { swell: 0.5, plates: 0.16, mountains: [260, 650, 900] }, sky: [[0.64, 0.46, 0.2], [0.93, 0.73, 0.42]], fog: [[0.88, 0.66, 0.38], 1 / 900], haze: 1,

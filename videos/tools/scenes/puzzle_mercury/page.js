@@ -175,7 +175,8 @@
     a.rim.color.value.setRGB(...(Wd.wd.rim || [0.2, 0.25, 0.35])); a.rim.power.value = 4.0;
     // the heat haze: a shimmer over everything, stronger while the heat is the clue
     const shimmer = 0.12 + 0.45 * env(t, B.c3, B.opts + 0.3, 0.8) + (CFG.open ? 0.3 * (1 - ramp(t, CFG.open.t0, CFG.open.t1)) : 0);
-    return { thr: 1.6, bloom: 0.45, expo: Wd.wd.expo || 1.0, vig: 0.4, grade: Wd.wd.grade || [1, 1, 1], shimmer };
+    const bloom = lerp(0.45, SK && SK.bloom != null ? SK.bloom : 0.45, ks);          // the sky shot can bloom less (Mercury: the Sun's glare greyed the black sky)
+    return { thr: 1.6, bloom, expo: Wd.wd.expo || 1.0, vig: 0.4, grade: Wd.wd.grade || [1, 1, 1], shimmer };
   }
   window.__frame = async (t) => {
     if (!Wd) await build();
