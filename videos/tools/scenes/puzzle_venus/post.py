@@ -176,7 +176,7 @@ def titled(im, t):
         st = 0 if t < ans or not ANSWER else (1 if i == RIGHT else -1)
         option(img, i, t, a, st)
     # «write in the comments», until the countdown
-    kw = k_win(t, B['write'], B['n3'] + 0.2, 0.3)
+    kw = k_win(t, B['write'], B['n3'] - 0.3, 0.3)
     text(img, 'Пиши відповідь у коментарях', f_write, 540, 640, kw); arrow(img, 540, 712, kw, t)
     countdown(img, t)
     if not ANSWER:
