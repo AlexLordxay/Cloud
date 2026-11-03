@@ -21,6 +21,12 @@ VIDEOS = os.path.abspath(os.path.join(TOOLS, '..'))
 FF = __import__('imageio_ffmpeg').get_ffmpeg_exe()
 SC = json.load(open(os.path.join(HERE, 'scene.json'))); B = SC['beats']
 W, H, FPS, DUR = 1080, 1920, 30, SC['duration']
+# the cut (scene.json "out"): the answer can be dropped — the frames from cut[0] to cut[1] go, a short dissolve over the seam
+OUT = SC.get('out', {}); CUT = OUT.get('cut'); DUR_OUT = OUT.get('duration', DUR); ANSWER = OUT.get('answer', True)
+XF = 0.27
+
+
+def src_t(t): return t + (CUT[1] - CUT[0]) if CUT and t >= CUT[0] else t
 GOLD, GREEN = (247, 198, 107), (110, 225, 130)
 
 f_q = C.font('Unbounded.ttf', 96, 700)
@@ -157,7 +163,7 @@ def titled(im, t):
         s = 1 + 0.06 * (1 - ease(t / 0.4))
         fq = f_q if s == 1 else C.font('Unbounded.ttf', int(96 * s), 700)
         text(img, 'НА ЯКІЙ Я', fq, 540, 300, kb); text(img, 'ПЛАНЕТІ?', fq, 540, 420, kb, GOLD)
-    text(img, 'НА ЯКІЙ Я ПЛАНЕТІ?', f_q2, 540, 200, k_win(t, B['c1'] - 0.2, ans + 0.6))
+    text(img, 'НА ЯКІЙ Я ПЛАНЕТІ?', f_q2, 540, 200, k_win(t, B['c1'] - 0.2, ans + 0.6 if ANSWER else DUR_OUT + 1))
     # the clues, one by one; they make way for the options
     for i in range(3):
         a = k_win(t, CLUES[i][2] + 0.2, B['opts'], 0.3)
@@ -166,13 +172,15 @@ def titled(im, t):
     # the options
     for i in range(3):
         t0 = B['opts'] + 0.2 + 0.45 * i
-        a = k_win(t, t0, ans + 0.9, 0.25)
-        st = 0 if t < ans else (1 if i == RIGHT else -1)
+        a = k_win(t, t0, ans + 0.9 if ANSWER else CUT[0] + 0.1, 0.25)
+        st = 0 if t < ans or not ANSWER else (1 if i == RIGHT else -1)
         option(img, i, t, a, st)
     # «write in the comments», until the countdown
     kw = k_win(t, B['write'], B['n3'] + 0.2, 0.3)
     text(img, 'Пиши відповідь у коментарях', f_write, 540, 640, kw); arrow(img, 540, 712, kw, t)
     countdown(img, t)
+    if not ANSWER:
+        no_answer(img, t); return img.convert('RGB')
     # the answer: Venus's globe and its name
     ka = k_win(t, ans + 1.15, bye, 0.4)
     if ka > 0:
@@ -189,15 +197,39 @@ def titled(im, t):
     return img.convert('RGB')
 
 
+def no_answer(img, t):
+    # no answer in this video (it opens tomorrow's puzzle): a big «?», «Відповідь — завтра», the subscribe button
+    t0 = CUT[0]
+    if t < t0: return
+    k = k_in(t, t0, 0.25); s = 1 + 0.3 * (1 - ease((t - t0) / 0.35)) + 0.03 * math.sin((t - t0) * 3)
+    text(img, '?', C.font('Unbounded.ttf', int(240 * s), 700), 540, 430, k, GOLD)
+    kz = k_in(t, t0 + 0.15, 0.35)
+    text(img, 'Відповідь —', f_bye, 540, 640, kz); text(img, 'ЗАВТРА', f_bye, 540, 715, kz, GOLD)
+    tb = OUT.get('subscribe', 33.6)
+    if t > tb: C.draw_subscribe(img, 540, 840, t - tb, DUR_OUT - tb + 1, align='center')
+
+
+def src_frame(t):
+    def get(tt):
+        p = os.path.join(WORK, 'frames', f'f_{int(round(tt * FPS)):05d}.jpg')
+        return Image.open(p).convert('RGB') if os.path.exists(p) else None
+    a = get(src_t(t))
+    if CUT and CUT[0] <= t < CUT[0] + XF:                 # the dissolve over the seam
+        b = get(t)
+        if a is not None and b is not None: a = Image.blend(b, a, ease((t - CUT[0]) / XF))
+    return a
+
+
 def _job(f):
-    i, o = os.path.join(WORK, 'frames', f'f_{f:05d}.jpg'), os.path.join(WORK, 'out', f'f_{f:05d}.jpg')
-    if not os.path.exists(i): return
-    titled(Image.open(i), f / FPS).save(o, quality=93)
+    o = os.path.join(WORK, 'out', f'f_{f:05d}.jpg'); im = src_frame(f / FPS)
+    if im is None: print('missing frame for', f); return
+    titled(im, f / FPS).save(o, quality=93)
 
 
 def frames():
-    os.makedirs(os.path.join(WORK, 'out'), exist_ok=True)
-    with Pool(os.cpu_count()) as p: p.map(_job, range(int(round(DUR * FPS))), chunksize=16)
+    out = os.path.join(WORK, 'out'); os.makedirs(out, exist_ok=True)
+    for x in os.listdir(out): os.remove(os.path.join(out, x))
+    with Pool(os.cpu_count()) as p: p.map(_job, range(int(round(DUR_OUT * FPS))), chunksize=16)
     print('titled')
 
 
@@ -205,22 +237,24 @@ def sound():
     nar = SC.get('narration')
     ins = ['-i', os.path.join(WORK, 'music.wav'), '-i', os.path.join(WORK, 'sfx.wav')]
     if nar:
-        ins += ['-i', os.path.join(HERE, nar['file'])]
-        parts = ''.join(f'[2:a]atrim={a}:{b},asetpts=PTS-STARTPTS,afade=t=in:d=0.02,afade=t=out:st={b - a - 0.04:.3f}:d=0.04,adelay={int(at * 1000)}:all=1[p{k}];'
-                        for k, (a, b, at) in enumerate(nar['parts']))
+        files = [nar['file']] + sorted({p[3] for p in nar['parts'] if len(p) > 3})   # a part may come from a re-recorded phrase
+        for fl in files: ins += ['-i', os.path.join(HERE, fl)]
+        idx = lambda p: 2 + files.index(p[3] if len(p) > 3 else nar['file'])
+        parts = ''.join(f'[{idx(p)}:a]atrim={p[0]}:{p[1]},asetpts=PTS-STARTPTS,afade=t=in:d=0.02,afade=t=out:st={p[1] - p[0] - 0.04:.3f}:d=0.04,adelay={int(p[2] * 1000)}:all=1[p{k}];'
+                        for k, p in enumerate(nar['parts']))
         mix = (parts + ''.join(f'[p{k}]' for k in range(len(nar['parts']))) + f'amix=inputs={len(nar["parts"])}:normalize=0,highpass=f=70,apad,volume={nar.get("level", 1.0)}[vo];'
                '[vo]asplit=2[v][sc];[0:a]volume=2.6[m];[m][sc]sidechaincompress=threshold=0.04:ratio=4:attack=60:release=700[md];'
                '[1:a]volume=0.5[fx];[md][v][fx]amix=inputs=3:normalize=0')
     else:
         mix = '[0:a]volume=2.6[m];[1:a]volume=0.5[fx];[m][fx]amix=inputs=2:normalize=0'
-    mix += f',loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=out:st={DUR - 1.2:.2f}:d=1.2,atrim=0:{DUR}[a]'
+    mix += f',loudnorm=I=-14:TP=-1.5:LRA=11,afade=t=out:st={DUR_OUT - 1.2:.2f}:d=1.2,atrim=0:{DUR_OUT}[a]'
     subprocess.run([FF, '-y', '-loglevel', 'error', *ins, '-filter_complex', mix, '-map', '[a]', '-ar', '44100', os.path.join(WORK, 'mix.wav')], check=True)
 
 
 def encode():
     out = os.path.join(VIDEOS, 'puzzle_venus.mp4')
     subprocess.run([FF, '-y', '-loglevel', 'error', '-framerate', str(FPS), '-i', os.path.join(WORK, 'out', 'f_%05d.jpg'), '-i', os.path.join(WORK, 'mix.wav'),
-                    '-map', '0:v', '-map', '1:a', '-t', f'{DUR:.2f}', '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p',
+                    '-map', '0:v', '-map', '1:a', '-t', f'{DUR_OUT:.2f}', '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p',
                     '-profile:v', 'high', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out], check=True)
     print('written', out)
 

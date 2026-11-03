@@ -8,7 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SC = json.load(open(os.path.join(HERE, 'scene.json'))); B = SC['beats']
 OUT = os.path.join(HERE, '../../work/puzzle_venus/sfx.wav')
 SR = 44100
-N = int(SC['duration'] * SR)
+OUT_ = SC.get('out', {}); N = int(OUT_.get('duration', SC['duration']) * SR)
 mix = np.zeros(N)
 
 
@@ -42,7 +42,8 @@ for at, f in [(B['n3'], 1500), (B['n2'], 1500), (B['n1'], 1100)]:
     add(tick(f), at, 0.7); add(tick(f * 0.75), at + 1.0, 0.35)          # tick … tock
 # the answer: a bright chime, a fifth up, with a long shimmer
 ch = tone(1318.5, 2.5, 0.7, ((1, 1), (2, 0.3), (3, 0.12))) + 0.8 * np.concatenate([np.zeros(int(0.09 * SR)), tone(1975.5, 2.5, 0.8, ((1, 1), (2, 0.25)))])[:int(2.5 * SR)]
-add(ch, B['ans'], 0.35)
+if OUT_.get('answer', True): add(ch, B['ans'], 0.35)
+else: add(pop(520), OUT_['cut'][0], 0.6)                      # no answer: just a soft pop for the «?»
 mix = mix / max(1e-9, np.abs(mix).max()) * 0.7
 st = np.stack([mix, mix], 1)
 os.makedirs(os.path.dirname(OUT), exist_ok=True)

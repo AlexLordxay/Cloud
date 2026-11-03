@@ -34,6 +34,9 @@
   відліку 3-2-1 (по 2 с, кільце) → 👍 → махає. Таймінг — `scene.json` `beats` (під голос), камера `cam`, голос `narration.parts`.
   Кадри: 4 × `node scenes/puzzle_venus/render.js fill <с> - frames` (~17 кадрів/хв разом, ~65 хв); далі `python3 scenes/puzzle_venus/post.py`
   (титри, глобус Венери, відлік, кнопка підписки, музика `music.js`, звуки `sfx.py`, −14 LUFS). Описи — `posts.md`.
+  **Відповіді у відео НЕМАЄ (автор 3.11):** після відліку — «?» і «Відповідь — завтра» (фраза `fix_noanswer.mp3`, 0,23 кр.), вирізано
+  src 29,75–32,6 с (`scene.json` `out`: cut, answer:false; кадри рендеряться до 39,1 с, вихід 36,2 с). Наступна загадка має ПОЧИНАТИСЯ
+  з «Вчорашня відповідь — Венера!». Баланс Higgsfield ≈ 33,2.
   Коментар Ірини (7 грудня, «хто я?») — відповідь: Змієносець (30.11–17.12); про Змієносця просили троє → кандидат на зодіак.
 - **Новий контейнер:** `cd videos/tools && npm install; pip install imageio-ffmpeg matplotlib scipy tifffile imagecodecs`.
   Гілка `claude/ukrainian-conversation-tvi8yz` (усе закомічено й запушено). Для сцен з Місяцем: `python3 scenes/moon_meet/terrain_data.py south`.

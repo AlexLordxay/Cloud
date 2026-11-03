@@ -6,8 +6,8 @@
 const fs = require('fs'), path = require('path');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
 const SC = JSON.parse(fs.readFileSync(path.join(__dirname, 'scene.json')));
-const T = SC.duration, OUT = path.resolve(__dirname, '../../work/puzzle_venus/music.wav');
-const S = SC.beats;
+const T = SC.out ? SC.out.duration : SC.duration, OUT = path.resolve(__dirname, '../../work/puzzle_venus/music.wav');
+const S = Object.assign({}, SC.beats, SC.out && SC.out.answer === false ? { noAnswer: 1, cut: SC.out.cut[0] } : {});
 
 function score({ organ, FL, REG_MID, lv }, S, T) {
   // [start, notes, how full]
@@ -20,11 +20,17 @@ function score({ organ, FL, REG_MID, lv }, S, T) {
     [S.write, [53, 57, 60, 65], 0.28],             // «write in the comments»: F
     [S.n3, [52, 57, 59, 64], 0.16],                // the countdown: Esus4, thin …
     [S.n1, [64], 0.12],                            //   … one high note left (the breath)
+  ].concat(S.noAnswer ? [
+    [S.cut - 0.3, [53, 57, 60, 65], 0.3],          // no answer — «tomorrow»: F …
+    [S.cut + 2.4, [55, 60, 62, 67], 0.32],         //   … Gsus4, left open (the answer is tomorrow's)
+    [S.cut + 4.4, [53, 57, 60, 65], 0.28],         //   F, and open again to the end
+    [S.cut + 5.8, [55, 60, 62, 67], 0.26],
+  ] : [
     [S.ans - 0.4, [53, 57, 60, 65], 0.34],         // the answer: F …
     [S.ans + 1.4, [60, 64, 67, 72], 0.5],          //   … C: the lift (eased in, no hit)
     [S.bye, [53, 57, 60, 65], 0.34],               // goodbye: F …
     [S.bye + 2.0, [55, 60, 62, 67], 0.3],          //   … Gsus4, open
-  ];
+  ]);
   CH.forEach(([a, ns, d], i) => {
     const b = (CH[i + 1] ? CH[i + 1][0] : T) + 0.8;
     ns.forEach((m, j) => organ(a + j * 0.08, b, m + 12, d > 0.45 ? REG_MID : FL, lv(d, 0.03, 0.22), 700 + 2600 * d, 1.4, 1.4));
