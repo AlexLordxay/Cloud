@@ -49,31 +49,23 @@ def label(d, x, y, name, km, a=1.0):
     d.text((x, y + 44), km, font=F_NUM, fill=SUN_C + (int(235 * a),), anchor='mm')
 
 def sizes(u):
-    """Mercury, the Moon and the Earth at their true sizes (4 879, 3 474, 12 742 km across); the Earth slides in last."""
+    """Mercury beside the Moon at their true sizes (4 879 and 3 474 km across)."""
     if 'sizes' not in _cache:
         from make import sphere                                   # moontrip's textured-sphere drawer
         bg = Image.new('RGBA', (W, H), (4, 6, 14, 255)); bg.alpha_composite(stars(9, 260))
-        k = 230 / 12742                                            # px of radius per km of diameter
-        _cache['sizes'] = (bg, sphere(os.path.join(TEX, 'mercury_2k.jpg'), round(4879 * k), 160, light=(-0.6, 0.35, 0.75)),
-                           sphere(os.path.join(TEX, 'moon_2k.jpg'), round(3474 * k), 0, light=(-0.6, 0.35, 0.75)),
-                           sphere(os.path.join(TEX, 'earth_day_2k.jpg'), 230, 20, light=(-0.6, 0.35, 0.75),
-                                  clouds=os.path.join(TEX, 'earth_clouds.png'), rim=(0.25, 0.5, 1.0)))
-    bg, mer, moon, earth = _cache['sizes']
+        k = 150 / 4879
+        _cache['sizes'] = (bg, sphere(os.path.join(TEX, 'mercury_2k.jpg'), 150, 160, light=(-0.6, 0.35, 0.75)),
+                           sphere(os.path.join(TEX, 'moon_2k.jpg'), round(3474 * k), 0, light=(-0.6, 0.35, 0.75)))
+    bg, mer, moon = _cache['sizes']
     im = bg.copy(); d = ImageDraw.Draw(im)
     e = lambda a, b: min(1.0, max(0.0, (u - a) / (b - a)))
     ease = lambda x: x * x * (3 - 2 * x)
-    # Mercury and the Moon side by side up top, the Earth rising from below
-    a1 = ease(e(0.0, 0.12)); a2 = ease(e(0.12, 0.25)); a3 = ease(e(0.35, 0.55))
-    for img, cx, cy, name, km, a in ((mer, 0.30, 0.26, 'Меркурій', '4 879 км', a1), (moon, 0.72, 0.26, 'Місяць', '3 474 км', a2)):
+    for img, cx, name, km, a in ((mer, 0.29, 'Меркурій', '4 879 км', ease(e(0.0, 0.15))), (moon, 0.75, 'Місяць', '3 474 км', ease(e(0.12, 0.3)))):
         if a <= 0: continue
         s = img.copy(); s.putalpha(s.getchannel('A').point(lambda v: int(v * a)))
-        im.alpha_composite(s, (int(cx * W - s.width / 2), int(cy * H - s.height / 2)))
-        label(d, cx * W, cy * H + s.height / 2 + 40, name, km, a)
-    if a3 > 0:
-        y = int(H * 0.66 - earth.height / 2 + (1 - a3) * 520)
-        s = earth.copy(); s.putalpha(s.getchannel('A').point(lambda v: int(v * a3)))
-        im.alpha_composite(s, (int(W / 2 - s.width / 2), y))
-        label(d, W / 2, y + s.height + 36, 'Земля', '12 742 км', a3)
+        cy = 0.42 * H + (1 - a) * 30
+        im.alpha_composite(s, (int(cx * W - s.width / 2), int(cy - s.height / 2)))
+        label(d, cx * W, 0.42 * H + 150 + 44, name, km, a)
     return im.convert('RGB')
 
 def orbit(u):
@@ -81,7 +73,7 @@ def orbit(u):
     hand fixed to its ground points at the Sun again only after both: one day from noon to noon is 176 days. Near the
     Sun (perihelion) the orbit outruns the spin and the hand swings back."""
     im = Image.new('RGBA', (W, H), (4, 6, 14, 255)); im.alpha_composite(stars(4, 200)); d = ImageDraw.Draw(im)
-    cx, cy, a, e = W / 2, H * 0.44, 250, 0.2056
+    cx, cy, a, e = W / 2, H * 0.43, 215, 0.2056
     b = a * math.sqrt(1 - e * e); fx = cx - a * e                       # the Sun at a focus
     # the orbit
     pts = [(cx + a * math.cos(t), cy + b * math.sin(t)) for t in np.linspace(0, 2 * math.pi, 361)]
@@ -106,10 +98,10 @@ def orbit(u):
     d.line((px_, py_, hx, hy), fill=SUN_C + (255,), width=5); d.ellipse((hx - 7, hy - 7, hx + 7, hy + 7), fill=SUN_C + (255,))
     # the counters
     days = int(round(176 * k))
-    d.text((W / 2, H * 0.73), f'{days} днів', font=F_BIG, fill=(255, 255, 255, 240), anchor='mm')
+    d.text((W / 2, H * 0.21), f'{days} днів', font=F_BIG, fill=(255, 255, 255, 240), anchor='mm')
     yr = min(2, int(2 * k + 1e-6)); a1 = min(1.0, max(0.0, (k - 0.5) / 0.05)); a2 = min(1.0, max(0.0, (k - 0.995) / 0.005))
-    if a1 > 0: d.text((W / 2, H * 0.79), '1 рік = 88 днів', font=F_NUM, fill=SUN_C + (int(240 * a1),), anchor='mm')
-    if a2 > 0: d.text((W / 2, H * 0.835), '1 день = 176 днів', font=F_NUM, fill=(140, 200, 255, int(240 * a2)), anchor='mm')
+    if a1 > 0: d.text((W / 2, H * 0.625), '1 рік = 88 днів', font=F_NUM, fill=SUN_C + (int(240 * a1),), anchor='mm')
+    if a2 > 0: d.text((W / 2, H * 0.665), '1 день = 176 днів', font=F_NUM, fill=(140, 200, 255, int(240 * a2)), anchor='mm')
     return im.convert('RGB')
 
 DRAW = {'sizes': sizes, 'orbit': orbit}

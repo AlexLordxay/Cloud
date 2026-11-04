@@ -54,7 +54,7 @@ exports.mercuryWorld = (shot, meta) => `async function buildMercury() {
         vec3 colr = c * (vec3(1.0, 0.985, 0.96) * 2.6 * expo * lit * s + vec3(0.006, 0.0065, 0.008));
         // ice in the permanent shadows: a faint cold glow (the radar-bright deposits)
         float ik = texture2D(ice, vUv).r * iceK * (1.0 - s);
-        colr += vec3(0.30, 0.55, 0.85) * ik * 0.16;
+        colr += vec3(0.22, 0.48, 0.95) * ik * (0.055 + 0.03 * texture2D(col, vUv * 3.0).r);
         vec2 e2 = min(vUv, 1.0 - vUv);
         colr *= smoothstep(0.0, 0.16, min(e2.x, e2.y));
         gl_FragColor = vec4(pow(colr, vec3(og)), 1.0);

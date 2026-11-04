@@ -1,1 +1,21 @@
-{"title": "Знайомся: Меркурій", "duration": 80, "fps": 30, "width": 720, "height": 1280, "pieces": [[0, ["shot", "hook"]]]}
+{
+  "title": "Знайомся: Меркурій",
+  "duration": 85.6,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "audio": {"music": "cinematic"},
+  "pieces": [
+    [0, ["shot", "hook"]], [6.5, ["globe", "turn"]], [10.9, ["draw", "sizes"]], [14.4, ["draw", "orbit"]],
+    [25.0, ["shot", "terminator"]], [35.5, ["globe", "calo"]], [40.6, ["globe", "shock"]], [46.2, ["shot", "rupes"]],
+    [54.9, ["shot", "shev"]], [62.8, ["shot", "pole"]], [71.9, ["globe", "bepi"]], [77.8, ["globe", "outro"]]
+  ],
+  "narration": {
+    "file": "voice.mp3",
+    "level": 1.0,
+    "parts": [
+      [0, 6.3, 0.15], [6.5, 13.85, 6.8], [14.05, 24.5, 14.5], [24.85, 34.8, 25.3], [35.3, 45.45, 35.7],
+      [45.75, 54.1, 46.3], [54.55, 61.97, 55.1], [62.3, 70.97, 63.0], [71.4, 76.55, 72.1], [77.05, 80.5, 78.7]
+    ]
+  }
+}

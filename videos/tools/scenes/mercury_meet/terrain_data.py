@@ -42,11 +42,12 @@ SITES = {
     'hokusai': dict(lat=57.8, lon=16.8, half=170, az=90, el=3.0, ex=1.8, els=[0.3, 0.9, 1.6, 2.4, 3.3, 4.4],
                     bowls=[(57.8, 16.8, 114, 3.2)]),
     # the Caloris basin, 1550 km across: its rim mountains in the morning light from the east
-    'caloris': dict(lat=31.5, lon=162.7, half=1000, az=90, el=5.0, ex=4.0),
+    'caloris': dict(lat=31.5, lon=162.7, half=1000, az=90, el=5.0, ex=4.0, pc=False, demblur=2500),
     # Discovery Rupes (the scarp, up to ~2 km) and Shevchenko crater (143 km), low Sun from the west
-    'discovery': dict(lat=-54.5, lon=-41.0, half=300, az=270, el=7.0, ex=2.2, bowls=[(-53.6, -46.0, 143, 2.2)]),
+    'discovery': dict(lat=-54.5, lon=-41.0, half=300, az=270, el=7.0, ex=2.2, bowls=[(-53.6, -46.0, 143, 2.2)], eps=0.3),
     # near the north pole: Prokofiev and its neighbours, the Sun skimming the horizon, ice in the shadows
-    'pole': dict(lat=85.5, lon=-60.0, half=170, az=180, el=1.6, ex=1.8, ice=True),
+    # (here the heights come from MESSENGER's laser altimeter, dense near the north pole: used as they are, no photoclinometry)
+    'pole': dict(lat=87.0, lon=-60.0, half=230, az=180, el=2.5, ex=1.8, ice=True, pc=False, demblur=1400),
 }
 
 
@@ -171,13 +172,13 @@ def build(site):
     step = 2 * half * 1e3 / (NH - 1)
     dem = np.where(dem < -20000, np.median(dem), dem)
     h = sample(dem, dbox, lat, lon)
-    h = gblur(h, 10e3 / step)                                             # the global heights: only their broad shape is real
+    h = gblur(h, S.get('demblur', 10e3) / step)                           # the global heights: mostly only their broad shape is real
 
     print(site, 'albedo…', flush=True)
     loi, lbox = cached('loi', site, lambda: fetch_box(LOI, lat, lon))
     b = sample(bdr, bbox, lat, lon); o = sample(loi, lbox, lat, lon)
     ok = (b > 1) & (o > 1)
-    h = h + relief(b, o, ok, step) + sum(bowl(lat0, lon0, half, NH, *c) for c in S.get('bowls', []))
+    h = h + (relief(b, o, ok, step, eps=S.get('eps', 0.1)) if S.get('pc', True) else 0) + sum(bowl(lat0, lon0, half, NH, *c) for c in S.get('bowls', []))
     hb = h
     gy, gx = np.gradient(hb, step, step)
     nrm = np.dstack([-gx, gy, np.ones_like(h)])                            # x east, y north, z up
