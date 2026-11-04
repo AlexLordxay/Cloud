@@ -98,7 +98,8 @@ def orbit(u):
     d.line((px_, py_, hx, hy), fill=SUN_C + (255,), width=5); d.ellipse((hx - 7, hy - 7, hx + 7, hy + 7), fill=SUN_C + (255,))
     # the counters
     days = int(round(176 * k))
-    d.text((W / 2, H * 0.21), f'{days} днів', font=F_BIG, fill=(255, 255, 255, 240), anchor='mm')
+    word = 'день' if days % 10 == 1 and days % 100 != 11 else 'дні' if days % 10 in (2, 3, 4) and days % 100 not in (12, 13, 14) else 'днів'
+    d.text((W / 2, H * 0.21), f'{days} {word}', font=F_BIG, fill=(255, 255, 255, 240), anchor='mm')
     yr = min(2, int(2 * k + 1e-6)); a1 = min(1.0, max(0.0, (k - 0.5) / 0.05)); a2 = min(1.0, max(0.0, (k - 0.995) / 0.005))
     if a1 > 0: d.text((W / 2, H * 0.625), '1 рік = 88 днів', font=F_NUM, fill=SUN_C + (int(240 * a1),), anchor='mm')
     if a2 > 0: d.text((W / 2, H * 0.665), '1 день = 176 днів', font=F_NUM, fill=(140, 200, 255, int(240 * a2)), anchor='mm')
