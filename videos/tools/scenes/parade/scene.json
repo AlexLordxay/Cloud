@@ -1,0 +1,10 @@
+{
+ "title": "Парад планет 16 листопада 2026",
+ "duration": 97.0,
+ "fps": 30,
+ "beats": {"hook": 0.0, "site": 7.1, "lineup": 18.0, "mercury": 20.24, "venus": 25.13, "mars": 31.83, "jupiter": 36.9,
+           "sky1": 45.0, "venusL": 48.6, "mercuryL": 54.3, "south": 56.2, "ruler": 58.6, "finger": 60.2,
+           "site2": 63.0, "sky2": 67.3, "leonids": 70.5, "speed": 75.5, "card": 79.6, "cta": 90.9,
+           "meteors": [1.0, 50.8, 68.2, 69.6, 71.0, 72.6, 74.6, 76.2, 77.9, 82.0, 86.5, 92.6]},
+ "site_offset": {"site": 0.0, "site2": 11.3}
+}

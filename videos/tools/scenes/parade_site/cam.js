@@ -8,7 +8,8 @@
   const IDS = ['mercury', 'venus', 'mars', 'jupiter'];
   const COL = { sun: [255, 214, 120], mercury: [205, 196, 186], venus: [255, 226, 160], mars: [255, 140, 100], jupiter: [235, 200, 160] };
   const NAME = { sun: 'Сонце', earth: 'Земля', mercury: 'Меркурій', venus: 'Венера', mars: 'Марс', jupiter: 'Юпітер' };
-  const RAY_T = { sun: 3.6, mercury: 5.0, venus: 5.7, mars: 6.4, jupiter: 7.1 };   // when each ray grows (s)
+  const RAY_T = { sun: 2.9, mercury: 4.0, venus: 4.7, mars: 5.4, jupiter: 6.1 };   // when each ray grows (s; the voice: «Із Землі всі чотири…»)
+  const SHOT2 = 11.3;   // the second shot: along the line of sight to Mars and Jupiter, and how far apart they really are
   let rays = {}, labels = {}, fan = null, ready = false;
 
   function label(T, text, col) {
@@ -35,6 +36,33 @@
     ready = true;
   };
 
+  let gap = null, gapLabel = null;
+  function shot2(r, u) {
+    const T = r.THREE, V = T.Vector3, B = r.byId, E = B.earth.world.clone(), M = B.mars.world.clone(), J = B.jupiter.world.clone();
+    if (!gap) {
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(new Float32Array(12), 3)); g.setIndex([0, 1, 2, 0, 2, 3]);
+      gap = new T.Mesh(g, new T.MeshBasicMaterial({ color: 0xf7c66b, transparent: true, opacity: 0, depthTest: false, side: T.DoubleSide })); gap.renderOrder = 16; gap.frustumCulled = false; r.scene.add(gap);
+      gapLabel = label(T, '≈ 592 млн км', [247, 198, 107]); gapLabel.scale.set(0.34, 0.085, 1); r.scene.add(gapLabel);
+    }
+    const dir = J.clone().sub(E).normalize(), side = new V(-dir.z, 0, dir.x).normalize();
+    // from just behind the Earth (Mars in front of Jupiter: together, as in the sky) swinging out to the side, where the
+    // gap between them opens up along the line of sight
+    const k = ease(Math.min(1, Math.max(0, (u - 0.5) / 2.6)));
+    const mid = E.clone().lerp(J, 0.5), L = E.distanceTo(J);
+    const p0 = E.clone().addScaledVector(dir, -9).add(new V(0, 2.2, 0)).addScaledVector(side, 1.2);
+    // … up over the plane: the Earth at the bottom, Jupiter at the top, Mars between, the gap lit
+    const mid2 = E.clone().lerp(J, 0.5);
+    const p1 = mid2.clone().addScaledVector(dir, -L * 0.1).add(new V(0, L * 1.5, 0));
+    const pos = p0.clone().lerp(p1, k);
+    const look = J.clone().lerp(mid2, k);
+    const up = new V(0, 1, 0).lerp(dir, k).normalize();
+    const cam = r.camera; cam.position.copy(pos); cam.up.copy(up); cam.lookAt(look); r.controls.target.copy(look);
+    for (const id in rays) rays[id].material.opacity = id === 'mars' || id === 'jupiter' ? 0.35 * smooth((u - 2.2) / 0.6) : 0;
+    const g = smooth((u - 2.4) / 0.9), a = gap.geometry.attributes.position, end = M.clone().lerp(J, g), w = side.clone().multiplyScalar(0.35);
+    a.setXYZ(0, M.x + w.x, M.y + 0.05, M.z + w.z); a.setXYZ(1, end.x + w.x, end.y + 0.05, end.z + w.z); a.setXYZ(2, end.x - w.x, end.y + 0.05, end.z - w.z); a.setXYZ(3, M.x - w.x, M.y + 0.05, M.z - w.z); a.needsUpdate = true;
+    gap.material.opacity = 0.9 * smooth((u - 2.3) / 0.3);
+    gapLabel.position.copy(M.clone().lerp(J, 0.5)).addScaledVector(side, -L * 0.075); gapLabel.material.opacity = smooth((u - 3.0) / 0.5);
+  }
   window.__recCam = () => {
     if (!ready) return;
     const r = window.__rec, T = r.THREE, V = T.Vector3, t = window.__vt() - (window.__t0 || 0);
@@ -67,7 +95,7 @@
       rays[id].material.opacity = 0.9 * smooth((t - RAY_T[id]) / 0.25);
     }
     // the wedge between the Sun's ray and the farthest-out planet ray (the morning side of the sky)
-    const fk = smooth((t - 7.9) / 0.8) * 0.16, pa = fan.geometry.attributes.position, sunA = Math.atan2(S.z - E.z, S.x - E.x);
+    const fk = smooth((t - 6.9) / 0.8) * 0.16 * (t < SHOT2 ? 1 : 0), pa = fan.geometry.attributes.position, sunA = Math.atan2(S.z - E.z, S.x - E.x);
     const ang = IDS.map(id => Math.atan2(B[id].world.z - E.z, B[id].world.x - E.x));
     const rel = a0 => ((a0 - sunA + 3 * Math.PI) % (2 * Math.PI)) - Math.PI;
     const far = ang.reduce((m, a0) => Math.abs(rel(a0)) > Math.abs(rel(m)) ? a0 : m, sunA), R0 = span * 1.25;
@@ -81,8 +109,9 @@
       const b = B[id], sp = labels[id], P = b.world.clone(), off = (b.radius || 1) * (id === 'sun' ? 1.5 : 2.2) + span * 0.02;
       sp.position.copy(P).addScaledVector(upDir, -off);
       const tIn = id === 'earth' ? 1.2 : id === 'sun' ? RAY_T.sun : RAY_T[id] + 0.3;
-      sp.material.opacity = smooth((t - tIn) / 0.4);
+      sp.material.opacity = smooth((t - tIn) / 0.4) * (t < SHOT2 || id === 'mars' || id === 'jupiter' || id === 'earth' ? 1 : 0);
     }
+    if (t >= SHOT2) shot2(r, t - SHOT2);
     for (const x of r.BODIES) if (x.orbitLine) { const inner = ['mercury', 'venus', 'earth', 'mars', 'jupiter'].includes(x.id); x.orbitLine.visible = inner; if (inner) x.orbitLine.material.opacity = 0.32; }
   };
 })();
