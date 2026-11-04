@@ -11,7 +11,7 @@ const fs = require('fs'), path = require('path'), http = require('http');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
 const TOOLS = path.resolve(__dirname, '../..'), WORK = path.join(TOOLS, 'work', 'mercury_meet');
 const SHOTS = require('./shots'), { mercuryWorld } = require('./world');
-const [name, mode = 'stills', list = '0'] = process.argv.slice(2);
+const [name, mode = 'stills', list = '0', upto] = process.argv.slice(2);
 const shot = SHOTS[name];
 if (!shot) { console.log('shots:', Object.keys(SHOTS).join(', ')); process.exit(1); }
 const W = 720, H = 1280, FPS = 30;
@@ -90,8 +90,9 @@ function cam(t) {
     for (const t of list.split(',').map(Number)) await save(t, path.join(WORK, `shot_${name}_${t}.jpg`));
   } else {
     const dir = path.join(WORK, 'shot_' + name); fs.mkdirSync(dir, { recursive: true });
-    const n = Math.round(shot.dur * FPS);
-    for (let i = 0; i < n; i++) { await save(i / FPS, path.join(dir, `f_${String(i).padStart(5, '0')}.jpg`)); if (i % 30 === 0) console.log('frame', i, '/', n); }
+    // video [from [to]]: only frames from…to-1 (to share a long shot between two processes)
+    const n = upto ? Number(upto) : Math.round(shot.dur * FPS);
+    for (let i = mode === 'video' && list !== '0' ? Number(list) : 0; i < n; i++) { await save(i / FPS, path.join(dir, `f_${String(i).padStart(5, '0')}.jpg`)); if (i % 30 === 0) console.log('frame', i, '/', n); }
   }
   await br.close(); srv.close();
 })();
