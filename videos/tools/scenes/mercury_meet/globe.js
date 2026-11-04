@@ -26,6 +26,8 @@ const P = (lat, lon) => new THREE.Vector3(Math.cos(lat * D) * Math.cos(lon * D),
 async function setup() {
   const load = f => new Promise(r => new THREE.TextureLoader().load(f, t => { t.anisotropy = 16; r(t); }, undefined, () => r(null)));
   const [map, over] = await Promise.all([load('/tex/mercury.jpg'), load('/data/overlay.png')]);
+  // repeat across the date line, so the seam-free longitude below can run past the map's edge
+  for (const t of [map, over]) { t.wrapS = THREE.RepeatWrapping; t.needsUpdate = true; }
   const sunDir = P(...${JSON.stringify(shot.sun || [0, 120])});
   const U = { map: { value: map }, over: { value: over }, overK: { value: 0 }, sun: { value: sunDir }, shock: { value: -1 },
     cal: { value: P(31.5, 162.7) } };
@@ -35,7 +37,11 @@ async function setup() {
       void main() {
         vec3 n = normalize(vN);
         float lat = asin(clamp(n.y, -1.0, 1.0)), lon = atan(-n.z, n.x);
-        vec2 uv = vec2((lon + 3.14159265) / 6.2831853, (lat + 1.5707963) / 3.14159265);
+        // the longitude jumps from +180° to −180° at the date line; there the texture lookup would take the tiniest
+        // mipmap and leave a dark seam. Two versions of u, one with its jump on the far side, and whichever changes
+        // least across this pixel (Tarini's trick).
+        float uA = (lon + 3.14159265) / 6.2831853, uB = fract(uA + 0.5) - 0.5;
+        vec2 uv = vec2(fwidth(uA) <= fwidth(uB) + 1e-6 ? uA : uB, (lat + 1.5707963) / 3.14159265);
         vec3 c = pow(texture2D(map, uv).rgb, vec3(2.2)) * 0.85;
         float mu0 = dot(n, sun);
         vec3 v = normalize(cameraPosition - vW);

@@ -36,7 +36,22 @@ def px(lat, lon):
     return ((lon + 180) / 360 * W, (90 - lat) / 180 * H)
 
 
-g = json.load(open(os.path.join(WORK, 'geo', 'ukraine.json')))
+def ukraine():
+    """Ukraine's outline WITH Crimea. Natural Earth (via datasets/geo-countries, saved in work/mercury_meet/geo/) draws
+    de facto lines and puts Crimea inside Russia's shape, so the peninsula is taken from there and joined back."""
+    from shapely.geometry import shape, Polygon
+    from shapely.ops import unary_union
+    d = json.load(open(os.path.join(WORK, 'geo', 'countries.geojson')))   # raw.githubusercontent.com/datasets/geo-countries
+    feat = {f['properties']['name']: f for f in d['features']}
+    crimea = [Polygon(r[0]) for r in feat['Russia']['geometry']['coordinates']
+              if 44 < min(p[1] for p in r[0]) and max(p[1] for p in r[0]) < 46.3 and 32 < min(p[0] for p in r[0]) and max(p[0] for p in r[0]) < 37]
+    assert len(crimea) == 1, 'Crimea not found'
+    u = unary_union([shape(feat['Ukraine']['geometry']).buffer(0), crimea[0].buffer(0)]).buffer(0.002).buffer(-0.002)
+    parts = sorted(u.geoms if u.geom_type == 'MultiPolygon' else [u], key=lambda p: -p.area)
+    return {'type': 'MultiPolygon', 'coordinates': [[list(map(list, p.exterior.coords))] for p in parts]}
+
+
+g = ukraine()
 base = [[px(*from_xy(*to_xy(la, lo, UA0, R_E), CAL, R_M)) for lo, la in ring[0]] for ring in g['coordinates']]
 # drawn twice, a map-width apart, so the part past the date line lands on the left edge
 polys = base + [[(x - W, y) for x, y in p] for p in base]
