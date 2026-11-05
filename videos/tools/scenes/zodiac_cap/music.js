@@ -1,4 +1,4 @@
-// «Ти Козеріг?» — the Hoverla organ score (MUSIC.md) retimed as in «Ти Стрілець?»: the hush before the fact (34.9 s),
+// «Ти Козеріг?» (5.11 re-cut: see schedule()) — the Hoverla organ score (MUSIC.md) retimed as in «Ти Стрілець?»: the hush before the fact (34.9 s),
 // A major blooming as «якщо ти Козеріг за гороскопом…» comes (35.4 s), the quiet figure for the call to comment (45.0 s). Originally: "What if over Hoverla instead of the Moon…" — the video's own score, in the spirit of a space-film organ score (no
 // quotation): one organ, no bass, no drums. A clock-like eighth-note figure in A minor that groups in threes against the
 // bar, held chords that breathe in and out, stops and octaves added as the worlds grow, a sudden hush just before the
@@ -179,40 +179,37 @@ function createSceneMusic(ctx, dest) {
   }
 
   function schedule() {
-    const SUN = 35.4, HUSH = 34.9, MOON = 45.0, END = 52.2, E8 = BEAT / 2;
+    // 5.11 re-cut: the fact opens the video in A major (the old «Sun» part, 0–8.9 s), then the old score from its 1.25 s
+    // shifted by M = 7.75 s up to the hush (42.65 s), the quiet Am figure for the call to comment, the end card.
+    const M = 7.75, FACT = 9.0, HUSH = 34.9 + M, MOON = 43.1, END = 49.5, E8 = BEAT / 2;
     const FL = [[1, 1], [2, 0.35]];
-    // one chord per world (5 s = two bars): Am Am F F C G Am | the Sun: A major | the Moon: Am
     const CH = { Am: [57, 60, 64], F: [53, 57, 60], C: [55, 60, 64], G: [55, 59, 62], A: [57, 61, 64] };
     const PLAN = ['Am', 'Am', 'F', 'F', 'C', 'G', 'Am'];
-    const chordAt = t => t >= MOON ? 'Am' : t >= SUN - 0.01 ? 'A' : PLAN[Math.min(PLAN.length - 1, Math.floor(t / 5))];
-    // the figure: root, fifth, octave, repeated, so it falls in threes across the eight eighths of a bar
+    const chordAt = t => t >= MOON ? 'Am' : t < FACT ? 'A' : PLAN[Math.max(0, Math.min(PLAN.length - 1, Math.floor((t - M) / 5)))];
     const fig = ch => [ch[0], ch[0] + 7, ch[0] + 12];
-    const play = (t0, t1, dyn) => {                       // dyn(t): 0..1 loudness; also brings in the octave above
+    const play = (t0, t1, dyn) => {
       for (let t = t0, i = 0; t < t1 - 0.05; t += E8, i++) {
         const d = dyn(t), f = fig(CH[chordAt(t)]), m = f[i % 3];
         organ(t, t + E8 * 0.9, m, d > 0.55 ? REG_MID : FL, 0.10 + 0.22 * d, 1000 + 3000 * d, 0.01, 0.12);
         if (d > 0.45) organ(t, t + E8 * 0.9, m + 12, FL, 0.05 + 0.12 * (d - 0.45), 2500, 0.01, 0.12);
       }
     };
-    // waves: a first swell under Venus/Earth, back down for Neptune, then one long rise to the hush
+    // the fact: A major from the first second, the figure bright, calming into the main text
+    for (const m of [57, 61, 64, 69, 73, 76]) organ(0.0, FACT + 0.4, m, REG_MID, 0.26, 3200, 0.8, 1.6);
+    play(0.0, FACT, t => 0.75 - 0.45 * Math.max(0, (t - (FACT - 2.5)) / 2.5));
+    organ(1.5, FACT, 85, FL, 0.14, 3000, 1.5, 1.0);
+    // the main text: the old waves (time in the old video = t - M)
     const wave0 = t => t < 5 ? 0.1 : t < 13 ? 0.1 + 0.35 * (t - 5) / 8 : t < 17 ? 0.45 - 0.25 * (t - 13) / 4 :
       t < 20 ? 0.2 : 0.2 + 0.8 * (t - 20) / (26.8 - 20);
-    const wave = t => wave0(t * 26.8 / HUSH);             // the Sagittarius shape stretched to this hush
-    play(0, HUSH, wave);
-    // held chords that breathe: each swells in and out over its 5 s
+    const wave = t => wave0((t - M) * 26.8 / 34.9);
+    play(FACT, HUSH, wave);
     PLAN.forEach((k, c) => {
-      const t0 = c * 5, t1 = c === PLAN.length - 1 ? HUSH : t0 + 5.4, w = wave(t0 + 2.5);
-      for (const m of CH[k]) organ(t0, t1, m + 12, c < 4 ? FL : REG_MID, 0.08 + 0.22 * w, 900 + 2500 * w, 2.2, 1.6);
+      const t1 = c === PLAN.length - 1 ? HUSH : c * 5 + M + 5.4, t0 = Math.max(FACT, c * 5 + M), w = wave(t0 + 2.5);
+      if (t1 > t0 + 1) for (const m of CH[k]) organ(t0, t1, m + 12, c < 4 ? FL : REG_MID, 0.08 + 0.22 * w, 900 + 2500 * w, 2.2, 1.6);
     });
-    // a long high line over the last rise
-    [[26, 5, 76], [31, 3.9, 79]].forEach(([t0, len, m]) => organ(t0, t0 + len, m + 12, FL, 0.16, 3000, 1.5, 0.6));
-    // the hush: everything stops, one high note hangs on
-    organ(HUSH - 0.2, SUN + 0.5, 81, FL, 0.12, 2500, 0.3, 1.0);
-    // the Sun: A major breathes in over 2.5 s, the figure comes back in full, then calms down for the Moon
-    for (const m of [57, 61, 64, 69, 73, 76]) organ(SUN - 1.0, MOON + 0.5, m, REG_MID, 0.30, 3500, 2.5, 2.0);
-    play(SUN, MOON, t => 0.85 - 0.5 * Math.max(0, (t - (MOON - 2.5)) / 2.5));
-    organ(SUN + 1.5, MOON, 85, FL, 0.16, 3000, 1.5, 1.0);
-    // the Moon: the quiet figure alone, fading to nothing
+    [[26 + M, 5, 76], [31 + M, 3.9, 79]].forEach(([t0, len, m]) => organ(t0, t0 + len, m + 12, FL, 0.16, 3000, 1.5, 0.6));
+    // the hush, then the quiet figure for the call to comment, fading to nothing over the end card
+    organ(HUSH - 0.2, MOON + 0.6, 81, FL, 0.12, 2500, 0.3, 1.0);
     play(MOON, END - 1.0, t => 0.25 * (1 - (t - MOON) / (END - MOON)));
     for (const m of CH.Am) organ(MOON, END, m + 12, FL, 0.12, 1500, 1.5, 1.0);
   }

@@ -1,6 +1,9 @@
 # «Ти Козеріг?» — the camera, the Sun and the drawings over the sky as functions of the video time t (s). Built on «Ти
-# Стрілець?» (the helpers come from the 13th-sign scene). The voice (scene.json): 0.2–34.8 the main text, 35.4–44.6 the
-# fact («якщо ти Козеріг за гороскопом… Сонце стояло в Стрільці»), 45.3–48.8 the call to comment.
+# Стрілець?» (the helpers come from the 13th-sign scene).
+# 5.11 re-cut (lessons from «Ти Змієносець?»: the twist for everyone first, the dates later, a short ending): the fact
+# («якщо ти Козеріг за гороскопом… Сонце стояло в Стрільці») now opens the video at 0.3–8.9; the main text («твоє
+# сузір'я — одне з найдавніших…») follows at 9.4–42.7 and is the old timeline shifted by M = 7.75 s; the call to comment
+# 43.3–46.8; the end card from 47.0. The old functions are kept as _old_* and are called with t - M.
 import importlib.util, math, os, datetime
 from PIL import Image, ImageDraw, ImageFilter
 from sky import vec, ecl, slerp
@@ -26,14 +29,14 @@ KEYS = [(0.0, CAP, 640, 0), (8.6, CAP, 600, 0), (10.4, TROP, 520, 0), (19.0, TRO
         (24.5, CAP, 610, 0), (26.4, ALG, 3000, 0), (28.6, ALG, 26000, 0), (34.6, ALG, 28000, 0), (36.6, SGR, 560, 0),
         (44.4, SGR, 580, 0), (46.0, CAP, 640, 0), (52.2, CAP, 660, 0)]
 
-def camera(t):
+def _old_camera(t):
     for (t0, c0, s0, r0), (t1, c1, s1, r1) in zip(KEYS, KEYS[1:]):
         if t <= t1:
             k = ease((t - t0) / (t1 - t0))
             return slerp(c0, c1, k), math.exp(math.log(s0) + (math.log(s1) - math.log(s0)) * k), r0 + (r1 - r0) * k
     return KEYS[-1][1], KEYS[-1][2], KEYS[-1][3]
 
-def sun(t):
+def _old_sun(t):
     """19 January → 16 February through Capricornus (with the dates), then for the fact 22 December → 19 January,
     which is all in Sagittarius."""
     if t < 30:
@@ -43,9 +46,9 @@ def sun(t):
 def sectors(t):
     return 0.0, 0.0
 
-def view(t):
-    c, s, r = camera(t)
-    lam, sk = sun(t)
+def _old_view(t):
+    c, s, r = _old_camera(t)
+    lam, sk = _old_sun(t)
     hi_cap = max(win(t, -1, 24.6, 0.6), ramp(t, 45.2, 46.4))
     hi_sgr = win(t, 36.4, 44.6, 0.6)
     deep = ramp(t, 26.8, 27.8) * (1 - ramp(t, 34.6, 35.6))                     # the deep zoom on the horn
@@ -64,7 +67,7 @@ def _pt(P, v):
 def _mark(d, x, y, R, k, col):
     d.ellipse((x - R, y - R, x + R, y + R), outline=col + (int(255 * k),), width=3)
 
-def overlay(img, P, t, sky):
+def _old_overlay(img, P, t, sky):
     lay = img.convert('RGBA'); ov = Image.new('RGBA', lay.size, (0, 0, 0, 0)); d = ImageDraw.Draw(ov)
     gold, blue = (255, 210, 120), (140, 205, 255)
     # the shortest day's Sun, 2000 years ago (in Capricornus) and now (in Sagittarius): the point slides back along the
@@ -103,5 +106,52 @@ def overlay(img, P, t, sky):
         x, y, _ = _pt(P, GC); R = 22 + 10 * (1 - ramp(t, 41.0, 42.0))
         _mark(d, x, y, R, k, (255, 220, 160))
         d.text((x, y - R - 12), 'центр Галактики', font=sky.font(11), anchor='mb', fill=(255, 230, 190, int(255 * k)))
+    lay.alpha_composite(ov)
+    return lay.convert('RGB')
+
+
+# ---- the 5.11 re-cut ----
+M = 7.75                                            # main block: new t = old t + M
+FACT_END, CALL0, END = 8.9, 43.3, 49.5
+NEW_KEYS = [(0.0, CAP, 640, 0), (2.0, CAP, 620, 0), (3.8, SGR, 560, 0), (FACT_END, SGR, 585, 0), (10.4, CAP, 600, 0)] + \
+    [(t0 + M, c, s, r) for (t0, c, s, r) in KEYS if 8.6 <= t0 <= 34.6] + [(44.4, CAP, 640, 0), (END, CAP, 660, 0)]
+
+def camera(t):
+    for (t0, c0, s0, r0), (t1, c1, s1, r1) in zip(NEW_KEYS, NEW_KEYS[1:]):
+        if t <= t1:
+            k = ease((t - t0) / (t1 - t0))
+            return slerp(c0, c1, k), math.exp(math.log(s0) + (math.log(s1) - math.log(s0)) * k), r0 + (r1 - r0) * k
+    return NEW_KEYS[-1][1], NEW_KEYS[-1][2], NEW_KEYS[-1][3]
+
+def sun(t):
+    """The fact first: 22 December → 19 January, all in Sagittarius; then (old timeline) 19 January → 16 February."""
+    if t < 9.2:
+        return L_DEC22 + (L_JAN19B - L_DEC22) * ease((t - 2.8) / 4.6), win(t, 2.2, FACT_END, 0.5)
+    if t > 42.9: return L_JAN19, 0.0
+    return _old_sun(t - M)
+
+def view(t):
+    c, s, r = camera(t)
+    lam, sk = sun(t)
+    hi_cap = max(win(t, -1, 2.6, 0.6), win(t, 9.4, 24.6 + M, 0.6), ramp(t, 43.2, 44.4))
+    hi_sgr = win(t, 2.2, FACT_END, 0.6)
+    deep = ramp(t, 26.8 + M, 27.8 + M) * (1 - ramp(t, 34.6 + M, 35.6 + M))
+    glow = []
+    core = win(t, 6.0, FACT_END, 0.6)                                           # «неподалік від центру Галактики»
+    if core > 0: glow += [(GC, 90, (255, 200, 140), 0.16 * core), (GC, 14, (255, 235, 210), 0.5 * core)]
+    return dict(centre=c, scale=s, roll=r, ecliptic=0.7 * max(win(t, 8.8 + M, 24.6 + M, 0.6), win(t, 2.2, FACT_END, 0.6)),
+                hi={'Cap': hi_cap, 'Sgr': hi_sgr}, borders={'Cap': hi_cap * (1 - deep), 'Sgr': hi_sgr},
+                zlines=0.8 * (1 - deep), lines=0.25 * (1 - deep), labels=1.0 - deep, sun=lam, sun_k=sk, sun_r=18,
+                label_size=20, glow=glow, clip_rho=2.0, photo=1.0 - deep, mw=0.0)
+
+def overlay(img, P, t, sky):
+    if 9.0 < t < 42.9:
+        return _old_overlay(img, P, t - M, sky)                                  # tropic, the horn
+    k = win(t, 6.0, FACT_END, 0.5)
+    if k <= 0: return img
+    lay = img.convert('RGBA'); ov = Image.new('RGBA', lay.size, (0, 0, 0, 0)); d = ImageDraw.Draw(ov)
+    x, y, _ = _pt(P, GC); R = 22 + 10 * (1 - ramp(t, 6.0, 7.0))
+    _mark(d, x, y, R, k, (255, 220, 160))
+    d.text((x, y - R - 12), 'центр Галактики', font=sky.font(11), anchor='mb', fill=(255, 230, 190, int(255 * k)))
     lay.alpha_composite(ov)
     return lay.convert('RGB')
