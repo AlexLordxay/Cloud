@@ -103,8 +103,8 @@ function createSceneMusic(ctx, dest) {
     }
     // the hook: glitter — high soft notes falling like the stones (A minor), over a held high fifth
     const glit = [88, 84, 81, 88, 86, 81, 79, 84, 88, 81];
-    glit.forEach((m, i) => organ(0.2 + i * 0.52, 0.2 + i * 0.52 + 0.35, m, FL, 0.06, 4000, 0.01, 1.2));
-    organ(0.0, GLOBE + 0.4, 69, FL, 0.08, 2000, 1.5, 1.2); organ(0.0, GLOBE + 0.4, 76, FL, 0.06, 2500, 1.5, 1.2);
+    glit.forEach((m, i) => organ(0.2 + i * 0.52, 0.2 + i * 0.52 + 0.35, m, FL, 0.12, 4000, 0.01, 1.2));
+    organ(0.0, GLOBE + 0.4, 69, FL, 0.14, 2000, 0.6, 1.2); organ(0.0, GLOBE + 0.4, 76, FL, 0.1, 2500, 0.6, 1.2);
     // the Sun: a long high line opening over it
     organ(SUN + 0.5, WIND, 84, FL, 0.13, 3000, 1.8, 1.0); organ(SUN + 2.5, WIND, 88, FL, 0.08, 3000, 1.8, 1.0);
     // the cold: a thin high cluster that shivers

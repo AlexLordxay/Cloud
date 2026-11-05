@@ -541,17 +541,19 @@ def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov
                     ms = math.exp(-ts) * ph0 + ao * (0.55 * math.exp(-ts * 0.3) * ph1 + 0.3 * math.exp(-ts * 0.1) * ph2)
                     powder = 1 - 0.7 * math.exp(-sig * 30)
                     depth = ZTOP + 380 - z
-                    fk = 0.0
+                    flk = 0.0
                     if fl4 > 0:
                         dd = math.sqrt((x - flash[0]) ** 2 + (y - flash[1]) ** 2 + (z - flash[2]) ** 2)
-                        fk = math.exp(-dd / 260.0) / (1 + (dd / 140.0) ** 2) * (0.6 + 0.4 * ao)
+                        flk = math.exp(-dd / 260.0) / (1 + (dd / 140.0) ** 2) * (0.6 + 0.4 * ao)
                     a = math.exp(-sig * step)
                     for ch in range(3):
                         g = gas(depth / SUN[2], ch)
                         ga = gas(depth, ch)
                         S = sunC[ch] * g * ms * 8.0 * powder + amb[ch] * ga * (math.exp(-ta) * 0.9 + 0.05) * ao
                         if fl4 > 0:
-                            S += (0.75, 0.85, 1.0)[ch] * fl4 * fk
+                            S += (0.75, 0.85, 1.0)[ch] * fl4 * flk
+                        if fine == 3:
+                            S += (0.004, 0.013, 0.04)[ch] * ao
                         if ch == 0:
                             L0 += T0 * S * (1 - a); T0 *= a
                         elif ch == 1:
@@ -570,7 +572,7 @@ def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov
                     sa = (air_sig(z) + far_haze(t)) * step
                     a = math.exp(-sa)
                     for ch in range(3):
-                        c = haze(z, cth, ch, math.exp(-ts))
+                        c = haze(z, cth, ch, math.exp(-ts) if fine != 3 else 0.0)
                         if fl4 > 0:
                             c += (0.75, 0.85, 1.0)[ch] * fl4 * 6.0 * math.exp(-math.sqrt((x - flash[0]) ** 2 + (y - flash[1]) ** 2 + (z - flash[2]) ** 2) / 300.0)
                         if ch == 0:

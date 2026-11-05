@@ -27,9 +27,10 @@ PH = TL['phrases']
 W, H = 720, 1280
 FOV = 66.0
 # the clouds' resolution per shot (the dark, blurred backgrounds can be small)
-RES = {'jump': (540, 960), 'sun': (540, 960), 'wind': (540, 960), 'deep': (540, 960),
-       'hook': (360, 640), 'cold': (360, 640), 'diamonds': (360, 640), 'final': (360, 640)}
+RES = {'jump': (540, 960), 'sun': (540, 960), 'wind': (450, 800), 'deep': (540, 960),
+       'hook': (360, 640), 'cold': (270, 480), 'diamonds': (360, 640), 'final': (360, 640)}
 CLOUD_SHOTS = list(RES)
+DEEP_BG = ('hook', 'diamonds', 'final')
 
 
 def ph(i):
@@ -116,10 +117,10 @@ def shot_jump(t):
     k = t / D
     mx, my, _ = C.shaft(C.ZTOP - 300)
     e = ease(k)
-    pos = np.array([lerp(-1000, mx - 60, e), lerp(-1250, my - 40, e), lerp(C.ZTOP + 1450, C.ZTOP + 120, k ** 1.7)])
+    pos = np.array([lerp(-1000, mx - 300, e), lerp(-1250, my - 350, e), lerp(C.ZTOP + 1500, C.ZTOP + 520, k ** 1.5)])
     far = np.array([pos[0] + 3000, pos[1] + 3600, C.ZTOP + 650])
-    dn = np.array([mx, my, C.ZTOP - 900])
-    w = ease((k - 0.12) / 0.88)
+    dn = np.array([pos[0] + 700, pos[1] + 800, C.ZTOP - 900])
+    w = 0.75 * ease((k - 0.15) / 0.85)
     f, r, u = C.look(pos, far * (1 - w) + dn * w, roll=0.12 * e)
     kd = ease((t - 0.4) / 1.8)          # he leans into the dive
     head, back = dive_pose(f, u, r, t, kd)
@@ -132,21 +133,18 @@ def shot_jump(t):
 
 
 def shot_sun(t):
-    # inside the mouth of the shaft looking up past him at the sky: the Sun a hard little star, cirrus, the walls round
-    D = SH['sun']['t1'] - SH['sun']['t0']
-    z = C.ZTOP - 60 - 25 * t
-    sx, sy, _ = C.shaft(z)
-    pos = np.array([sx - 120, sy - 60, z])
-    sd = nrm(C.SUN + np.array([0.0, 0.0, 0.25]))
-    tgt = pos + sd * 1000 + np.array([0, 0, 0]) + np.cross(sd, [0, 0, 1]) * 120
-    f, r, u = C.look(pos, tgt, roll=0.25 + 0.05 * t)
-    # he is above us, belly down (his front toward us), drifting; the Sun just past his shoulder
-    ap = pos + f * 7.5 - r * 1.1 - u * 0.4
-    head = nrm(u * 0.9 + r * 0.3 * math.sin(t * 0.35))
+    # above the deck, falling on his back… no: he falls belly down above us; we look up past him at the sky — the Sun a
+    # hard little star among the cirrus, him dark against it with a bright rim
+    pos = np.array([300.0, -200.0, C.ZTOP + 650 - 30 * t])
+    sd = nrm(C.SUN)
+    tgt = pos + nrm(sd * 1.0 + np.array([0, 0, -0.35])) * 1000
+    f, r, u = C.look(pos, tgt, roll=0.35 + 0.04 * t)
+    ap = pos + f * 5.2 - r * 1.0 - u * 0.7
+    head = nrm(u * 0.9 + r * 0.35 * math.sin(t * 0.35 + 0.5))
     back = f
     L = light_at(ap, lit=1.0)
-    L['rim'] = [0.9, 0.85, 0.8]
-    L['gnd'] = [v * 2.2 for v in L['gnd']]   # the bright cloud below lights him from underneath
+    L['rim'] = [1.0, 0.95, 0.9]
+    L['gnd'] = [v * 3.0 for v in L['gnd']]   # the bright cloud deck below lights him from underneath
     lay = dict(cam=T3(pos) + T3(pos + f) + T3(u), fov=FOV, expo=1.0,
                astro=dict(on=True, pos=T3(ap), quat=body_quat(head, back), pt=t + 60, flow=dict(spread=0.9, look=[0.0, 0.3])),
                light=L)
@@ -157,39 +155,34 @@ WIND_LINE = None   # (y, z) of the wind's line through the field, chosen by pick
 
 
 def shot_wind(t):
-    # carried sideways through the field of clumps under the deck: the camera looks across the wind, the clouds
-    # stream past (blurred along the motion), he tumbles slowly with his limbs fluttering
+    # carried sideways over the tops of the deck: we look across the wind and down; the cloud streams past (blurred along
+    # the motion), he tumbles slowly with his limbs fluttering
     D = SH['wind']['t1'] - SH['wind']['t0']
-    y0, z0 = WIND_LINE
-    x = lerp(-850, 850, t / D)
-    pos = np.array([x, y0, z0 - 18 * t])
-    f = nrm([0.12, 1.0, -0.18]); r, u = None, None
-    f, r, u = C.look(pos, pos + f * 100, roll=0.05 * n1(t, 0.8, 1))
-    roll = 0.5 * t + 0.4 * n1(t, 0.5, 2)
-    c, s = math.cos(roll), math.sin(roll)
-    head = u * c + r * s
-    back = -f * 0.8 + (u * -s + r * c) * 0.2
-    ap = pos + f * 5.2 - u * 0.2 + r * 0.25 * n1(t, 1.3, 0)
-    L = light_at(ap)
-    lay = dict(cam=T3(pos) + T3(pos + f) + T3(u), fov=FOV, expo=1.05,
+    pos = np.array([2500 + 330 * t, 3500.0, C.ZTOP + 480 - 6 * t])
+    f, r, u = C.look(pos, pos + nrm([0.1, 1.0, -0.42]) * 100, roll=0.06 * n1(t, 0.8, 1))
+    roll = 0.45 * t + 0.4 * n1(t, 0.5, 2)
+    c, s_ = math.cos(roll), math.sin(roll)
+    head = u * c + r * s_
+    back = -f * 0.8 + (u * -s_ + r * c) * 0.2
+    ap = pos + f * 5.2 - u * 0.3 + r * 0.25 * n1(t, 1.3, 0)
+    L = light_at(ap, lit=1.0)
+    lay = dict(cam=T3(pos) + T3(pos + f) + T3(u), fov=FOV, expo=1.0,
                astro=dict(on=True, pos=T3(ap), quat=body_quat(head, back), pt=t + 80, flow=dict(spread=0.7, wind=1.0)),
                light=L)
-    return dict(cloud=(pos, f, r, u, None), layer=lay, post=dict(mblur=26, streaks=True))
+    return dict(cloud=(pos, f, r, u, None), layer=lay, post=dict(mblur=30, streaks=True))
 
 
 def shot_cold(t):
     # close on him: the frost creeps over the suit and the visor; he folds his arms in; the clouds behind, blurred
     D = SH['cold']['t1'] - SH['cold']['t0']
-    z = DECKB_FIELD - 120 - 6 * t
-    sx, sy, _ = C.shaft(z)
-    pos = np.array([sx, sy, z])
-    f, r, u = C.look(pos, pos + nrm([0.3, 1, -0.05]) * 100, roll=0.0)
+    pos = np.array([5800.0 + 40 * t, 3500.0, C.ZTOP + 330 - 5 * t])
+    f, r, u = C.look(pos, pos + nrm([0.2, 1, -0.22]) * 100, roll=0.0)
     lay_cam = [0, 0.15 + 0.03 * t, 2.25 - 0.05 * t, 0, 0.2, 0, 0, 1, 0]
     fr = sm((t - (ph(21) - SH['cold']['t0']) + 0.2) / 2.4)
     hug = ease((t - (ph(21) - SH['cold']['t0']) - 0.2) / 2.2) * 0.75
     lay = dict(cam=lay_cam, fov=34, expo=1.1,
                astro=dict(on=True, pos=[0.0, -0.45, 0], quat=[0, math.sin(math.pi / 2 - 0.15), 0, math.cos(math.pi / 2 - 0.15)],
-                          pt=t + 120, flow=dict(spread=0.2 * (1 - hug), hug=hug, look=[0.15 * n1(t, 0.4, 0), -0.05]), frost=0.85 * fr),
+                          pt=t + 120, flow=dict(spread=0.2 * (1 - hug), hug=hug, look=[0.15 * n1(t, 0.4, 0), -0.3]), frost=0.35 * fr),
                light=dict(sun=[0.4, 0.8, 0.5], sunC=[0.35, 0.6, 0.95], sky=[0.1, 0.2, 0.42], gnd=[0.05, 0.1, 0.22], rim=[0.3, 0.5, 0.8]))
     return dict(cloud=(pos, f, r, u, None), layer=lay, post=dict(bgblur=7, bgdim=0.9))
 
@@ -213,10 +206,12 @@ def flashes(t, seed, rate, t_from=0.0):
 
 def shot_deep(t):
     D = SH['deep']['t1'] - SH['deep']['t0']
-    z0 = C.DECKB - 200
-    z = z0 - 150 * t - 4 * t * t
+    z0 = C.ZTOP + 300
+    z = z0 - 180 * t - 15 * t * t
     sx, sy, _ = C.shaft(z)
-    pos = np.array([sx, sy, z])
+    mx, my, _ = C.shaft(C.ZTOP - 300)
+    bl = sm(t / 1.0)
+    pos = np.array([lerp(mx - 40, sx, bl), lerp(my - 30, sy, bl), z])
     tx, ty, _ = C.shaft(z - 500)
     f, r, u = C.look(pos, np.array([tx + 50 * math.sin(t * 0.4), ty, z - 500]), roll=0.2 + 0.08 * t)
     head, back = dive_pose(f, u, r, t, 1.0)
@@ -228,13 +223,13 @@ def shot_deep(t):
         rng = np.random.default_rng(100 + idx)
         ang = rng.uniform(0, 6.28); dd = rng.uniform(250, 600)
         flash = np.array([pos[0] + dd * math.cos(ang), pos[1] + dd * math.sin(ang), z - rng.uniform(150, 500), fl * 40.0])
-    dk = 0.55 * sm(t / D)
+    dk = 0.6 * sm((t - 2.5) / (D - 2.5))
     L = light_at(ap, deep_extra=dk)
     if fl > 0:
         L['rim'] = [L['rim'][0] + 0.6 * fl, L['rim'][1] + 0.7 * fl, L['rim'][2] + 0.9 * fl]
     lay = dict(cam=T3(pos) + T3(pos + f) + T3(u), fov=FOV, expo=1.0,
                astro=dict(on=True, pos=T3(ap), quat=body_quat(head, back), pt=t + 160, flow=dict(spread=1.0)), light=L)
-    return dict(cloud=(pos, f, r, u, flash), layer=lay, post=dict(expo=1 - 0.35 * sm(t / D)))
+    return dict(cloud=(pos, f, r, u, flash), layer=lay, post=dict(expo=1 - 0.3 * sm((t - 2.5) / (D - 2.5))))
 
 
 def deep_bg(t, seed, fl_rate=0.35):
@@ -270,7 +265,7 @@ def shot_hook(t):
     astro = dict(on=True, pos=[0, -0.75, 0], quat=[0, math.sin((math.pi - 0.45) / 2), 0, math.cos((math.pi - 0.45) / 2)], pt=t + 5,
                  flow=dict(spread=0.35, reach=0.55 * ease((t - 0.8) / 1.6), look=look))
     lay = gem_layer(t + 3, cam, astro, 7.0, 650, box=(0, 0.5, 0, 3.2, 4.0, 3.2))
-    return dict(cloud=deep_bg(t + 20, 7), layer=lay, post=dict(bgblur=3, white=ease((t - tp - 1.2) / 0.5)))
+    return dict(cloud=deep_bg(t + 20, 7), layer=lay, post=dict(bgblur=3, expo=4.0, white=ease((t - tp - 1.2) / 0.5)))
 
 
 def shot_diamonds(t):
@@ -284,11 +279,11 @@ def shot_diamonds(t):
     cam = [R * math.sin(ang), 0.6 + 0.08 * t, R * math.cos(ang), 0, 0.15, 0, 0, 1, 0]
     reach = ease((t - (ph(27) - a0) + 0.6) / 2.0)
     look = [-0.3 * reach + 0.12 * n1(t, 0.5, 0), 0.25 + 0.15 * reach]
-    astro = dict(on=True, pos=[0, -0.6, 0], quat=[0, math.sin(-0.25), 0, math.cos(-0.25)], pt=t + 200,
+    astro = dict(on=True, pos=[0, -0.6, 0], quat=[0, math.sin((math.pi - 0.75) / 2), 0, math.cos((math.pi - 0.75) / 2)], pt=t + 200,
                  flow=dict(spread=0.4 * (1 - reach), reach=reach, look=look))
     lamp = 1.0 + 7.0 * sm((t - 0.3) / 1.2)
     lay = gem_layer(t, cam, astro, lamp, n, k=1.0, glint=1.0 + 0.6 * rain, box=(0, 0.6, 0, 4.5, 5.5, 4.5))
-    return dict(cloud=deep_bg(t + 60, 9, 0.25), layer=lay, post=dict(bgblur=3))
+    return dict(cloud=deep_bg(t + 60, 9, 0.25), layer=lay, post=dict(bgblur=3, expo=4.0))
 
 
 def shot_final(t):
@@ -300,7 +295,7 @@ def shot_final(t):
     astro = dict(on=True, pos=[0.2 * math.sin(t * 0.3), -0.6 - 16 * sink ** 1.4, -2.0 * sink], quat=[math.sin(-0.35 * sink), 0, 0, math.cos(-0.35 * sink)],
                  pt=t + 260, flow=dict(spread=0.85, look=[0.0, -0.3]))
     lay = gem_layer(t + 12, cam, astro, 6.0 * (1 - 0.6 * sink), int(500 * (1 - 0.7 * sm(t / 6))), glint=0.8, box=(0, -4, 0, 5, 9, 5))
-    return dict(cloud=deep_bg(t + 100, 11, 0.12), layer=lay, post=dict(bgblur=3, bgdim=1 - 0.6 * sm(t / D)))
+    return dict(cloud=deep_bg(t + 100, 11, 0.12), layer=lay, post=dict(bgblur=3, expo=4.0, bgdim=1 - 0.6 * sm(t / D)))
 
 
 def shot_globe(t):
@@ -309,15 +304,15 @@ def shot_globe(t):
     a0 = SH['globe']['t0']
     D = SH['globe']['t1'] - a0
     k = t / D
-    sun = nrm([0.85, 0.12, 0.55])
-    dist = lerp(118000, 98000, ease(k))
+    sun = nrm([0.75, 0.18, 0.62])
+    dist = lerp(165000, 140000, ease(k))
     cam_km = [dist * 0.18, 16000 - 4000 * k, dist, 0, 1500, 0, 0, 1, 0]
     te = ph(3) - a0 + 2.6                              # «… ширший за Землю»
     ek = sm((t - te) / 0.8) * (1 - sm((t - (ph(4) - a0) - 1.2) / 0.8))
-    space = dict(on=True, cam=cam_km, pale=1.0, nepRot=0.003 * t, triton=[-52000, 21000, 30000],
-                 earth=dict(on=ek > 0.01, pos=[36000, -9000, 22000], k=ek), stars=True, expo=1.0)
+    space = dict(on=True, cam=cam_km, pale=1.0, nepRot=0.003 * t, triton=[-60000, 26000, 60000],
+                 earth=dict(on=ek > 0.01, pos=[21458, -19432, -2152], k=ek), stars=True, expo=1.0)
     cam = [0.0, 0.25, 3.4 - 0.15 * k, 0.0, 0.15, -10, 0, 1, 0]
-    astro = dict(on=True, pos=[-0.75 + 0.05 * n1(t, 0.3, 0), -1.45 + 0.04 * n1(t, 0.25, 1), -0.2], quat=[0, math.sin(0.25), 0, math.cos(0.25)],
+    astro = dict(on=True, pos=[-0.75 + 0.05 * n1(t, 0.3, 0), -1.3 + 0.04 * n1(t, 0.25, 1), -2.2], quat=[0, math.sin(-0.3), 0, math.cos(-0.3)],
                  pt=t + 300, flow=dict(spread=0.25, look=[0.1 * n1(t, 0.3, 2) - 0.2, 0.08]))
     lay = dict(t=t, cam=cam, fov=40, expo=1.0, astro=astro, space=space,
                light=dict(sun=T3_dir(sun), sunC=[1.25, 1.22, 1.18], sky=[0.015, 0.02, 0.03], gnd=[0.02, 0.04, 0.08], rim=[0.15, 0.3, 0.55]))
@@ -355,7 +350,7 @@ def pick_wind():
                         i = int((dx - M[0]) / M[3]); j = int((y + dy - M[1]) / M[3]); k = int((z + dz - 18 * 5 - M[2]) / M[3])
                         occ += den[k, j, i]
             # and some cloud not far away (so there is something to stream past)
-            near = sum(den[int((z - M[2]) / M[3]), int((y + 120 - M[1]) / M[3]), int((dx - M[0]) / M[3])] for dx in xs[::5])
+            near = sum(int(den[int((z - M[2]) / M[3]), int((y + 120 - M[1]) / M[3]), int((dx - M[0]) / M[3])]) for dx in xs[::5])
             score = occ - 0.02 * near
             if best is None or score < best[0]:
                 best = (score, y, z)
@@ -394,7 +389,7 @@ def render_clouds(name, nw=1, kw=0):
         _, t = shot_of(fi)
         pos, f, r, u, flash = SHOT_FN[name](t)['cloud']
         img = np.zeros((h, w, 3), np.float64)
-        C.render(*vols, img, pos, f, r, u, math.radians(FOV), 1.0, fi, 1, np.zeros(4) if flash is None else np.asarray(flash, float))
+        C.render(*vols, img, pos, f, r, u, math.radians(FOV), 1.0, fi, 3 if name in DEEP_BG else 1, np.zeros(4) if flash is None else np.asarray(flash, float))
         np.save(fn[:-4] + '.npy', img.astype(np.float16))   # linear, for the post (blur, glare) before the tone curve
         Image.fromarray(C.tonemap(img)).save(fn)
         print(name, fi, flush=True)
@@ -486,7 +481,7 @@ def comp_frame(fi):
     if P.get('earth_label', 0) > 0.05:
         c = S['post']['cam_km']; pos = np.array(c[:3]); tg = np.array(c[3:6]); upv = np.array(c[6:9])
         f = nrm(tg - pos); r = nrm(np.cross(f, upv)); u = np.cross(r, f)
-        q = project(np.array([36000, -9000, 22000]) - pos, f, r, u, 40, W, H)
+        q = project(np.array([21458, -19432, -2152]) - pos, f, r, u, 40, W, H)
         if q:
             from flat import label
             label(im, 'Земля', q[0], q[1] + 46, 28, fill=(200, 225, 255), alpha=P['earth_label'])
@@ -515,6 +510,54 @@ def flat_all():
         print('flat', nm, flush=True)
 
 
+def preview(times):
+    # quick look: the clouds small, the layer at 360×640, laid together like comp (no titles)
+    import subprocess
+    from PIL import Image
+    global W, H
+    vols = C.load(); wind_line(); load_sun()
+    pv = os.path.join(WORK, 'pv'); os.makedirs(pv, exist_ok=True)
+    fr = []
+    for t in times:
+        fi = int(round(t * FPS)); name, lt = shot_of(fi)
+        if name in FLAT: continue
+        S = SHOT_FN[name](lt)
+        if S['cloud'] is not None:
+            pos, f, r, u, flash = S['cloud']
+            img = np.zeros((480, 270, 3), np.float64)
+            C.render(*vols, img, pos, f, r, u, math.radians(FOV), 1.0, fi, 3 if name in DEEP_BG else 1, np.zeros(4) if flash is None else np.asarray(flash, float))
+            os.makedirs(os.path.join(WORK, 'bg', name), exist_ok=True)
+            np.save(os.path.join(pv, f'bg_{fi:05d}.npy'), img.astype(np.float16))
+        L = S['layer']; L['f'] = fi; L.setdefault('t', lt); fr.append(L)
+    json.dump(dict(W=360, H=640, frames=fr), open(os.path.join(pv, 'spec.json'), 'w'))
+    subprocess.run(['node', os.path.join(HERE, 'layer.js'), os.path.join(pv, 'spec.json'), pv], check=True, env=dict(os.environ, FORCE='1'))
+    ims = []
+    for t in times:
+        fi = int(round(t * FPS)); name, lt = shot_of(fi)
+        if name in FLAT: continue
+        S = SHOT_FN[name](lt); P = S['post']
+        bgf = os.path.join(pv, f'bg_{fi:05d}.npy')
+        if S['cloud'] is not None:
+            a = np.load(bgf).astype(np.float32)
+            if P.get('sunstar'):
+                pos, f, r, u, _ = S['cloud']; q = project(nrm(C.SUN), f, r, u, FOV, 270, 480)
+                if q: sun_glare(a, q[0], q[1], 1.0)
+            if P.get('bgblur'): a = blur_lin(a, P['bgblur'] * 270 / 360.0)
+            if P.get('mblur'):
+                from scipy.ndimage import uniform_filter1d
+                a = uniform_filter1d(a, max(1, int(P['mblur'] * 270 / 540.0)), axis=1, mode='nearest')
+            a *= P.get('expo', 1.0) * P.get('bgdim', 1.0)
+            bg = Image.fromarray(C.tonemap(a)).resize((360, 640), Image.LANCZOS)
+        else:
+            bg = Image.new('RGB', (360, 640))
+        im = bg.convert('RGBA'); im.alpha_composite(Image.open(os.path.join(pv, f'a_{fi:05d}.png')).convert('RGBA'))
+        if P.get('white', 0) > 0: im = Image.blend(im, Image.new('RGBA', (360, 640), (235, 245, 255, 255)), min(1.0, P['white']))
+        ims.append(im.convert('RGB'))
+    sh = Image.new('RGB', (360 * len(ims), 640))
+    for i, im in enumerate(ims): sh.paste(im, (i * 360, 0))
+    sh.save(os.path.join(WORK, 'sheet.png'))
+
+
 if __name__ == '__main__':
     cmd = sys.argv[1]
     if cmd == 'clouds':
@@ -527,5 +570,7 @@ if __name__ == '__main__':
         comp(nw, kw)
     elif cmd == 'flat':
         flat_all()
+    elif cmd == 'preview':
+        preview([float(x) for x in sys.argv[2].split(',')])
     elif cmd == 'wind':
         wind_line(); print(WIND_LINE)

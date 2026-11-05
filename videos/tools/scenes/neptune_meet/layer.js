@@ -44,7 +44,9 @@ const page = `<!doctype html><html><body style="margin:0;background:transparent"
         // the real colour (Irwin et al. 2024): a pale greenish blue, like Uranus but a touch deeper — the same
         // pattern of light and dark, much less saturated
         float l = dot(c, vec3(0.3, 0.45, 0.25));
-        vec3 pc = vec3(0.27, 0.45, 0.68) * (0.55 + 1.6 * l) + vec3(0.02, 0.025, 0.02);
+        // keep the bands and spots: stretch the brightness about its mean
+        l = 0.16 + (l - 0.16) * 2.2;
+        vec3 pc = vec3(0.27, 0.45, 0.68) * (0.5 + 1.9 * max(l, 0.0)) + vec3(0.02, 0.025, 0.02);
         c = mix(c, pc, pale);
         float mu = dot(n, sun), d = max(mu, 0.0);
         float limb = pow(max(dot(n, V), 0.0), 0.35);                  // limb darkening of a gas giant
@@ -88,7 +90,9 @@ const page = `<!doctype html><html><body style="margin:0;background:transparent"
   const near = new T.Scene(), cam = new T.PerspectiveCamera(60, W / H, 0.05, 5000);
   const a = window.__makeAstronaut(T); await a.ready;
   a.group.traverse(o => { o.castShadow = false; o.receiveShadow = false; });
+  a.group.traverse(o => { const m = o.material; if (m && m.isMeshPhysicalMaterial && m.metalness === 1 && m.clearcoat === 1 && m.envMapIntensity === 1.4) m.userData.visor = true; });
   const fx = window.__astroFX(T, a);
+  a.group.traverse(o => { const m = o.material; if (m && m.userData && m.userData.visor) { const p = m.onBeforeCompile; m.onBeforeCompile = (sh, r) => { p(sh, r); sh.fragmentShader = sh.fragmentShader.replace('fxFrostK = smoothstep', 'fxFrostK = 0.0 * smoothstep'); }; m.needsUpdate = true; } });
   near.add(a.group);
   // reflections: a cloudscape — a blue sky above, cloud tops below the horizon, darker blue deeper down
   const envU = { sun: { value: new T.Vector3(0, 1, 0) }, deep: { value: 0 } };
@@ -108,27 +112,48 @@ const page = `<!doctype html><html><body style="margin:0;background:transparent"
   // each also gets a glint (an additive star) that flares when its facet turns to the light
   const NG = 900;
   const gGeo = new T.OctahedronGeometry(1, 0); gGeo.scale(0.8, 1.1, 0.8);
-  const gMat = new T.MeshPhysicalMaterial({ color: 0xe8f4ff, metalness: 0.9, roughness: 0.04, envMapIntensity: 1.6, clearcoat: 1, clearcoatRoughness: 0.02, iridescence: 0.5, iridescenceIOR: 1.9 });
-  // the stones' own reflections: a dark blue room with a few hard white lights in it (so the facets flash white)
-  { const gs = new T.Scene();
-    gs.add(new T.Mesh(new T.SphereGeometry(10, 64, 32), new T.ShaderMaterial({ side: T.BackSide,
-      vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-      fragmentShader: 'varying vec3 vD; float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }' +
-        'void main(){ vec3 c = mix(vec3(0.02, 0.06, 0.16), vec3(0.15, 0.3, 0.6), smoothstep(-0.5, 1.0, vD.y));' +
-        ' vec3 g = floor(vD * 7.0); float k = h(g); vec3 cc = (g + 0.5) / 7.0; float d = length(normalize(cc) - vD);' +
-        ' c += vec3(0.9, 0.95, 1.0) * step(0.62, k) * smoothstep(0.09, 0.02, d) * 9.0;' +
-        ' c += vec3(1.0) * smoothstep(0.25, 0.0, length(vD - normalize(vec3(-0.3, 0.8, 0.5)))) * 14.0;' +
-        ' gl_FragColor = vec4(c, 1.0); }' })));
-    const pm = new T.PMREMGenerator(renderer); gMat.envMap = pm.fromScene(gs, 0.0).texture; pm.dispose(); gMat.envMapIntensity = 1.3; }
+  // the stones: a shader of their own — a dark, clear body (the deep blue seen through it), a bright rim where the face
+  // turns away (fresnel), and the flash: a facet's mirror direction meeting the helmet lamp or one of the hidden lights
+  // around flares white, edged with the rainbow of dispersion. As they spin, facets flash on and off.
+  const gU = { lampP: { value: new T.Vector3() }, lampI: { value: 0 }, tt: { value: 0 } };
+  const gMat = new T.ShaderMaterial({ uniforms: gU,
+    vertexShader: 'varying vec3 vW; varying float vId; void main(){ vec4 w = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = w.xyz; vId = float(gl_InstanceID); gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: \`uniform vec3 lampP; uniform float lampI, tt; varying vec3 vW; varying float vId;
+      float h(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+      vec3 hue(float x){ return clamp(abs(fract(x + vec3(0.0, 0.667, 0.333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0); }
+      void main(){
+        vec3 n = normalize(cross(dFdx(vW), dFdy(vW)));
+        vec3 V = normalize(cameraPosition - vW); if (dot(n, V) < 0.0) n = -n;
+        vec3 R = reflect(-V, n);
+        float fr = pow(1.0 - max(dot(n, V), 0.0), 3.0);
+        vec3 c = vec3(0.012, 0.03, 0.075) + vec3(0.12, 0.2, 0.32) * fr;
+        // the lamp
+        vec3 L = normalize(lampP - vW); float dl = length(lampP - vW);
+        float sp = pow(max(dot(R, L), 0.0), 40.0) * lampI * 1.6 / (1.0 + 0.04 * dl * dl);
+        c += vec3(1.0, 0.97, 0.9) * sp;
+        // hidden lights all round: a grid of directions, some lit
+        vec3 g = floor(R * 5.0 + 0.5); float k = h(g + floor(vId));
+        float d = length(normalize(g + 1e-3) - R);
+        float on = step(0.72, k) * smoothstep(0.16, 0.03, d);
+        c += (vec3(0.8) + 0.9 * hue(d * 9.0 + k * 3.0)) * on * 2.2;
+        // a soft sheen from above (the faint light of the depths)
+        c += vec3(0.1, 0.18, 0.3) * pow(max(R.y, 0.0), 6.0);
+        gl_FragColor = vec4(c, 1.0);
+        #include <tonemapping_fragment>
+        #include <encodings_fragment>
+      }\` });
   const gems = new T.InstancedMesh(gGeo, gMat, NG); gems.instanceMatrix.setUsage(T.DynamicDrawUsage); near.add(gems);
   const gl = new Float32Array(NG * 3), gcol = new Float32Array(NG * 3), gsz = new Float32Array(NG);
   const glG = new T.BufferGeometry(); glG.setAttribute('position', new T.BufferAttribute(gl, 3)); glG.setAttribute('col', new T.BufferAttribute(gcol, 3)); glG.setAttribute('size', new T.BufferAttribute(gsz, 1));
-  const glints = new T.Points(glG, new T.ShaderMaterial({ transparent: true, depthWrite: false, blending: T.AdditiveBlending, uniforms: { vh: { value: H } },
+  // added light: the colour adds up, and the alpha grows with the brightness (so laid over the clouds later, a glint
+  // still shows; where it is dark nothing covers what is behind)
+  const glints = new T.Points(glG, new T.ShaderMaterial({ transparent: true, depthWrite: false, blending: T.CustomBlending,
+    blendSrc: T.OneFactor, blendDst: T.OneFactor, blendSrcAlpha: T.OneFactor, blendDstAlpha: T.OneFactor, uniforms: { vh: { value: H } },
     vertexShader: 'attribute vec3 col; attribute float size; uniform float vh; varying vec3 vC; void main(){ vC = col; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = size > 0.0 ? max(2.0, size * projectionMatrix[1][1] * vh * 0.5 / -mv.z) : 0.0; }',
-    fragmentShader: 'varying vec3 vC; void main(){ vec2 q = gl_PointCoord * 2.0 - 1.0; float r = length(q); float a = exp(-r * r * 30.0) * 1.4 + 0.5 * exp(-abs(q.x) * 40.0) * exp(-abs(q.y) * 3.0) + 0.5 * exp(-abs(q.y) * 40.0) * exp(-abs(q.x) * 3.0); gl_FragColor = vec4(vC * a, 1.0); }' }));
+    fragmentShader: 'varying vec3 vC; void main(){ vec2 q = gl_PointCoord * 2.0 - 1.0; float r = length(q); float a = exp(-r * r * 30.0) * 1.4 + 0.5 * exp(-abs(q.x) * 40.0) * exp(-abs(q.y) * 3.0) + 0.5 * exp(-abs(q.y) * 40.0) * exp(-abs(q.x) * 3.0); vec3 c = vC * a; gl_FragColor = vec4(c, clamp(max(c.r, max(c.g, c.b)), 0.0, 1.0)); }' }));
   glints.frustumCulled = false; near.add(glints);
   const G = []; seed = 11;
-  for (let i = 0; i < NG; i++) G.push({ x: rr(), y: rr(), z: rr(), s: 0.03 + 0.09 * Math.pow(rr(), 2.2), v: 0.7 + 0.6 * rr(), ax: new T.Vector3(rr() - 0.5, rr() - 0.5, rr() - 0.5).normalize(), w: 1 + 3 * rr(), ph: rr() * 6.28, sw: rr() * 6.28 });
+  for (let i = 0; i < NG; i++) G.push({ x: rr(), y: rr(), z: rr(), s: 0.022 + 0.06 * Math.pow(rr(), 2.4), v: 0.7 + 0.6 * rr(), ax: new T.Vector3(rr() - 0.5, rr() - 0.5, rr() - 0.5).normalize(), w: 1 + 3 * rr(), ph: rr() * 6.28, sw: rr() * 6.28 });
   const M4 = new T.Matrix4(), Q = new T.Quaternion(), V3 = new T.Vector3(), S3 = new T.Vector3();
 
   // ------------------------------------------------ the soft motion
@@ -167,7 +192,12 @@ const page = `<!doctype html><html><body style="margin:0;background:transparent"
   }
 
   window.__frame = (o) => {
-    renderer.clear();
+    // the reflections first (a PMREM render leaves the canvas and the clear colour in its own state)
+    { const L = o.light, sd = new T.Vector3(...L.sun).normalize();
+      const key = sd.toArray().map(v => v.toFixed(2)).join() + (L.deep || 0).toFixed(2);
+      if (key !== envKey) { envU.sun.value.copy(sd); envU.deep.value = L.deep || 0;
+        const pm = new T.PMREMGenerator(renderer); near.environment = pm.fromScene(esc, 0.02).texture; pm.dispose(); envKey = key; } }
+    renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 0); renderer.clear();
     if (o.space && o.space.on) {
       const s = o.space, sd = new T.Vector3(...o.light.sun).normalize();
       NU.sun.value.copy(sd); NU.pale.value = s.pale; NU.rot.value = s.nepRot || 0;
@@ -182,9 +212,6 @@ const page = `<!doctype html><html><body style="margin:0;background:transparent"
       renderer.clearDepth();
     }
     const L = o.light, sd = new T.Vector3(...L.sun).normalize();
-    const key = sd.toArray().map(v => v.toFixed(2)).join() + (L.deep || 0).toFixed(2);
-    if (key !== envKey) { envU.sun.value.copy(sd); envU.deep.value = L.deep || 0;
-      const pm = new T.PMREMGenerator(renderer); near.environment = pm.fromScene(esc, 0.02).texture; pm.dispose(); envKey = key; }
     cam.fov = o.fov; cam.aspect = W / H; cam.updateProjectionMatrix();
     cam.position.set(o.cam[0], o.cam[1], o.cam[2]); cam.up.set(o.cam[6], o.cam[7], o.cam[8]); cam.lookAt(o.cam[3], o.cam[4], o.cam[5]);
     sunL.color.setRGB(...L.sunC); sunL.intensity = 1;
@@ -222,6 +249,7 @@ const page = `<!doctype html><html><body style="margin:0;background:transparent"
         const e = fl * (0.7 + 3.0 * inBeam) * (g.glint || 1) * Math.min(1, Math.min(y, 1 - y) * 12);
         gl.set([p.x, p.y, p.z], i * 3); gcol.set([0.8 * e, 0.92 * e, 1.0 * e], i * 3); gsz[i] = s * 14;
       }
+      gU.lampP.value.copy(lampP); gU.lampI.value = lamp.intensity; gU.tt.value = g.t;
       gems.instanceMatrix.needsUpdate = true; ['position', 'col', 'size'].forEach(k => glG.attributes[k].needsUpdate = true);
     }
     renderer.render(near, cam);
