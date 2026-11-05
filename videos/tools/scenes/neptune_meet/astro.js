@@ -50,7 +50,7 @@ const page = `<!doctype html><html><body style="margin:0;background:transparent"
       J['shoulder' + L].rotation.z += s * 0.75 * sp; J['shoulder' + L].rotation.x -= 0.35 * sp;
       J['elbow' + L].rotation.x += 0.25 * sp; J['hip' + L].rotation.z += s * 0.18 * sp; J['knee' + L].rotation.x -= 0.5 * sp; }
     J.head.rotation.x -= 0.35 * sp;
-    a.group.position.set(...o.pos); a.group.rotation.set(o.rot[0], o.rot[1], o.rot[2], o.order || 'XYZ');
+    a.group.position.set(...o.pos); if (o.quat) a.group.quaternion.set(...o.quat); else a.group.rotation.set(o.rot[0], o.rot[1], o.rot[2], o.order || 'XYZ');
     sunL.position.copy(a.group.position).addScaledVector(sd, 10); sunL.target.position.copy(a.group.position);
     sunL.color.setRGB(...o.sunC); sunL.intensity = 1;
     hemi.color.setRGB(...o.sky); hemi.groundColor.setRGB(...o.gnd); hemi.intensity = 1;

@@ -25,6 +25,7 @@ DECKB = 2050.0               # the mean bottom of the upper deck
 SIG = 0.07                   # extinction of the cloud at density 1, 1/m
 SUN = np.array([0.46, 0.22, 0.86]); SUN /= np.linalg.norm(SUN)
 TAUMAX = 30.0
+SKYK = 0.07                  # how much the cloud dims the diffuse sky light (an overcast day under the deck)
 B = 8                        # coarse block for skipping empty space
 # volumes: x0, y0, z0, h, nx, ny, nz
 NEAR = np.array([-1000.0, -1000.0, 0.0, 2.5, 800, 800, 1440])        # 2 x 2 x 3.6 km
@@ -139,8 +140,8 @@ def sdist(x, y, z, far):
     s = min(top_h(x, y) - z, sb)
     if not far:
         f = fbm(x / 620, y / 620, z / 900, 31, 3)
-        thr = 0.56 - 0.06 * min(1.0, max(0.0, (DECKB - z) / 1800))
-        sf = min((f - thr) * 1300, DECKB + 260 - z)
+        thr = 0.505 - 0.05 * min(1.0, max(0.0, (DECKB - z) / 1800))
+        sf = min((f - thr) * 2200, DECKB + 260 - z)
         s = max(s, sf)
         cx, cy, r = shaft(z)
         ang = math.atan2(y - cy, x - cx)
@@ -241,7 +242,7 @@ def sweep_sky(den, out, h, R):
                 s = 0.0; n = 0
                 for d in range(-R, R + 1):
                     jj = min(max(j + d, 0), ny - 1); s += tmp[jj, i]; n += 1
-                prev[j, i] = s / n + den[k, j, i] / 255.0 * SIG * h * 0.3
+                prev[j, i] = s / n + den[k, j, i] / 255.0 * SIG * h * SKYK
                 out[k, j, i] = int(255 * math.sqrt(min(prev[j, i], TAUMAX) / TAUMAX) + 0.5)
 
 
@@ -333,8 +334,11 @@ def blur3(den, out, R):
 def build_one(name, M, far):
     t0 = time.time()
     nx, ny, nz = int(M[4]), int(M[5]), int(M[6])
-    den = np.zeros((nz, ny, nx), np.uint8)
-    build_density(den, M, far); print(name, 'density', round(time.time() - t0), 's', flush=True)
+    if os.environ.get('RELIGHT'):
+        den = np.load(os.path.join(WORK, f'{name}_den.npy'))
+    else:
+        den = np.zeros((nz, ny, nx), np.uint8)
+        build_density(den, M, far); print(name, 'density', round(time.time() - t0), 's', flush=True)
     sun = np.zeros_like(den); sweep_sun(den, sun, M[3], *SUN)
     sky = np.zeros_like(den); sweep_sky(den, sky, M[3], 3 if not far else 1)
     occ = np.zeros(((nz + B - 1) // B, (ny + B - 1) // B, (nx + B - 1) // B), np.uint8); coarse(den, occ)
@@ -431,7 +435,7 @@ def far_haze(t):
 @njit(cache=True, inline='always')
 def air_sig(z):
     # the haze: thin above the deck, thickening down the shaft
-    return 1 / 14000.0 + (1 / 1400.0) * min(1.0, max(0.0, (ZTOP + 100 - z) / 1600))
+    return 1 / 14000.0 + (1 / 5500.0) * min(1.0, max(0.0, (ZTOP + 100 - z) / 1600))
 
 
 @njit(parallel=True, cache=True)
@@ -504,7 +508,8 @@ def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov
                     h = fh
                 skip = 0.0
                 if cb > 1:
-                    skip = (cb - 1) * B * h * 0.95 + h * 0.5
+                    # (not too far at once: the air's light is sampled once a step, and long steps leave blotches)
+                    skip = min((cb - 1) * B * h * 0.95 + h * 0.5, 25.0 + 0.004 * t)
                     d = 0.0
                 else:
                     d = tri(nd, vx, vy, vz) if vol == 1 else tri(fd, vx, vy, vz)
@@ -567,7 +572,7 @@ def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov
                 if ended == 1:
                     bg = sky_col(dx, dy, dz, ch, 1.0)
                 else:
-                    bg = (0.012, 0.03, 0.07)[ch] * gas(ZTOP - zz, ch) * 1.5
+                    bg = (0.002, 0.006, 0.02)[ch] * gas(ZTOP - zz, ch)
                 if ch == 0:
                     L0 += T0 * bg
                 elif ch == 1:
