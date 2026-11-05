@@ -222,7 +222,7 @@ def shot_deep(t):
     if fl > 0:
         rng = np.random.default_rng(100 + idx)
         ang = rng.uniform(0, 6.28); dd = rng.uniform(250, 600)
-        flash = np.array([pos[0] + dd * math.cos(ang), pos[1] + dd * math.sin(ang), z - rng.uniform(150, 500), fl * 40.0])
+        flash = np.array([pos[0] + dd * math.cos(ang), pos[1] + dd * math.sin(ang), z - rng.uniform(150, 500), fl * 1.4])
     dk = 0.6 * sm((t - 2.5) / (D - 2.5))
     L = light_at(ap, deep_extra=dk)
     if fl > 0:
@@ -244,7 +244,7 @@ def deep_bg(t, seed, fl_rate=0.35):
     if fl > 0:
         rng = np.random.default_rng(seed * 100 + idx)
         ang = 0.3 + rng.uniform(-0.6, 0.6); dd = rng.uniform(500, 900)
-        flash = np.array([pos[0] + dd * math.cos(ang), pos[1] + dd * math.sin(ang), z + rng.uniform(-100, 250), fl * 30.0])
+        flash = np.array([pos[0] + dd * math.cos(ang), pos[1] + dd * math.sin(ang), z + rng.uniform(-100, 250), fl * 3.0])
     return pos, f, r, u, flash
 
 
@@ -264,8 +264,8 @@ def shot_hook(t):
     look = [0.25 * n1(t, 0.5, 1) - 0.15, 0.35 + 0.08 * n1(t, 0.4, 2)]
     astro = dict(on=True, pos=[0, -0.75, 0], quat=[0, math.sin((math.pi - 0.45) / 2), 0, math.cos((math.pi - 0.45) / 2)], pt=t + 5,
                  flow=dict(spread=0.35, reach=0.55 * ease((t - 0.8) / 1.6), look=look))
-    lay = gem_layer(t + 3, cam, astro, 7.0, 650, box=(0, 0.5, 0, 3.2, 4.0, 3.2))
-    return dict(cloud=deep_bg(t + 20, 7), layer=lay, post=dict(bgblur=3, expo=4.0, white=ease((t - tp - 1.2) / 0.5)))
+    lay = gem_layer(t + 3, cam, astro, 8.0, 900, glint=1.6, box=(0, 0.6, 0.3, 2.4, 3.0, 2.2))
+    return dict(cloud=deep_bg(t + 20, 7)[:4] + (None,), layer=lay, post=dict(bgblur=3, expo=2.6, white=ease((t - tp - 1.2) / 0.5)))
 
 
 def shot_diamonds(t):
@@ -372,8 +372,8 @@ def load_sun():
 
 
 def frames_of(name):
-    s = SH[name]
-    return range(int(round(s['t0'] * FPS)), int(round(s['t1'] * FPS)))
+    # (the same split as shot_of, frame by frame)
+    return [fi for fi in range(NF) if shot_of(fi)[0] == name]
 
 
 def render_clouds(name, nw=1, kw=0):
