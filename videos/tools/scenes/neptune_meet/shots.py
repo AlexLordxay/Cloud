@@ -310,7 +310,7 @@ def shot_globe(t):
     te = ph(3) - a0 + 2.6                              # «… ширший за Землю»
     ek = sm((t - te) / 0.8) * (1 - sm((t - (ph(4) - a0) - 1.2) / 0.8))
     space = dict(on=True, cam=cam_km, pale=1.0, nepRot=0.003 * t, triton=[-60000, 26000, 60000],
-                 earth=dict(on=ek > 0.01, pos=[21458, -19432, -2152], k=ek), stars=True, expo=1.0)
+                 earth=dict(on=ek > 0.01, pos=[20323, 25421, -5635], k=ek), stars=True, expo=1.0)
     cam = [0.0, 0.25, 3.4 - 0.15 * k, 0.0, 0.15, -10, 0, 1, 0]
     astro = dict(on=True, pos=[-0.75 + 0.05 * n1(t, 0.3, 0), -1.3 + 0.04 * n1(t, 0.25, 1), -2.2], quat=[0, math.sin(-0.3), 0, math.cos(-0.3)],
                  pt=t + 300, flow=dict(spread=0.25, look=[0.1 * n1(t, 0.3, 2) - 0.2, 0.08]))
@@ -443,6 +443,7 @@ def blur_lin(a, sig):
 
 def comp_frame(fi):
     from PIL import Image, ImageDraw, ImageFilter
+    if SUNV is None: wind_line(); load_sun()
     name, t = shot_of(fi)
     if name in FLAT:
         return Image.open(os.path.join(WORK, 'flat', f'f_{fi:05d}.jpg')).convert('RGB')
@@ -481,10 +482,10 @@ def comp_frame(fi):
     if P.get('earth_label', 0) > 0.05:
         c = S['post']['cam_km']; pos = np.array(c[:3]); tg = np.array(c[3:6]); upv = np.array(c[6:9])
         f = nrm(tg - pos); r = nrm(np.cross(f, upv)); u = np.cross(r, f)
-        q = project(np.array([21458, -19432, -2152]) - pos, f, r, u, 40, W, H)
+        q = project(np.array([20323, 25421, -5635]) - pos, f, r, u, 40, W, H)
         if q:
             from flat import label
-            label(im, 'Земля', q[0], q[1] + 46, 28, fill=(200, 225, 255), alpha=P['earth_label'])
+            label(im, 'Земля', q[0] - 4, q[1] + 52, 28, fill=(200, 225, 255), alpha=P['earth_label'])
     if P.get('white', 0) > 0:
         im = Image.blend(im, Image.new('RGBA', (W, H), (235, 245, 255, 255)), min(1.0, P['white']))
     return im.convert('RGB')
