@@ -491,10 +491,11 @@ def comp_frame(fi):
     return im.convert('RGB')
 
 
-def comp(nw=1, kw=0):
+def comp(nw=1, kw=0, only=None):
     out = os.path.join(WORK, 'frames'); os.makedirs(out, exist_ok=True)
     for fi in range(NF):
         if fi % nw != kw: continue
+        if only and shot_of(fi)[0] not in only: continue
         comp_frame(fi).save(os.path.join(out, f'f_{fi:05d}.jpg'), quality=94)
         if fi % 150 == 0: print('comp', fi, flush=True)
 
@@ -568,7 +569,7 @@ if __name__ == '__main__':
         spec()
     elif cmd == 'comp':
         nw, kw = (int(sys.argv[2]), int(sys.argv[3])) if len(sys.argv) > 3 else (1, 0)
-        comp(nw, kw)
+        comp(nw, kw, sys.argv[4].split(',') if len(sys.argv) > 4 else None)
     elif cmd == 'flat':
         flat_all()
     elif cmd == 'preview':
