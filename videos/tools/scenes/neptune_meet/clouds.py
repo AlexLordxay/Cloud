@@ -439,7 +439,9 @@ def air_sig(z):
 
 
 @njit(parallel=True, cache=True)
-def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov, expo, seed, fine):
+def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov, expo, seed, fine, flash):
+    # flash: a lightning stroke inside the cloud — [x, y, z, strength] (strength 0: none); it lights the cloud round it
+    # with no shadows, falling off over a few hundred metres (the glow of lightning seen through cloud)
     hgt, wid = img.shape[0], img.shape[1]
     tanf = math.tan(fov * 0.5)
     sunC = (1.0, 0.97, 0.92)
@@ -449,6 +451,7 @@ def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov
     fx0, fy0, fz0, fh = FAR[0], FAR[1], FAR[2], FAR[3]
     fnx, fny, fnz = FAR[4], FAR[5], FAR[6]
     ftop = fz0 + fnz * fh
+    fl4 = flash[3]
     for py in prange(hgt):
         for px in range(wid):
             u = ((px + 0.5) / wid * 2 - 1) * tanf * wid / hgt
@@ -520,6 +523,9 @@ def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov
                 elif vol == 1 and fine > 1 and d > 0.0 and d < 0.999 and t < 260:
                     d *= 0.8 + 0.4 * vnoise(x / 2.0, y / 2.0, z / 2.0, 77)
                 step = skip if skip > 0 else max(h * 0.5, t * 0.003)
+                # deep in a cloud the rest hardly shows: longer steps
+                if skip == 0 and T2 < 0.25:
+                    step *= 2.0
                 if vol == 2 and skip == 0:
                     step = max(4.0, t * 0.003)
                 if d > 0.003:
@@ -535,18 +541,24 @@ def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov
                     ms = math.exp(-ts) * ph0 + ao * (0.55 * math.exp(-ts * 0.3) * ph1 + 0.3 * math.exp(-ts * 0.1) * ph2)
                     powder = 1 - 0.7 * math.exp(-sig * 30)
                     depth = ZTOP + 380 - z
+                    fk = 0.0
+                    if fl4 > 0:
+                        dd = math.sqrt((x - flash[0]) ** 2 + (y - flash[1]) ** 2 + (z - flash[2]) ** 2)
+                        fk = math.exp(-dd / 260.0) / (1 + (dd / 140.0) ** 2) * (0.6 + 0.4 * ao)
                     a = math.exp(-sig * step)
                     for ch in range(3):
                         g = gas(depth / SUN[2], ch)
                         ga = gas(depth, ch)
                         S = sunC[ch] * g * ms * 8.0 * powder + amb[ch] * ga * (math.exp(-ta) * 0.9 + 0.05) * ao
+                        if fl4 > 0:
+                            S += (0.75, 0.85, 1.0)[ch] * fl4 * fk
                         if ch == 0:
                             L0 += T0 * S * (1 - a); T0 *= a
                         elif ch == 1:
                             L1 += T1 * S * (1 - a); T1 *= a
                         else:
                             L2 += T2 * S * (1 - a); T2 *= a
-                    if T0 < 0.003 and T1 < 0.003 and T2 < 0.003:
+                    if T0 < 0.01 and T1 < 0.01 and T2 < 0.01:
                         break
                 else:
                     # air: lit by the Sun where the cloud doesn't shade it (beams down the shaft)
@@ -559,6 +571,8 @@ def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov
                     a = math.exp(-sa)
                     for ch in range(3):
                         c = haze(z, cth, ch, math.exp(-ts))
+                        if fl4 > 0:
+                            c += (0.75, 0.85, 1.0)[ch] * fl4 * 6.0 * math.exp(-math.sqrt((x - flash[0]) ** 2 + (y - flash[1]) ** 2 + (z - flash[2]) ** 2) / 300.0)
                         if ch == 0:
                             L0 += T0 * c * (1 - a); T0 *= a
                         elif ch == 1:
@@ -648,7 +662,7 @@ def load():
 def frame(vols, t, W=720, Hh=1280, seed=0):
     pos, f, r, u = cam_at(t)
     img = np.zeros((Hh, W, 3), np.float64)
-    render(*vols, img, pos, f, r, u, math.radians(66), 1.0, seed, 1)
+    render(*vols, img, pos, f, r, u, math.radians(66), 1.0, seed, 1, np.zeros(4))
     return tonemap(img)
 
 
