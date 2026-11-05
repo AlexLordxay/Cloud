@@ -157,7 +157,7 @@ def shot_paper(t, T, cache={}):
     if t < T['sky'] + 1.2:
         im = cache['paper'].copy().convert('RGBA')
         lay = Image.new('RGBA', (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
-        y = 300; total = len(SUMS); per = (T['sky'] - 0.5) / total
+        y = 380; total = len(SUMS); per = (T['sky'] - 0.5) / total
         for i, (txt, sz, kind) in enumerate(SUMS):
             fo = font(FONT_I, sz + 14)
             k = (t - 0.2 - i * per) / (per * 0.9)
@@ -171,11 +171,11 @@ def shot_paper(t, T, cache={}):
                 d.rectangle([x + wfull * ease(k), y - 10, W, y + sz + 30], fill=(0, 0, 0, 0))
             if kind == 0:
                 d.line([x, y + sz + 22, x + wfull * min(1, ease(k)), y + sz + 22], fill=INK + (200,), width=2)
-            y += sz + (60 if kind == 0 else 40)
+            y += sz + (40 if kind == 0 else 22)
         # a quill line: a small orbit sketch and a cross where to look
         k = (t - 0.2 - total * per * 0.7) / 1.5
         if k > 0:
-            cx, cy, R = W / 2, 1010, 150
+            cx, cy, R = W / 2, 1110, 120
             d.arc([cx - R, cy - R * 0.62, cx + R, cy + R * 0.62], 200, 200 + 300 * min(1, ease(k)), fill=INK + (210,), width=3)
             d.ellipse([cx - 8, cy - 8, cx + 8, cy + 8], fill=INK + (220,))
             if k > 0.8:
