@@ -21,8 +21,9 @@ WORK = os.path.join(HERE, '..', '..', 'work', 'neptune_meet')
 os.makedirs(WORK, exist_ok=True)
 
 ZTOP = 2700.0                # the mean top of the deck
+DECKB = 2050.0               # the mean bottom of the upper deck
 SIG = 0.07                   # extinction of the cloud at density 1, 1/m
-SUN = np.array([0.62, 0.30, 0.72]); SUN /= np.linalg.norm(SUN)
+SUN = np.array([0.46, 0.22, 0.86]); SUN /= np.linalg.norm(SUN)
 TAUMAX = 30.0
 B = 8                        # coarse block for skipping empty space
 # volumes: x0, y0, z0, h, nx, ny, nz
@@ -49,7 +50,7 @@ def sworley(x, y, z, s):
     # smooth F1^2 (a soft minimum over the nearby feature points): round puffs with soft creases between them
     ix, iy, iz = math.floor(x), math.floor(y), math.floor(z)
     acc = 0.0
-    K = 9.0
+    K = 22.0
     for dk in range(-1, 2):
         for dj in range(-1, 2):
             for di in range(-1, 2):
@@ -87,30 +88,65 @@ def fbm(x, y, z, s, oct):
 @njit(cache=True)
 def shaft(z):
     # the centre of the shaft and its radius at height z
-    cx = 140 * math.sin(z / 560 + 0.7) + 55 * math.sin(z / 240 + 2.1)
-    cy = 110 * math.sin(z / 640 + 2.4) + 45 * math.sin(z / 280 + 0.3)
-    r = 270 + 70 * math.sin(z / 400 + 1.3) + 35 * math.sin(z / 170)
+    cx = 80 * math.sin(z / 620 + 0.7) + 30 * math.sin(z / 260 + 2.1)
+    cy = 65 * math.sin(z / 700 + 2.4) + 25 * math.sin(z / 300 + 0.3)
+    r = 400 + 70 * math.sin(z / 450 + 1.3) + 35 * math.sin(z / 190)
     return cx, cy, r
 
 
 @njit(cache=True)
 def top_h(x, y):
-    # the top of the deck: rolling, with cumulus towers; flatter round the mouth of the shaft
-    base = ZTOP + 420 * (fbm(x / 2200, y / 2200, 0.5, 7, 3) - 0.5)
-    tw = max(0.0, fbm(x / 700, y / 700, 3.5, 11, 3) - 0.53)
-    r = math.sqrt(x * x + y * y)
-    tw *= min(1.0, max(0.0, (r - 450) / 500))
-    return base + 2400 * tw ** 1.15
+    # the top of the deck: rolling hills and hollows
+    return ZTOP + 380 * (fbm(x / 2200, y / 2200, 0.5, 7, 3) - 0.5) + 160 * (fbm(x / 650, y / 650, 2.5, 9, 2) - 0.5)
+
+
+TCELL = 1500.0
+
+
+@njit(cache=True)
+def towers(x, y, z):
+    # cumulus towers: a stack of three round blobs, one maybe per cell of a jittered grid; none near the shaft
+    best = -1e9
+    ci, cj = math.floor(x / TCELL), math.floor(y / TCELL)
+    for dj in range(-1, 2):
+        for di in range(-1, 2):
+            i, j = int(ci + di), int(cj + dj)
+            hh = hash3(i, j, 7, 3)
+            if rnd(hh) > 0.55:
+                continue
+            cx = (i + 0.2 + 0.6 * rnd(hash3(i, j, 8, 3))) * TCELL
+            cy = (j + 0.2 + 0.6 * rnd(hash3(i, j, 9, 3))) * TCELL
+            if cx * cx + cy * cy < 1700.0 ** 2:
+                continue
+            R = 200 + 260 * rnd(hash3(i, j, 10, 3))
+            lean = 0.25 * (rnd(hash3(i, j, 11, 3)) - 0.5)
+            zb = top_h(cx, cy)
+            for q in range(3):
+                rq = R * (1.0 - 0.2 * q)
+                zc = zb - 0.2 * R + q * 0.75 * R
+                ox = lean * q * R
+                d = rq - math.sqrt((x - cx - ox) ** 2 + (y - cy) ** 2 + ((z - zc) * 1.15) ** 2)
+                if d > best:
+                    best = d
+    return best
 
 
 @njit(cache=True)
 def sdist(x, y, z, far):
-    # signed distance into the cloud before the puffs (+ inside)
-    s = top_h(x, y) - z
+    # signed distance into the cloud before the puffs (+ inside). The upper deck (top_h down to DECKB) with the mouth of
+    # the shaft; under it (near only) a field of big clumps with clearings, a corridor kept open along the fall.
+    sb = z - (DECKB + 150 * (fbm(x / 520, y / 520, 1.7, 29, 3) - 0.5))
+    s = min(top_h(x, y) - z, sb)
     if not far:
+        f = fbm(x / 620, y / 620, z / 900, 31, 3)
+        thr = 0.56 - 0.06 * min(1.0, max(0.0, (DECKB - z) / 1800))
+        sf = min((f - thr) * 1300, DECKB + 260 - z)
+        s = max(s, sf)
         cx, cy, r = shaft(z)
         ang = math.atan2(y - cy, x - cx)
-        rr = r * (1 + 0.22 * math.sin(3 * ang + z / 300) + 0.12 * math.sin(5 * ang - z / 210))
+        k = min(1.0, max(0.0, (DECKB + 120 - z) / 300))
+        r = r * (1 - k) + 210 * k
+        rr = r * (1 + 0.15 * math.sin(3 * ang + z / 300) + 0.08 * math.sin(5 * ang - z / 210))
         s1 = math.sqrt((x - cx) ** 2 + (y - cy) ** 2) - rr
         # the mouth flares out
         s1 -= 160 * max(0.0, (z - (ZTOP - 350)) / 350) ** 2
@@ -123,11 +159,12 @@ def sdist(x, y, z, far):
 @njit(cache=True)
 def puffs(x, y, z, far):
     b = 0.0
-    b += 60 * (0.42 - sworley(x / 130, y / 130, z / 130, 1))
-    b += 24 * (0.42 - sworley(x / 48, y / 48, z / 48, 2))
+    b += 170 * (0.42 - sworley(x / 420, y / 420, z / 420, 5))
+    b += 64 * (0.42 - sworley(x / 140, y / 140, z / 140, 1))
+    b += 24 * (0.42 - sworley(x / 50, y / 50, z / 50, 2))
     if not far:
-        b += 9 * (0.42 - sworley(x / 18, y / 18, z / 18, 3))
-        b += 3.2 * (0.42 - sworley(x / 6.5, y / 6.5, z / 6.5, 4))
+        b += 7 * (0.42 - sworley(x / 18, y / 18, z / 18, 3))
+        b += 1.2 * (0.42 - sworley(x / 6.5, y / 6.5, z / 6.5, 4))
     return b
 
 
@@ -143,10 +180,10 @@ def build_density(den, M, far):
             for i in range(nx):
                 x = x0 + (i + 0.5) * h
                 s = sdist(x, y, z, far)
-                if s < -110:
+                if s < -260:
                     den[k, j, i] = 0
                     continue
-                if s > 130:
+                if s > 280:
                     den[k, j, i] = 255
                     continue
                 s += puffs(x, y, z, far)
@@ -255,6 +292,44 @@ def chamfer(occ, dist):
             break
 
 
+@njit(parallel=True, cache=True)
+def blur3(den, out, R):
+    # density blurred twice with a box of radius R along each axis (≈ a gaussian), for the local occlusion
+    nz, ny, nx = den.shape
+    a = den.astype(np.float32)
+    b = np.empty_like(a)
+    for rep in range(2):
+        for k in prange(nz):
+            for j in range(ny):
+                for i in range(nx):
+                    s = 0.0
+                    for d in range(-R, R + 1):
+                        s += a[k, j, min(max(i + d, 0), nx - 1)]
+                    b[k, j, i] = s / (2 * R + 1)
+        for k in prange(nz):
+            for j in range(ny):
+                for i in range(nx):
+                    s = 0.0
+                    for d in range(-R, R + 1):
+                        s += b[k, min(max(j + d, 0), ny - 1), i]
+                    a[k, j, i] = s / (2 * R + 1)
+        for k in prange(nz):
+            for j in range(ny):
+                for i in range(nx):
+                    s = 0.0
+                    for d in range(-R, R + 1):
+                        s += a[min(max(k + d, 0), nz - 1), j, i]
+                    b[k, j, i] = s / (2 * R + 1)
+        for k in prange(nz):
+            for j in range(ny):
+                for i in range(nx):
+                    a[k, j, i] = b[k, j, i]
+    for k in prange(nz):
+        for j in range(ny):
+            for i in range(nx):
+                out[k, j, i] = int(a[k, j, i] + 0.5)
+
+
 def build_one(name, M, far):
     t0 = time.time()
     nx, ny, nz = int(M[4]), int(M[5]), int(M[6])
@@ -264,7 +339,8 @@ def build_one(name, M, far):
     sky = np.zeros_like(den); sweep_sky(den, sky, M[3], 3 if not far else 1)
     occ = np.zeros(((nz + B - 1) // B, (ny + B - 1) // B, (nx + B - 1) // B), np.uint8); coarse(den, occ)
     dist = np.zeros_like(occ); chamfer(occ, dist); print(name, 'light', round(time.time() - t0), 's', flush=True)
-    for n, a in (('den', den), ('sun', sun), ('sky', sky), ('dist', dist)):
+    ao = np.zeros_like(den); blur3(den, ao, 3 if not far else 1)
+    for n, a in (('den', den), ('sun', sun), ('sky', sky), ('dist', dist), ('ao', ao)):
         np.save(os.path.join(WORK, f'{name}_{n}.npy'), a)
 
 
@@ -312,7 +388,8 @@ def gas(depth, ch):
 def sky_col(dx, dy, dz, ch, cirrus):
     # above the deck: deep blue overhead, pale cyan haze at the horizon, cirrus streaks far up, the Sun a hard star
     zen = (0.004, 0.018, 0.075)[ch]
-    hor = (0.16, 0.34, 0.56)[ch]
+    cs0 = dx * SUN[0] + dy * SUN[1] + dz * SUN[2]
+    hor = haze(ZTOP + 200, cs0, ch, 1.0) * 1.1
     u = max(dz, 0.0)
     c = hor + (zen - hor) * (1 - (1 - u) ** 4)
     if dz > 0.01 and cirrus > 0:
@@ -336,17 +413,33 @@ def sky_col(dx, dy, dz, ch, cirrus):
 
 
 @njit(cache=True, inline='always')
+def haze(z, cth, ch, lit):
+    # what the air scatters towards us: sunlight (bluer the deeper) and the blue of the sky; Rayleigh-ish, so blue
+    ray = (0.42, 0.72, 1.3)[ch]
+    pha = hg(cth, 0.55) * 0.5 + 0.5 / (4 * math.pi)
+    g = gas((ZTOP + 900 - z) / SUN[2], ch)
+    amb = (0.10, 0.22, 0.48)[ch]
+    return ray * (g * pha * 2.6 * lit + amb * gas(ZTOP + 900 - z, ch) * 0.3)
+
+
+@njit(cache=True, inline='always')
+def far_haze(t):
+    k = min(1.0, max(0.0, (t - 2500) / 10000))
+    return k * k * (3 - 2 * k) / 3000.0
+
+
+@njit(cache=True, inline='always')
 def air_sig(z):
     # the haze: thin above the deck, thickening down the shaft
-    return 1 / 16000.0 + (1 / 1400.0) * min(1.0, max(0.0, (ZTOP + 100 - z) / 1600))
+    return 1 / 14000.0 + (1 / 1400.0) * min(1.0, max(0.0, (ZTOP + 100 - z) / 1600))
 
 
 @njit(parallel=True, cache=True)
-def render(nd, ns, nk, nb, fd, fs, fk, fb, img, cam, fwd, right, up, fov, expo, seed, fine):
+def render(nd, ns, nk, nb, na, fd, fs, fk, fb, fa, img, cam, fwd, right, up, fov, expo, seed, fine):
     hgt, wid = img.shape[0], img.shape[1]
     tanf = math.tan(fov * 0.5)
     sunC = (1.0, 0.97, 0.92)
-    amb = (0.10, 0.22, 0.48)
+    amb = (0.08, 0.16, 0.32)
     nx0, ny0, nz0, nh = NEAR[0], NEAR[1], NEAR[2], NEAR[3]
     nnx, nny, nnz = NEAR[4], NEAR[5], NEAR[6]
     fx0, fy0, fz0, fh = FAR[0], FAR[1], FAR[2], FAR[3]
@@ -391,11 +484,10 @@ def render(nd, ns, nk, nb, fd, fs, fk, fb, img, cam, fwd, right, up, fov, expo, 
                         ended = 1 if z > ZTOP - 300 else 2
                         break
                     st = 30.0
-                    sa = air_sig(z) * st
+                    sa = (air_sig(z) + far_haze(t)) * st
                     a = math.exp(-sa)
                     for ch in range(3):
-                        g = gas((ZTOP + 200 - z) / SUN[2], ch)
-                        c = sunC[ch] * g * pha * 2.2 + amb[ch] * gas(ZTOP + 200 - z, ch) * 0.25
+                        c = haze(z, cth, ch, 1.0)
                         if ch == 0:
                             L0 += T0 * c * (1 - a); T0 *= a
                         elif ch == 1:
@@ -420,27 +512,29 @@ def render(nd, ns, nk, nb, fd, fs, fk, fb, img, cam, fwd, right, up, fov, expo, 
                     # the far deck's fine grain, added here
                     q = vnoise(x / 22, y / 22, z / 22, 91) * 0.6 + vnoise(x / 8, y / 8, z / 8, 93) * 0.4
                     d = min(1.0, max(0.0, d + (q - 0.5) * 0.9))
-                elif vol == 1 and fine > 0 and d > 0.0 and d < 0.999 and t < 260:
+                elif vol == 1 and fine > 1 and d > 0.0 and d < 0.999 and t < 260:
                     d *= 0.8 + 0.4 * vnoise(x / 2.0, y / 2.0, z / 2.0, 77)
                 step = skip if skip > 0 else max(h * 0.5, t * 0.003)
                 if vol == 2 and skip == 0:
                     step = max(4.0, t * 0.003)
                 if d > 0.003:
                     if vol == 1:
-                        ts = tri(ns, vx, vy, vz); ta = tri(nk, vx, vy, vz)
+                        ts = tri(ns, vx, vy, vz); ta = tri(nk, vx, vy, vz); bl = tri(na, vx, vy, vz)
                     else:
-                        ts = tri(fs, vx, vy, vz); ta = tri(fk, vx, vy, vz)
+                        ts = tri(fs, vx, vy, vz); ta = tri(fk, vx, vy, vz); bl = tri(fa, vx, vy, vz)
+                    # local occlusion: creases (a lot of cloud around) darker, the bulges of the billows brighter
+                    ao = min(1.35, max(0.2, 1.75 - 2.3 * bl))
                     ts = ts * ts * TAUMAX; ta = ta * ta * TAUMAX
                     sig = d * SIG
                     # multiple scattering, Wrenninge-style octaves
-                    ms = math.exp(-ts) * ph0 + 0.55 * math.exp(-ts * 0.3) * ph1 + 0.3 * math.exp(-ts * 0.1) * ph2
+                    ms = math.exp(-ts) * ph0 + ao * (0.55 * math.exp(-ts * 0.3) * ph1 + 0.3 * math.exp(-ts * 0.1) * ph2)
                     powder = 1 - 0.7 * math.exp(-sig * 30)
-                    depth = ZTOP + 200 - z
+                    depth = ZTOP + 380 - z
                     a = math.exp(-sig * step)
                     for ch in range(3):
                         g = gas(depth / SUN[2], ch)
                         ga = gas(depth, ch)
-                        S = sunC[ch] * g * ms * 5.0 * powder + amb[ch] * ga * (math.exp(-ta) * 0.9 + 0.05)
+                        S = sunC[ch] * g * ms * 8.0 * powder + amb[ch] * ga * (math.exp(-ta) * 0.9 + 0.05) * ao
                         if ch == 0:
                             L0 += T0 * S * (1 - a); T0 *= a
                         elif ch == 1:
@@ -456,11 +550,10 @@ def render(nd, ns, nk, nb, fd, fs, fk, fb, img, cam, fwd, right, up, fov, expo, 
                     else:
                         ts = tri(fs, vx, vy, vz)
                     ts = ts * ts * TAUMAX
-                    sa = air_sig(z) * step
+                    sa = (air_sig(z) + far_haze(t)) * step
                     a = math.exp(-sa)
                     for ch in range(3):
-                        g = gas((ZTOP + 200 - z) / SUN[2], ch)
-                        c = sunC[ch] * g * pha * 2.2 * math.exp(-ts) + amb[ch] * gas(ZTOP + 200 - z, ch) * 0.25
+                        c = haze(z, cth, ch, math.exp(-ts))
                         if ch == 0:
                             L0 += T0 * c * (1 - a); T0 *= a
                         elif ch == 1:
@@ -474,7 +567,7 @@ def render(nd, ns, nk, nb, fd, fs, fk, fb, img, cam, fwd, right, up, fov, expo, 
                 if ended == 1:
                     bg = sky_col(dx, dy, dz, ch, 1.0)
                 else:
-                    bg = (0.003, 0.012, 0.05)[ch] * gas(ZTOP - zz, ch) * 2.5
+                    bg = (0.012, 0.03, 0.07)[ch] * gas(ZTOP - zz, ch) * 1.5
                 if ch == 0:
                     L0 += T0 * bg
                 elif ch == 1:
@@ -542,7 +635,7 @@ def cam_at(t):
 def load():
     out = []
     for nm in ('near', 'far'):
-        for n in ('den', 'sun', 'sky', 'dist'):
+        for n in ('den', 'sun', 'sky', 'dist', 'ao'):
             out.append(np.load(os.path.join(WORK, f'{nm}_{n}.npy')))
     return out
 
