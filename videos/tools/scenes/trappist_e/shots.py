@@ -294,7 +294,7 @@ def close_cam(k):
     up = slerp(U_EYE, nrm(U_EYE - f * (U_EYE @ f)), k)
     return pos, nrm(f), nrm(up)
 
-EARTH = (12.05, 14.95)
+EARTH = (PH[5]['t0'] - 0.21, PH[5]['t1'] + 0.21)          # the flight away from the Earth, on «Вона за сорок світлових років»
 
 def frame(t):
     if EARTH[0] <= t < EARTH[1]:

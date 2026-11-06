@@ -1,5 +1,6 @@
 # «Знайомся: TRAPPIST-1e» — the timeline: the author's voice (voice3.mp3 = voice.mp3 92.4 s + phrases re-recorded for
-# the stress, appended: «Найімові́рніше» at 97.6 s, «кам'яна́, і тепла́» at 102.6 s; NOT sped up) cut at its pauses into
+# the stress, appended: «Найімові́рніше» at 97.6 s, «кам'яна́, і тепла́» at 102.6 s, the new hook «Її називають двійником
+# Землі» at 107.4 s — voice4.mp3; NOT sped up) cut at its pauses into
 # phrases (silencedetect -32 dB + syllable peaks), laid out with a few breaths where the picture changes, and the
 # shots hung on the phrases.
 #   python3 timeline.py   -> timeline.json (+ prints the shots)
@@ -8,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # [from, to] in the recording, the text, an extra pause before it (s)
 P = [
-    (0.00, 3.00, 'Це найсхожіша на Землю планета, яку ми знаємо.', 0.25),
+    (107.36, 109.54, 'Її називають двійником Землі.', 0.25),                          # re-recorded (voice4.mp3)
     (3.67, 5.73, 'І вона зовсім не схожа на Землю.', 0.0),
     (6.23, 6.87, 'Знайомся:', 0.5),
     (7.25, 8.57, 'Траппіст один е.', 0.0),
@@ -72,7 +73,7 @@ def build():
     sc = json.load(open(os.path.join(HERE, 'scene.json'))) if os.path.exists(os.path.join(HERE, 'scene.json')) else {}
     sc.update({'title': 'Знайомся: TRAPPIST-1e', 'duration': dur, 'fps': 30, 'width': 720, 'height': 1280,
                'audio': {'music': 'scene', 'fadeIn': 0.2, 'fadeOut': 2.5},
-               'narration': {'file': 'voice3.mp3', 'level': 1.0,
+               'narration': {'file': 'voice4.mp3', 'level': 1.0,
                              'parts': [[max(0.0, p['src'][0] - 0.05), p['src'][1] + 0.08, round(max(0.0, p['t0'] - 0.05), 3)] for p in out]}})
     json.dump(sc, open(os.path.join(HERE, 'scene.json'), 'w'), ensure_ascii=False, indent=1)
     for s in shots:

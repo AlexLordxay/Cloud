@@ -6,7 +6,7 @@ def P(i): return _TL['phrases'][i]['t0'], _TL['phrases'][i]['t1']
 SHOT = {x['name']: (x['t0'], x['t1']) for x in _TL['shots']}
 DURATION = _TL['dur']
 CAPTIONS = [
-    (-1.0, P(0)[1] + 0.1, 'hook', 'Найсхожіша\nна Землю\nпланета'),
+    (-1.0, P(0)[1] + 0.1, 'hook', 'Двійник\nЗемлі?'),
     (P(1)[0], P(1)[1], 'cap', 'І вона зовсім\nне схожа на Землю'),
     (P(2)[0], P(3)[1], 'cap', 'Знайомся: TRAPPIST-1e'),
     (P(4)[0], P(4)[1], 'cap', 'Її попросили показати\nв коментарях'),
@@ -43,7 +43,7 @@ CAPTIONS = [
     (P(35)[0], P(35)[1], 'cap', 'Надішли це тому,\nхто мріє про другу Землю'),
     (P(36)[0], P(36)[1], 'cap', 'І напиши, яку планету\nпоказати наступною'),
 ]
-EARTH = (12.05, 14.95)                       # the flight away from the Earth (shots.py)
+EARTH = (P(5)[0] - 0.21, P(5)[1] + 0.21)     # the flight away from the Earth (shots.py)
 NAMES = [(P(2)[0], EARTH[0] - 0.05, 'TRAPPIST-1e'), (EARTH[0] + 0.1, EARTH[1] - 0.1, '40 світлових років'),
          (EARTH[1] + 0.1, P(7)[1], 'TRAPPIST-1e'), (P(10)[0], P(12)[1], '1 рік = 6 діб'), (P(25)[0], P(27)[1], 'планета-око')]
 SUBS = [(EARTH[0] + 0.3, EARTH[1] - 0.1, 'стільки летить світло звідти до нас'), (EARTH[1] + 0.1, P(7)[1], '40 світлових років від нас'),
@@ -64,7 +64,7 @@ CREDITS = [
 ]
 CUTS = [(EARTH[0], 0.12), (EARTH[1], 0.12)] + [(_s[k][0], 0.22) for k in ('star', 'year', 'lock', 'system', 'sky', 'eye')]
 FADE_IN = 0
-HOOK_SIZE = 72
+HOOK_SIZE = 84
 HOOK_Y = 420
 SUBSCRIBE_AT = _s['eye'][0] + 1.0
 END_CARD = P(36)[1] + 0.45
