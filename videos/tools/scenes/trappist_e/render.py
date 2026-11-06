@@ -46,7 +46,7 @@ def _samp(M, TW, TH, nx, ny, nz, c):
 
 @njit(cache=True, parallel=True)
 def render_scene(img, mask, RW, RH, ox, oy, oz, rx, ry, rz, ux, uy, uz, fx, fy, fz, TX, TY, M, TW, TH,
-                 vk, vr, vg, vb, Sr, Sg, Sb, scx, scy, scz, srad, sint, NB, P, haze, planet_on):
+                 vk, vr, vg, vb, Sr, Sg, Sb, scx, scy, scz, srad, sint, NB, P, haze, planet_on, gvis):
     HS = 0.035
     AR, AG, AB = 1.0, 0.80, 0.70
     for j in prange(RH):
@@ -69,6 +69,7 @@ def render_scene(img, mask, RW, RH, ox, oy, oz, rx, ry, rz, ux, uy, uz, fx, fy, 
                     la = smooth(-0.12, 0.30, mx / mn)
                     fwd = max(0.0, dx)                                          # looking towards the star: bright rim
                     phase = 1.0 + 4.0 * fwd ** 12
+                    la = max(la, 0.55 * fwd ** 40)                              # the star behind the planet: a ring all round
                     if h2 < 1.0:
                         t = -b - math.sqrt(1.0 - h2); tbest = t
                         nx, ny, nz = ox + dx * t, oy + dy * t, oz + dz * t
@@ -148,7 +149,7 @@ def render_scene(img, mask, RW, RH, ox, oy, oz, rx, ry, rz, ux, uy, uz, fx, fy, 
                     m = 1.0
                 elif ang >= ar_:
                     x = ar_ / ang
-                    gl = sint * (0.020 * x ** 2.4 + 0.0025 * x ** 1.1)
+                    gl = sint * gvis * (0.020 * x ** 2.4 + 0.0025 * x ** 1.1)
                     r += Sr * gl; g += Sg * gl * 0.85; bl += Sb * gl * 0.7
             img[j, i, 0] += r; img[j, i, 1] += g; img[j, i, 2] += bl
             mask[j, i] = m
@@ -293,6 +294,22 @@ def neighbours(t_days, rel0, names=('f', 'g')):
         rows.append([*pos, rad, *Ld, 40.0 + 50 * k])
     return np.array(rows, np.float64).reshape(-1, 8)
 
+def star_visible(cam_pos):
+    """the part of the star's disc not hidden behind the planet (for its glare)"""
+    o = np.asarray(cam_pos, float); S = np.array([PL.A_E, 0.0, 0.0])
+    dp, ds = np.linalg.norm(o), np.linalg.norm(S - o)
+    if dp < ds and True:
+        rp, rs = math.asin(min(1.0, 1.0 / dp)), math.asin(min(1.0, PL.R_STAR / ds))
+        sep = math.acos(min(1.0, max(-1.0, float((-o / dp) @ ((S - o) / ds)))))
+        if sep >= rp + rs: return 1.0
+        if sep <= rp - rs: return 0.0
+        d, r1, r2 = sep, rp, rs                                   # overlap of two discs (small angles)
+        a1 = r1 * r1 * math.acos((d * d + r1 * r1 - r2 * r2) / (2 * d * r1))
+        a2 = r2 * r2 * math.acos((d * d + r2 * r2 - r1 * r1) / (2 * d * r2))
+        a3 = 0.5 * math.sqrt(max(0.0, (-d + r1 + r2) * (d + r1 - r2) * (d - r1 + r2) * (d + r1 + r2)))
+        return max(0.0, 1.0 - (a1 + a2 - a3) / (math.pi * r2 * r2))
+    return 1.0
+
 def frame3d(cam_pos, target, fovy=34.0, up=(0, 0, 1), vk=0.0, vegcol=(0.05, 0.20, 0.04), nb=None, star=True,
             star_int=60.0, haze=1.0, planet_on=True, bloom=1.0, star_gain=1.0, photo_gain=0.38, roll=0.0, sky_turn=0.0,
             raw=False):
@@ -304,7 +321,8 @@ def frame3d(cam_pos, target, fovy=34.0, up=(0, 0, 1), vk=0.0, vegcol=(0.05, 0.20
     img = np.zeros((RH, RW, 3), np.float32); mask = np.zeros((RH, RW), np.float32)
     NB = nb if nb is not None else np.zeros((0, 8))
     render_scene(img, mask, RW, RH, *cam_pos, *r, *u, *f, TX, TY, pack(), PL.TW, PL.TH, vk, *vegcol, *STARC,
-                 PL.A_E, 0.0, 0.0, PL.R_STAR, star_int if star else 0.0, NB, PERM, haze, planet_on)
+                 PL.A_E, 0.0, 0.0, PL.R_STAR, star_int if star else 0.0, NB, PERM, haze, planet_on,
+                 star_visible(cam_pos) if planet_on else 1.0)
     bg = background(r, u, f, TX, TY, mask, star_gain, photo_gain, GAL @ rotz(sky_turn))
     img = img + bg * (1 - mask[..., None])
     if raw: return img

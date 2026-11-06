@@ -8,8 +8,8 @@ function createSceneMusic(ctx, dest) {
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
   const BEAT = 0.625, E8 = BEAT / 2;
   // the timeline (timeline.json)
-  const REVEAL = 6.63, STAR = 21.61, YEAR = 28.07, LOCK = 37.31, SYSTEM = 49.29, SKY = 55.03, EYE = 61.81,
-    HUSH = 73.45, LIFT = 74.15, DREAM = 85.59, FINAL = 92.35, END = 103.5;
+  const REVEAL = 3.57, STAR = 21.67, YEAR = 28.13, LOCK = 37.37, SYSTEM = 49.35, SKY = 55.09, EYE = 61.87,
+    HUSH = 73.51, LIFT = 74.21, DREAM = 85.65, FINAL = 92.41, END = 103.56;
 
   const master = ctx.createDynamicsCompressor();
   master.threshold.value = -16; master.ratio.value = 3; master.attack.value = 0.02; master.release.value = 0.3;
@@ -98,7 +98,7 @@ function createSceneMusic(ctx, dest) {
     }
     // the hook: glitter over the crescent and the red star, over a held high fifth
     const glit = [81, 84, 88, 86, 84, 81, 79, 81, 84, 88, 86];
-    glit.forEach((m, i) => organ(0.2 + i * 0.55, 0.2 + i * 0.55 + 0.35, m, FL, 0.11, 4000, 0.01, 1.2));
+    glit.forEach((m, i) => organ(0.2 + i * 0.55, 0.2 + i * 0.55 + 0.35, m, FL, 0.11 * (i < 7 ? 1 : 0.6), 4000, 0.01, 1.2));
     organ(0.0, REVEAL + 0.6, 69, FL, 0.14, 2000, 0.6, 1.4); organ(0.0, REVEAL + 0.6, 76, FL, 0.1, 2500, 0.6, 1.4);
     // the eternal night: a thin high cluster that shivers
     organ(LOCK + 9.0, SYSTEM + 0.5, 83, FL, 0.06, 3000, 1.5, 1.0); organ(LOCK + 9.2, SYSTEM + 0.5, 84, FL, 0.05, 3000, 1.5, 1.0);

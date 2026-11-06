@@ -65,6 +65,7 @@ CREDITS = [
 CUTS = [(EARTH[0], 0.12), (EARTH[1], 0.12)] + [(_s[k][0], 0.22) for k in ('star', 'year', 'lock', 'system', 'sky', 'eye')]
 FADE_IN = 0
 HOOK_SIZE = 72
+HOOK_Y = 420
 SUBSCRIBE_AT = _s['eye'][0] + 1.0
 END_CARD = P(36)[1] + 0.45
 END_TITLE = 'Куди полетимо\nнаступного разу?'

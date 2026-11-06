@@ -1,5 +1,5 @@
-# «Знайомся: TRAPPIST-1e» — the timeline: the author's voice (voice2.mp3 = voice.mp3 92.4 s + the two phrases re-recorded
-# for the stress «тепла́», «Найімові́рніше» appended at 92.9 and 97.6 s; NOT sped up) cut at its pauses into
+# «Знайомся: TRAPPIST-1e» — the timeline: the author's voice (voice3.mp3 = voice.mp3 92.4 s + phrases re-recorded for
+# the stress, appended: «Найімові́рніше» at 97.6 s, «кам'яна́, і тепла́» at 102.6 s; NOT sped up) cut at its pauses into
 # phrases (silencedetect -32 dB + syllable peaks), laid out with a few breaths where the picture changes, and the
 # shots hung on the phrases.
 #   python3 timeline.py   -> timeline.json (+ prints the shots)
@@ -15,7 +15,7 @@ P = [
     (9.02, 11.13, 'Її попросили показати в коментарях.', 0.0),
     (11.51, 13.99, 'Вона за сорок світлових років від нас.', 0.0),
     (14.37, 15.90, 'Розміром майже як Земля,', 0.0),
-    (92.93, 96.84, 'кам\'яна, і тепла́ отримує на третину менше, ніж ми.', 0.0),        # re-recorded (voice2.mp3)
+    (102.60, 106.57, 'кам\'яна́, і тепла́ отримує на третину менше, ніж ми.', 0.0),     # re-recorded (voice3.mp3)
     (20.38, 22.21, 'Але її зоря — не Сонце,', 0.5),
     (22.53, 25.94, 'а тьмяний червоний карлик, ледь більший за Юпітер.', 0.0),
     (26.34, 30.04, 'Планета так близько до зорі, що рік тут триває шість днів.', 0.5),
@@ -48,7 +48,7 @@ P = [
 ]
 TAIL = 4.8
 
-SHOTS = [('hook', 0), ('reveal', 2), ('star', 8), ('year', 10), ('lock', 13), ('system', 18), ('sky', 20),
+SHOTS = [('hook', 0), ('reveal', 1), ('star', 8), ('year', 10), ('lock', 13), ('system', 18), ('sky', 20),
          ('eye', 22), ('life', 28), ('dark', 29), ('dream', 32), ('final', 35)]
 
 
@@ -72,7 +72,7 @@ def build():
     sc = json.load(open(os.path.join(HERE, 'scene.json'))) if os.path.exists(os.path.join(HERE, 'scene.json')) else {}
     sc.update({'title': 'Знайомся: TRAPPIST-1e', 'duration': dur, 'fps': 30, 'width': 720, 'height': 1280,
                'audio': {'music': 'scene', 'fadeIn': 0.2, 'fadeOut': 2.5},
-               'narration': {'file': 'voice2.mp3', 'level': 1.0,
+               'narration': {'file': 'voice3.mp3', 'level': 1.0,
                              'parts': [[max(0.0, p['src'][0] - 0.05), p['src'][1] + 0.08, round(max(0.0, p['t0'] - 0.05), 3)] for p in out]}})
     json.dump(sc, open(os.path.join(HERE, 'scene.json'), 'w'), ensure_ascii=False, indent=1)
     for s in shots:

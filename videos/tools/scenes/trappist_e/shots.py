@@ -69,6 +69,29 @@ def hook_cam(push=0.0, swing=0.0):
     up = nrm(up0 * math.cos(a) - rt * math.sin(a))
     return pos, f, up
 
+def frame_for(pos):
+    """the hook's framing for any camera position: the planet low left, the star (or where it hides) up right"""
+    dp = nrm(-pos); ds = nrm(np.array([PL.A_E, 0, 0]) - pos)
+    f = nrm(dp * 0.60 + ds * 0.40)
+    up0 = ds - dp
+    if np.linalg.norm(up0 - f * (up0 @ f)) < 1e-6: up0 = np.array([0, 0, 1.0])
+    up0 = nrm(up0 - f * (up0 @ f))
+    rt = nrm(np.cross(up0, f))
+    a = math.radians(24)
+    return f, nrm(up0 * math.cos(a) - rt * math.sin(a))
+
+HOOK_END = hook_cam(push=0.8, swing=0.15)[0]
+_C1 = nrm(HOOK_END); _A = np.array([-1.0, 0, 0])
+_SEP1 = math.degrees(math.acos(float(_C1 @ _A)))
+_C0 = slerp(_A, _C1, 5.3 / _SEP1)                       # the star 5.3° from the planet's centre: just hidden behind it
+
+def rise_cam(k):
+    """the star rising from behind the planet's limb (k 0..1)"""
+    c = slerp(_C0, _C1, k)
+    pos = c * (7.95 + (np.linalg.norm(HOOK_END) - 7.95) * k)
+    f, up = frame_for(pos)
+    return pos, f, up
+
 def view(pos, f, up, fovy=34.0, **kw):
     return R.frame3d(pos, pos + f, fovy, up, **kw)
 
@@ -282,12 +305,14 @@ def frame(t):
     u = (t - a) / (b - a)
     nbe = eye_neighbours()
     if s == 'hook':
-        pos, f, up = hook_cam(push=ease2(u) * 0.8, swing=0.15 * ease2(u))
+        # the first frame: a ring of light round the night side, the star hidden; it rises from behind the limb
+        k = ramp(t, 0.0, b) ** 1.45
+        pos, f, up = rise_cam(k)
         return view(pos, f, up, nb=nb_at(0, nbe['f'], nbe['g'])).convert('RGBA')
     if s == 'reveal':
-        p0, f0, u0 = hook_cam(push=0.8, swing=0.15)
+        p0, f0, u0 = rise_cam(1.0)
         p1, f1, u1 = eye_wide()
-        k = ease(ramp(t, a + 0.8, b - 1.0))
+        x = ramp(t, a, a + 12.5); k = 1 - (1 - x) ** 2
         pos = slerp(p0, p1, k) * (np.linalg.norm(p0) + (np.linalg.norm(p1) - np.linalg.norm(p0)) * k)
         f = slerp(f0, f1, k); up = slerp(u0, u1, k)
         return view(pos, f, up, nb=nb_at(0, nbe['f'], nbe['g'])).convert('RGBA')
