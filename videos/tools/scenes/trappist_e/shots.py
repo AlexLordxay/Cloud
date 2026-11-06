@@ -111,9 +111,9 @@ def sphere_layer(img, cx, cy, rpx, kind, t=0.0):
     cov = np.clip((1 - np.sqrt(rr)) * rpx + 0.5, 0, 1)
     mu = np.sqrt(np.clip(1 - rr, 0, 1))
     if kind == 'sun':
-        col = np.array([1.0, 0.95, 0.86]) * 1.15
-        gran = 1 - 0.04 * (np.sin(u * 90) * np.sin(v * 83) > 0.3)
-        I = (0.40 + 0.60 * mu ** 0.5)[..., None] * col * gran[..., None]
+        col = np.array([1.0, 0.80, 0.42]) * 0.78
+        gran = 1 - 0.035 * np.clip(np.sin(u * 61 + np.sin(v * 37) * 2) * np.sin(v * 57 + np.sin(u * 29) * 2), 0, 1)
+        I = (0.32 + 0.68 * mu ** 0.55)[..., None] * col * gran[..., None]
     elif kind == 'trappist':
         c_ = PL.ST.bb_rgb(2566.0) ** 1.35; c_ = c_ / c_.max()
         I = (0.30 + 0.70 * mu ** 0.7)[..., None] * c_ * 0.62
@@ -168,7 +168,7 @@ def shot_star(t):
     k_ju = ease(ramp(t, t_ju - 0.2, t_ju + 0.4))
     if k_sun > 0:
         c = to_px([0, 0]); tmp = img.copy(); sphere_layer(tmp, c[0], c[1], sc * 1.0, 'sun'); img = img * (1 - k_sun) + tmp * k_sun
-        glow(img, c[0], c[1], sc, np.array([1.0, 0.9, 0.75]), 0.06 * k_sun)
+        glow(img, c[0], c[1], sc, np.array([1.0, 0.75, 0.4]), 0.035 * k_sun)
     rt, rj = 0.1192, 0.10045
     if k_dw > 0:
         c = to_px([-0.17, 1.55]); tmp = img.copy(); sphere_layer(tmp, c[0], c[1], sc * rt, 'trappist'); img = img * (1 - k_dw) + tmp * k_dw
@@ -179,7 +179,10 @@ def shot_star(t):
     def lab(pu, dy, txt, k):
         c = to_px(pu) / R.SS; label(pic, (c[0], c[1] + dy), txt, 16, k)
     lab([0, 0], 0, 'Сонце', k_sun * (1 - z) * 0.0)
-    c_s = to_px([0, -1.0]) / R.SS; label(pic, (c_s[0], c_s[1] - 30), 'Сонце', 22, k_sun * (1 - ease(ramp(z, 0, 0.5))))
+    c_s = to_px([0, -1.0]) / R.SS; c_b = to_px([0, 1.0]) / R.SS
+    if c_s[1] - 30 > 230: label(pic, (c_s[0], c_s[1] - 30), 'Сонце', 22, k_sun)
+    elif c_b[1] > 300: label(pic, (W / 2, c_b[1] - 60), 'Сонце', 22, k_sun, fill=(80, 48, 12))
+    else: label(pic, (W / 2, max(c_b[1] + 46, 240)), '↑ Сонце', 22, k_sun)
     def lab2(pu, dy, txt, k):
         c = to_px(pu) / R.SS; label(pic, (c[0], c[1] + dy), txt, 20, k)
     lab2([-0.17, 1.55], rt * sc / R.SS + 28, 'TRAPPIST-1', k_dw)
@@ -268,7 +271,12 @@ def close_cam(k):
     up = slerp(U_EYE, nrm(U_EYE - f * (U_EYE @ f)), k)
     return pos, nrm(f), nrm(up)
 
+EARTH = (12.05, 14.95)
+
 def frame(t):
+    if EARTH[0] <= t < EARTH[1]:
+        import earth
+        return earth.frame((t - EARTH[0]) / (EARTH[1] - EARTH[0])).convert('RGBA')
     s = next(k for k, (a, b) in SH.items() if a <= t < b) if t < DUR else 'final'
     a, b = SH[s]
     u = (t - a) / (b - a)
