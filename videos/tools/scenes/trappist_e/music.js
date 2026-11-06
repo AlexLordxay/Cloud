@@ -8,8 +8,8 @@ function createSceneMusic(ctx, dest) {
   const midi = m => 440 * Math.pow(2, (m - 69) / 12);
   const BEAT = 0.625, E8 = BEAT / 2;
   // the timeline (timeline.json)
-  const REVEAL = 6.63, STAR = 21.28, YEAR = 27.74, LOCK = 36.94, SYSTEM = 48.45, SKY = 54.19, EYE = 60.97,
-    HUSH = 72.6, LIFT = 73.3, DREAM = 84.75, FINAL = 91.51, END = 101.46;
+  const REVEAL = 6.63, STAR = 21.61, YEAR = 28.07, LOCK = 37.31, SYSTEM = 49.29, SKY = 55.03, EYE = 61.81,
+    HUSH = 73.45, LIFT = 74.15, DREAM = 85.59, FINAL = 92.35, END = 103.5;
 
   const master = ctx.createDynamicsCompressor();
   master.threshold.value = -16; master.ratio.value = 3; master.attack.value = 0.02; master.release.value = 0.3;

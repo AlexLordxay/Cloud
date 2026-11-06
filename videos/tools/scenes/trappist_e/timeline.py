@@ -1,4 +1,5 @@
-# «Знайомся: TRAPPIST-1e» — the timeline: the author's voice (voice.mp3, 92.4 s, NOT sped up) cut at its pauses into
+# «Знайомся: TRAPPIST-1e» — the timeline: the author's voice (voice2.mp3 = voice.mp3 92.4 s + the two phrases re-recorded
+# for the stress «тепла́», «Найімові́рніше» appended at 92.9 and 97.6 s; NOT sped up) cut at its pauses into
 # phrases (silencedetect -32 dB + syllable peaks), laid out with a few breaths where the picture changes, and the
 # shots hung on the phrases.
 #   python3 timeline.py   -> timeline.json (+ prints the shots)
@@ -14,13 +15,13 @@ P = [
     (9.02, 11.13, 'Її попросили показати в коментарях.', 0.0),
     (11.51, 13.99, 'Вона за сорок світлових років від нас.', 0.0),
     (14.37, 15.90, 'Розміром майже як Земля,', 0.0),
-    (16.35, 19.91, 'кам\'яна, і тепла отримує на третину менше, ніж ми.', 0.0),
+    (92.93, 96.84, 'кам\'яна, і тепла́ отримує на третину менше, ніж ми.', 0.0),        # re-recorded (voice2.mp3)
     (20.38, 22.21, 'Але її зоря — не Сонце,', 0.5),
     (22.53, 25.94, 'а тьмяний червоний карлик, ледь більший за Юпітер.', 0.0),
     (26.34, 30.04, 'Планета так близько до зорі, що рік тут триває шість днів.', 0.5),
     (30.55, 31.91, 'Тож якщо тобі тридцять —', 0.0),
     (32.22, 34.63, 'тут тобі було б майже тисяча вісімсот.', 0.0),
-    (35.04, 38.65, 'Найімовірніше, вона завжди повернута до зорі одним боком.', 0.5),
+    (97.64, 101.79, 'Найімові́рніше, вона завжди повернута до зорі одним боком.', 0.5),  # re-recorded (voice2.mp3)
     (39.17, 40.33, 'Там вічний день:', 0.0),
     (40.84, 42.87, 'зоря нерухомо висить у небі.', 0.0),
     (43.35, 44.46, 'А з другого боку —', 0.0),
@@ -54,7 +55,7 @@ SHOTS = [('hook', 0), ('reveal', 2), ('star', 8), ('year', 10), ('lock', 13), ('
 def build():
     out, t, prev = [], 0.0, 0.0
     for i, (a, b, txt, extra) in enumerate(P):
-        gap = a - prev if i else 0.0
+        gap = (a - prev if 0 <= a - prev < 1.5 else 0.45) if i else 0.0     # re-recorded phrases sit at the end of the file
         t += gap + extra
         out.append(dict(i=i, src=[a, b], t0=round(t, 3), t1=round(t + b - a, 3), text=txt))
         t += b - a; prev = b
@@ -71,7 +72,7 @@ def build():
     sc = json.load(open(os.path.join(HERE, 'scene.json'))) if os.path.exists(os.path.join(HERE, 'scene.json')) else {}
     sc.update({'title': 'Знайомся: TRAPPIST-1e', 'duration': dur, 'fps': 30, 'width': 720, 'height': 1280,
                'audio': {'music': 'scene', 'fadeIn': 0.2, 'fadeOut': 2.5},
-               'narration': {'file': 'voice.mp3', 'level': 1.0,
+               'narration': {'file': 'voice2.mp3', 'level': 1.0,
                              'parts': [[max(0.0, p['src'][0] - 0.05), p['src'][1] + 0.08, round(max(0.0, p['t0'] - 0.05), 3)] for p in out]}})
     json.dump(sc, open(os.path.join(HERE, 'scene.json'), 'w'), ensure_ascii=False, indent=1)
     for s in shots:
