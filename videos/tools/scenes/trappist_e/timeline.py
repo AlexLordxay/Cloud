@@ -13,7 +13,7 @@ P = [
     (3.67, 5.73, 'І вона зовсім не схожа на Землю.', 0.0),
     (6.23, 6.87, 'Знайомся:', 0.5),
     (7.25, 8.57, 'Траппіст один е.', 0.0),
-    (9.02, 11.13, 'Її попросили показати в коментарях.', 0.0),
+    (9.02, 11.13, 'Її попросили показати в коментарях.', None),     # dropped: the comment card says it (captions.py)
     (11.51, 13.99, 'Вона за сорок світлових років від нас.', 0.0),
     (14.37, 15.90, 'Розміром майже як Земля,', 0.0),
     (102.60, 106.57, 'кам\'яна́, і тепла́ отримує на третину менше, ніж ми.', 0.0),     # re-recorded (voice3.mp3)
@@ -56,6 +56,8 @@ SHOTS = [('hook', 0), ('reveal', 1), ('star', 8), ('year', 10), ('lock', 13), ('
 def build():
     out, t, prev = [], 0.0, 0.0
     for i, (a, b, txt, extra) in enumerate(P):
+        if extra is None:                                                    # a phrase left out (kept for the numbering)
+            out.append(dict(i=i, src=[a, b], t0=round(t, 3), t1=round(t, 3), text=txt, skip=True)); continue
         gap = (a - prev if 0 <= a - prev < 1.5 else 0.45) if i else 0.0     # re-recorded phrases sit at the end of the file
         t += gap + extra
         out.append(dict(i=i, src=[a, b], t0=round(t, 3), t1=round(t + b - a, 3), text=txt))
@@ -74,7 +76,7 @@ def build():
     sc.update({'title': 'Знайомся: TRAPPIST-1e', 'duration': dur, 'fps': 30, 'width': 720, 'height': 1280,
                'audio': {'music': 'scene', 'fadeIn': 0.2, 'fadeOut': 2.5},
                'narration': {'file': 'voice4.mp3', 'level': 1.0,
-                             'parts': [[max(0.0, p['src'][0] - 0.05), p['src'][1] + 0.08, round(max(0.0, p['t0'] - 0.05), 3)] for p in out]}})
+                             'parts': [[max(0.0, p['src'][0] - 0.05), p['src'][1] + 0.08, round(max(0.0, p['t0'] - 0.05), 3)] for p in out if not p.get('skip')]}})
     json.dump(sc, open(os.path.join(HERE, 'scene.json'), 'w'), ensure_ascii=False, indent=1)
     for s in shots:
         print(f"{s['name']:8s} {s['t0']:6.2f} – {s['t1']:6.2f}  ({s['t1'] - s['t0']:.1f} s)")

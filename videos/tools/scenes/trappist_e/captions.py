@@ -9,7 +9,6 @@ CAPTIONS = [
     (-1.0, P(0)[1] + 0.1, 'hook', 'Двійник\nЗемлі?'),
     (P(1)[0], P(1)[1], 'cap', 'І вона зовсім\nне схожа на Землю'),
     (P(2)[0], P(3)[1], 'cap', 'Знайомся: TRAPPIST-1e'),
-    (P(4)[0], P(4)[1], 'cap', 'Її попросили показати\nв коментарях'),
     (P(5)[0], P(5)[1], 'cap', 'Вона за 40 світлових років\nвід нас'),
     (P(6)[0], P(6)[1], 'cap', 'Розміром майже як Земля'),
     (P(7)[0], P(7)[1], 'cap', 'Кам’яна, і тепла отримує\nна третину менше, ніж ми'),
@@ -70,3 +69,46 @@ SUBSCRIBE_AT = _s['eye'][0] + 1.0
 END_CARD = P(36)[1] + 0.45
 END_TITLE = 'Куди полетимо\nнаступного разу?'
 NEXT_TEASE = 'Не проґав наступну планету'
+
+# ---- the comment that asked for this planet: a card over the picture while the camera swings round ----
+# comment.png (the author's screenshot, cropped to the comment) if it is there; otherwise a card drawn from the text
+CARD = (P(1)[1] + 0.05, EARTH[0] - 0.15)
+_card = {}
+def _card_img(g):
+    if 'im' in _card: return _card['im']
+    from PIL import Image, ImageDraw, ImageFilter
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = os.path.join(here, 'comment.png')
+    Wc = 880
+    if os.path.exists(src):
+        im = Image.open(src).convert('RGBA')
+        im = im.resize((Wc, int(im.size[1] * Wc / im.size[0])), Image.LANCZOS)
+    else:
+        f1, f2 = g['font']('Commissioner.ttf', 34, 700), g['font']('Commissioner.ttf', 38, 500)
+        text = 'Проксима Центавра b, або люба з планет\nнавколо зірки TRAPPIST-1'
+        im = Image.new('RGBA', (Wc, 230), (28, 30, 36, 255)); d = ImageDraw.Draw(im)
+        d.ellipse((30, 34, 104, 108), fill=(120, 150, 220, 255))
+        d.text((67, 71), 'A', font=g['font']('Unbounded.ttf', 38, 600), anchor='mm', fill=(255, 255, 255, 255))
+        d.text((128, 40), '@Andara', font=f1, fill=(200, 205, 215, 255))
+        d.multiline_text((128, 90), text, font=f2, fill=(245, 245, 250, 255), spacing=10)
+    # rounded corners
+    m = Image.new('L', im.size, 0); ImageDraw.Draw(m).rounded_rectangle((0, 0, im.size[0] - 1, im.size[1] - 1), 30, fill=255)
+    im.putalpha(Image.fromarray(__import__('numpy').minimum(__import__('numpy').asarray(im.getchannel('A')), __import__('numpy').asarray(m))))
+    _card['im'] = im
+    return im
+
+def DRAW(img, t, g):
+    a, b = CARD
+    al = g['ease'](g['fade'](t, a, b, 0.45))
+    if al <= 0: return
+    from PIL import Image, ImageFilter
+    im = _card_img(g)
+    slide = (1 - g['ease'](min(1.0, (t - a) / 0.5))) * 60
+    x = int((g['W'] - im.size[0]) / 2); y = int(560 - im.size[1] / 2 + slide)
+    g['draw_block'](img, 'Ви просили — показуємо', g['f_end3'], y - 46, al, fill=(255, 214, 160))
+    lay = im.copy()
+    if al < 1: lay.putalpha(lay.getchannel('A').point(lambda v: int(v * al)))
+    sh = Image.new('RGBA', img.size, (0, 0, 0, 0)); shl = Image.new('RGBA', lay.size, (0, 0, 0, 0))
+    shl.putalpha(lay.getchannel('A').point(lambda v: int(v * 0.7))); sh.paste(shl, (x, y + 8))
+    img.alpha_composite(sh.filter(ImageFilter.GaussianBlur(18)))
+    img.alpha_composite(lay, (x, y))
