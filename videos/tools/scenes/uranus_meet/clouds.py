@@ -654,27 +654,37 @@ GLIDE = 6.8      # s over the tops, then down into the deck (at «Тут най�
 DIVE = 8.5
 
 
-def cam_at(t):
-    # 0–GLIDE: skimming the tops southwards (towards the low Sun and the ring arch), banking gently over the swells;
-    # then easing down into the deck, through the tops into the dim cyan below
-    if t < GLIDE:
-        k = t / GLIDE
-        y = lerp(1900.0, -300.0, k)
-        x = -600.0 + 420.0 * math.sin(k * 2.2)
-        z = ZTOP + 260.0 - 70.0 * k + 25.0 * math.sin(k * 5.0)
-        pos = np.array([x, y, z])
-        tgt = np.array([x + 900.0 * math.cos(k * 2.2) * 0.45, y - 3000.0, z + 260.0 - 180.0 * k])
-        f, r, u = look(pos, tgt, roll=-0.10 * math.cos(k * 2.2))
-        return pos, f, r, u
-    k = min((t - GLIDE) / DIVE, 1.0)
+def _glide(t):
+    k = t / GLIDE                                   # (past 1: carried on, for the blend into the dive)
+    y = 1900.0 - 2200.0 * k
+    x = -600.0 + 420.0 * math.sin(k * 2.2)
+    z = ZTOP + 260.0 - 70.0 * k + 25.0 * math.sin(k * 5.0)
+    pos = np.array([x, y, z])
+    tgt = np.array([x + 900.0 * math.cos(k * 2.2) * 0.45, y - 3000.0, z + 260.0 - 180.0 * min(k, 1.0)])
+    return pos, tgt, -0.10 * math.cos(k * 2.2)
+
+
+def _dive(t):
+    k = min((t - GLIDE) / DIVE, 1.0)                # (before 0: carried back, for the blend)
     e = smooth(k)
-    y = lerp(-300.0, -1700.0, k)
-    x0 = -600.0 + 420.0 * math.sin(2.2)
-    x = x0 + 150.0 * k
-    z = ZTOP + 190.0 - 175.0 * (k ** 1.3) + 30.0 * math.sin(k * 7.0)
+    y = -300.0 - 1400.0 * k
+    x = -600.0 + 420.0 * math.sin(2.2) + 150.0 * k
+    z = ZTOP + 190.0 - 175.0 * (max(k, 0.0) ** 1.3) + 30.0 * math.sin(k * 7.0)
     pos = np.array([x, y, z])
     tgt = np.array([x + 300.0, y - 2600.0, z + 120.0 - 250.0 * e])
-    f, r, u = look(pos, tgt, roll=-0.10 * math.cos(2.2) * (1 - e))
+    return pos, tgt, -0.10 * math.cos(2.2) * (1 - e)
+
+
+def cam_at(t):
+    # 0–GLIDE: skimming the tops southwards (towards the low Sun and the ring arch), banking gently over the swells;
+    # then easing down through the tops. The two paths are blended over ~2.7 s (no jolt in the turn or the speed).
+    w = smooth((t - (GLIDE - 1.2)) / 2.7)
+    pg, tg, rg = _glide(t)
+    if w <= 0:
+        f, r, u = look(pg, tg, roll=rg); return pg, f, r, u
+    pd, td, rd = _dive(t)
+    pos = pg * (1 - w) + pd * w; tgt = tg * (1 - w) + td * w
+    f, r, u = look(pos, tgt, roll=rg * (1 - w) + rd * w)
     return pos, f, r, u
 
 
