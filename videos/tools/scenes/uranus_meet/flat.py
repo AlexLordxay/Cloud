@@ -69,7 +69,7 @@ def shot_herschel(t):
     al = int(255 * ease((t - 0.3) / 0.6))
     f1 = font('Unbounded.ttf', 54)
     text(dr, (W / 2, H * 0.46 - W * 0.44 - 60), '13 березня 1781', f1, (255, 214, 140, al))
-    kg = ease((t - d * 0.48) / 0.7)
+    kg = ease((t - 3.3) / 0.7)
     if kg > 0:
         f2 = font('CormorantItalic.ttf', 76, 700)
         text(dr, (W / 2, H * 0.46 + W * 0.44 + 70), 'Georgium Sidus', f2, (235, 225, 200, int(255 * kg)))
@@ -111,8 +111,8 @@ ALDE = vec(68.98, 16.51)
 def shot_skynow(t):
     d = DUR['skynow']
     S = sky()
-    k1 = ease(t / (d * 0.45))                    # the evening sky, Taurus
-    k2 = ease((t - d * 0.5) / (d * 0.35))         # into the binoculars
+    k1 = ease(t / 3.8)                           # the evening sky, Taurus
+    k2 = ease((t - 3.8) / 2.2)                    # into the binoculars (at «Візьми бінокль»)
     mid = 0.58 * PLEI + 0.42 * URAN; mid /= np.linalg.norm(mid)
     c0 = (PLEI + URAN + ALDE) / 3; c0 /= np.linalg.norm(c0)
     c = c0 * (1 - k2) + mid * k2; c /= np.linalg.norm(c)
@@ -159,7 +159,7 @@ if __name__ == '__main__':
         for t in map(float, sys.argv[3].split(',')):
             fn(t).save(os.path.join(WORK, f'st_{name}_{t}.jpg'), quality=90); print(name, t)
     else:
-        out = os.path.join(WORK, 'frames', name); os.makedirs(out, exist_ok=True)
+        out = os.path.join(WORK, 'shots', name); os.makedirs(out, exist_ok=True)
         for fi in range(int(round(DUR[name] * FPS))):
             p = os.path.join(out, f'f_{fi:05d}.jpg')
             if os.path.exists(p): continue

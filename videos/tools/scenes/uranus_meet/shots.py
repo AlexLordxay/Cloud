@@ -161,10 +161,11 @@ def shot_mystery(t):
     """the night side: a thin cyan crescent, the rings lit from behind — a cold, dark world"""
     d = DUR['mystery']
     k = ease(t / d)
-    cdir = unit(-S26 + lerp(0.42, 0.30, k) * SIDE + 0.12 * NORB)
-    cam = cdir * lerp(175000, 150000, k)
-    return U.frame(cam, (0, 0, 0), up=NORB, fovy=44, sun=S26, sun_int=0.0, ring_k=10, dust_k=1.0, rot=0.2 * t,
-                   star_gain=0.9)
+    cdir = unit(-S26 + lerp(0.10, 0.17, k) * SIDE + 0.05 * NORB)
+    cam = cdir * lerp(185000, 165000, k)
+    tgt = SIDE * lerp(6000, 9000, k)
+    return U.frame(cam, tgt, up=NORB, fovy=44, sun=S26, sun_int=220.0, ring_k=10, dust_k=6.0, rot=0.2 * t,
+                   star_gain=0.9, bloom=1.3)
 
 def shot_final(t):
     """pulling away: the planet and its rings shrink into the stars"""
@@ -309,7 +310,7 @@ if __name__ == '__main__':
             print(name, t, flush=True)
     else:
         nw, kw = (int(sys.argv[3]), int(sys.argv[4])) if len(sys.argv) > 4 else (1, 0)
-        out = os.path.join(U.WORK, 'frames', name); os.makedirs(out, exist_ok=True)
+        out = os.path.join(U.WORK, 'shots', name); os.makedirs(out, exist_ok=True)
         n = int(round(DUR[name] * FPS))
         for fi in range(n):
             if fi % nw != kw: continue

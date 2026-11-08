@@ -650,8 +650,8 @@ def lerp(a, b, k):
     return a + (b - a) * k
 
 
-GLIDE = 7.0      # s over the tops, then down into the deck
-DIVE = 7.0
+GLIDE = 6.8      # s over the tops, then down into the deck (at «Тут найхолодніше»)
+DIVE = 8.5
 
 
 def cam_at(t):
@@ -709,7 +709,7 @@ if __name__ == '__main__':
         elif mode == 'video':
             t0s, t1s = float(sys.argv[2]), float(sys.argv[3])
             nw, kw = (int(sys.argv[4]), int(sys.argv[5])) if len(sys.argv) > 5 else (1, 0)
-            out = os.path.join(WORK, 'cl'); os.makedirs(out, exist_ok=True)
+            out = os.path.join(WORK, '..', 'shots', 'clouds'); os.makedirs(out, exist_ok=True)
             for fi in range(int(t0s * 30), int(t1s * 30)):
                 if fi % nw != kw:
                     continue
