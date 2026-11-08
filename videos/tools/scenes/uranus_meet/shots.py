@@ -294,7 +294,12 @@ def shot_voyager(t):
     if os.path.exists(p):
         v = Image.open(p).convert('RGBA')
         bg = bg.convert('RGBA'); bg.alpha_composite(v); bg = bg.convert('RGB')
-    return bg
+    # a darker band low down, where the caption goes (the white dish is there)
+    a = np.asarray(bg, np.float32)
+    yy = np.linspace(0, 1, U.H)[:, None, None]
+    k_ = np.clip((yy - 0.56) / 0.22, 0, 1); k_ = k_ * k_ * (3 - 2 * k_)
+    a *= 1 - 0.40 * k_
+    return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
 
 SHOTS = {'voyager': shot_voyager, 'moons': shot_moons, 'rockfall': shot_rockfall, 'hook': shot_hook, 'scale': shot_scale, 'orbit': shot_orbit, 'ringdive': shot_ringdive, 'under': shot_under,
          'mystery': shot_mystery, 'final': shot_final}

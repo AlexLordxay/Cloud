@@ -66,13 +66,14 @@ def shot_herschel(t):
     img = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
     dr = ImageDraw.Draw(img, 'RGBA')
     # the date, and later the name he wanted for it
-    al = int(255 * ease((t - 0.3) / 0.6))
-    f1 = font('Unbounded.ttf', 54)
-    text(dr, (W / 2, H * 0.46 - W * 0.44 - 60), '13 березня 1781', f1, (255, 214, 140, al))
     kg = ease((t - 3.3) / 0.7)
+    al = int(255 * ease((t - 0.3) / 0.6) * (1 - kg))
+    f1 = font('Unbounded.ttf', 54)
+    ytop = H * 0.46 - W * 0.44 - 60
+    if al > 0: text(dr, (W / 2, ytop), '13 березня 1781', f1, (255, 214, 140, al))
     if kg > 0:
-        f2 = font('CormorantItalic.ttf', 76, 700)
-        text(dr, (W / 2, H * 0.46 + W * 0.44 + 70), 'Georgium Sidus', f2, (235, 225, 200, int(255 * kg)))
+        f2 = font('CormorantItalic.ttf', 80, 700)
+        text(dr, (W / 2, ytop - 6), 'Georgium Sidus', f2, (235, 225, 200, int(255 * kg)))
     return img
 
 # ---------------------------------------------------------------------------------------------------- Miranda (photo)
