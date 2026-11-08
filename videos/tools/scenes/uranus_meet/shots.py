@@ -77,7 +77,7 @@ def orbit_state(t):
     th = (year - 2026.9) / 84.02 * 2 * math.pi
     e1 = -S26; e2 = unit(np.cross(NORB, e1))
     PU = ORB_D * (math.cos(th) * e1 + math.sin(th) * e2)            # Uranus relative to the Sun (inertial)
-    C = NORB * 13.5 * RE - e1 * 5.5 * RE + e2 * 1.0 * RE                   # the camera, relative to the Sun
+    C = NORB * 17.0 * RE - e1 * 3.0 * RE                   # the camera, relative to the Sun
     return year, PU, C, e1, e2
 
 def shot_orbit(t):
@@ -85,12 +85,12 @@ def shot_orbit(t):
     year, PU, C, e1, e2 = orbit_state(t)
     cam = C - PU
     sunpos = -PU
-    tgt = sunpos * 0.55
+    tgt = sunpos * 0.92
     sph = [[*sunpos, 1.35 * RE, 2, 0.1 * t, 0.0]]
-    img = U.frame(cam, tgt, up=NORB, fovy=52, sun=unit(sunpos), rot=0.0, ring_k=26, spheres=sph, bloom=1.4,
+    img = U.frame(cam, tgt, up=NORB, fovy=66, sun=unit(sunpos), rot=0.0, ring_k=26, spheres=sph, bloom=1.4,
                   star_gain=0.6)
     # the orbit (dashed) and the axis through the poles, drawn on top
-    TY = math.tan(math.radians(52) / 2)
+    TY = math.tan(math.radians(66) / 2)
     dr = ImageDraw.Draw(img, 'RGBA')
     def proj(p):
         r, u, f = U.TR.cam_basis(cam, tgt, NORB)
@@ -185,20 +185,20 @@ def shot_moons(t):
     k = ease(t / d)
     vdir = unit(rot_about(S26, NORB, math.radians(-30)) + 0.1 * NORB)
     upv = unit(NORB - vdir * (NORB @ vdir)); right = unit(np.cross(vdir, upv))
-    cam = vdir * 330000 + right * lerp(-9000, 9000, k)
+    cam = vdir * 330000 + right * lerp(-250, 250, k)
     sph, pos = [], []
     for i, (nm, rad, tex, q) in enumerate(MOONS):
         a = (i - 2) / 2.0
-        p = vdir * (330000 - 16000 - 3500 * i) + right * (a * 3000 - 900) + upv * (2400 - 600 * a * a - 3600 * (i % 2))
+        p = vdir * (330000 - 16000 - 3500 * i) + right * (a * 2600 - 150) + upv * (2400 - 600 * a * a - 3600 * (i % 2))
         sph.append([*p, rad, tex, 0.7 * i + 0.05 * t, 0.2]); pos.append((nm, p, rad))
-    img = U.frame(cam, cam - vdir * 330000 + right * lerp(-9000, 9000, k), up=upv, fovy=40, sun=S26, ring_k=16,
+    img = U.frame(cam, cam - vdir * 330000 + right * lerp(-250, 250, k), up=upv, fovy=40, sun=S26, ring_k=16,
                   spheres=sph, rot=0.25 * t)
     # the names under them
     f = ImageFont.truetype(os.path.join(U.TOOLS, 'fonts', 'Commissioner.ttf'), 30)
     try: f.set_variation_by_axes([600])
     except Exception: pass
     dr = ImageDraw.Draw(img)
-    r_, u_, f_ = U.TR.cam_basis(cam, cam - vdir * 330000 + right * lerp(-9000, 9000, k), upv)
+    r_, u_, f_ = U.TR.cam_basis(cam, cam - vdir * 330000 + right * lerp(-250, 250, k), upv)
     TY = math.tan(math.radians(20)); TX = TY * U.W / U.H
     al = int(255 * min(1.0, t / 0.5, (d - t) / 0.4))
     for nm, p, rad in pos:
