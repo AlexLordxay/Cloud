@@ -66,8 +66,8 @@ def shot_herschel(t):
     img = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
     dr = ImageDraw.Draw(img, 'RGBA')
     # the date, and later the name he wanted for it
-    kg = ease((t - 3.3) / 0.7)
-    al = int(255 * ease((t - 0.3) / 0.6) * (1 - kg))
+    kg = ease((t - 3.45) / 0.5)
+    al = int(255 * ease((t - 0.3) / 0.6) * (1 - ease((t - 3.0) / 0.4)))
     f1 = font('Unbounded.ttf', 54)
     ytop = H * 0.46 - W * 0.44 - 60
     if al > 0: text(dr, (W / 2, ytop), '13 березня 1781', f1, (255, 214, 140, al))
