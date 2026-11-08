@@ -54,14 +54,20 @@ def h3(i, j, k, s):
     return (h & 0xffffff) / 16777216.0
 
 @njit(cache=True)
+def grooves(y, P):
+    """radial structure: the optical depth changes across the ring (km to tens of metres) — long streaks along it"""
+    g = 0.55 + 0.75 * fbm(y * 0.00055, 1.7, 0.3, P, 4, 2.2, 0.55) + 0.45 * fbm(y * 0.0045, 4.1, 0.9, P, 3, 2.1, 0.5)
+    g += 0.25 * fbm(y * 0.04, 7.3, 2.2, P, 2, 2.0, 0.5)
+    return min(1.9, max(0.15, g))
+
+@njit(cache=True)
 def wake(x, y, P):
-    """the clumping of the sheet: streaks ~25° from the orbital direction, tens of metres apart"""
-    c, s = 0.906, 0.423
+    """the clumping of the sheet: streaks stretched along the orbit, ragged, ~20° off it, on top of the grooves"""
+    c, s = 0.94, 0.34
     u = x * c + y * s; v = -x * s + y * c
-    w = 0.5 + 0.5 * math.sin(v * 0.11 + 2.2 * fbm(u * 0.004, v * 0.02, 0.0, P, 3, 2.0, 0.5))
-    w = w ** 1.6
-    n = fbm(x * 0.013, y * 0.013, 3.0, P, 4, 2.0, 0.55)
-    return min(1.0, max(0.0, 0.25 + 0.85 * w + 0.35 * n))
+    w = 0.5 + 0.6 * fbm(u * 0.0018, v * 0.022, 5.0, P, 4, 2.1, 0.55)
+    n = fbm(x * 0.02, y * 0.02, 3.0, P, 3, 2.0, 0.55)
+    return min(1.0, max(0.0, (0.25 + 0.75 * w + 0.25 * n) * grooves(y, P)))
 
 @njit(cache=True, inline='always')
 def edge_k(y):
@@ -154,6 +160,7 @@ def trace(ox, oy, oz, dx, dy, dz, tmax, P, want_n):
 def render_ring(img, alp, RW, RH, ox, oy, oz, rx, ry, rz, ux, uy, uz, fx, fy, fz, TX, TY, Sx, Sy, Sz, sun,
                 Ux, Uy, Uz, uni, P, near_k, far_k, dust_k):
     """the ring layer: premultiplied colour + opacity. (Sx..): to the Sun; (Ux..): to Uranus' centre; uni: its light"""
+    pixm = 2.0 * TY / RH
     for j in prange(RH):
         for i in range(RW):
             px_ = ((i + 0.5) / RW * 2 - 1) * TX; py_ = (1 - (j + 0.5) / RH * 2) * TY
@@ -207,20 +214,23 @@ def render_ring(img, alp, RW, RH, ox, oy, oz, rx, ry, rz, ux, uy, uz, fx, fy, fz
                 if tp > 0 and nk > 0:
                     qx = ox + dx * tp; qy = oy + dy * tp
                     mu = abs(dz)
-                    ek = edge_k(qy)
+                    fpm = max(tp * pixm / max(mu, 0.01), 1.0)
+                    wl = HALF_W * 1000.0
+                    lo = max(qy - fpm * 0.5, -wl); hi = min(qy + fpm * 0.5, wl)
+                    ek = max(0.0, hi - lo) / fpm
                     if ek > 0:
                         w = wake(qx, qy, P)
-                        tau = 1.6 * (0.35 + 0.95 * w) * ek
-                        # far away a pixel covers many streaks: blur them out
+                        gr = grooves(qy, P)
+                        # far away a pixel covers many streaks: blur them out (the grooves along the ring stay)
                         dist = tp
-                        fade = smooth(20000.0, 200000.0, dist)
-                        tau = tau * (1 - fade) + 1.6 * 0.80 * ek * fade
+                        fade = smooth(3000.0, 60000.0, dist)
+                        tau = 1.6 * ((0.30 + 1.0 * w) * (1 - fade) + 0.8 * gr * fade) * ek
                         op = (1.0 - math.exp(-tau / max(mu, 0.004))) * nk
                         mu0 = abs(Sz)
                         same = (oz > 0) == (Sz > 0)
                         lit = ALB * 0.9 * (mu0 if same else 0.12 * mu0) * 0.45
                         n = fbm(qx * 0.03, qy * 0.03, 7.0, P, 3, 2.0, 0.5)
-                        lit *= (1.0 + 0.25 * n * (1 - fade)) * (0.12 + 0.88 * smooth(0.0, 0.3, mu))
+                        lit *= (0.75 + 0.35 * min(gr, 1.4)) * (1.0 + 0.25 * n * (1 - fade)) * (0.12 + 0.88 * smooth(0.0, 0.3, mu))
                         hz_k = 0.2 + 0.8 * smooth(0.0, 0.3, mu)
                         fr = lit * sun * 1.00 + ALB * 0.4 * uni * 0.62 * hz_k
                         fg = lit * sun * 0.97 + ALB * 0.4 * uni * 0.92 * hz_k

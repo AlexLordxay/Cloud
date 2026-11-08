@@ -53,7 +53,8 @@ def load_tex(name, w=2048, h=1024):
 _tex = {}
 def textures():
     if not _tex:
-        _tex['all'] = np.stack([load_tex('earth_day.jpg'), load_tex('miranda.jpg')])
+        _tex['all'] = np.stack([load_tex(n) for n in ('earth_day.jpg', 'miranda.jpg', 'sun.jpg', 'titania.jpg',
+                                                          'oberon.jpg', 'moon.jpg')])
     return _tex['all']
 
 @njit(cache=True, inline='always')
@@ -184,7 +185,11 @@ def render(img, mask, RW, RH, ox, oy, oz, rx, ry, rz, ux, uy, uz, fx, fy, fz, TX
                 ab = tex_samp(TEX, k, TW, TH, tx2, ty2, tz_, 2)
                 mu0 = nx * Sx + ny * Sy + nz * Sz
                 dif = max(mu0, 0.0) * smooth(-0.02, 0.05, mu0)
-                if k == 0:                                # the Earth: a thin blue atmosphere at the limb
+                if k == 2:                                # the Sun (the orbit diagram): it shines
+                    nv = max(-(nx * dx + ny * dy + nz * dz), 0.0)
+                    e = (0.45 + 0.55 * nv ** 0.5) * 9.0
+                    col_r = ar * e * 1.4; col_g = ag * e * 1.2; col_b = ab * e * 0.9
+                elif k == 0:                              # the Earth: a thin blue atmosphere at the limb
                     nv = -(nx * dx + ny * dy + nz * dz)
                     rim = (1 - max(nv, 0.0)) ** 3 * smooth(-0.1, 0.3, mu0)
                     col_r = ar * dif * 1.6 + 0.05 * rim; col_g = ag * dif * 1.6 + 0.12 * rim; col_b = ab * dif * 1.6 + 0.35 * rim
