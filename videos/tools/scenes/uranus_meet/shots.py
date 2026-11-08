@@ -189,7 +189,7 @@ def shot_moons(t):
     sph, pos = [], []
     for i, (nm, rad, tex, q) in enumerate(MOONS):
         a = (i - 2) / 2.0
-        p = vdir * (330000 - 16000 - 3500 * i) + right * (a * 2600 - 150) + upv * (2400 - 600 * a * a - 3600 * (i % 2))
+        p = vdir * (330000 - 16000 - 3500 * i) + right * (a * 2450 + 700) + upv * (2400 - 600 * a * a - 3600 * (i % 2))
         sph.append([*p, rad, tex, 0.7 * i + 0.05 * t, 0.2]); pos.append((nm, p, rad))
     img = U.frame(cam, cam - vdir * 330000 + right * lerp(-250, 250, k), up=upv, fovy=40, sun=S26, ring_k=16,
                   spheres=sph, rot=0.25 * t)
