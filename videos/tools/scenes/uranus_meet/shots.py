@@ -213,27 +213,55 @@ def shot_moons(t):
 # ---------------------------------------------------------------------------------------------------- Miranda: the fall
 G_MIR = 7.9e-5        # km/s², Miranda's gravity
 def shot_rockfall(t):
-    """beside a rock falling down Verona Rupes: 20 km take ~12 minutes; the clock races"""
+    """beside a rock falling down Verona Rupes: 20 km take ~12 minutes; the clock races; it lands, dust flies up"""
     import miranda as M
     from PIL import ImageFont
     d = DUR['rockfall']
     k = t / d
-    sim = 711.0 * k ** 1.7
+    T_HIT = 0.80                                   # the share of the shot when it lands
+    kf = min(1.0, k / T_HIT)
     e = M.edge_y(0.0, M.PERM); z0 = M.ground(0.0, e - 0.004)
+    prof = 0.0
+    sim = 711.0 * kf ** 1.7
     dz = 0.3 + 0.5 * G_MIR * sim * sim
-    zr = z0 - dz
     prof = min(0.999, dz / M.HC)
     sc = 1.0 - (1.0 - prof) ** (1 / 1.12)
     yr = e + sc * M.RUN + 0.035
-    rk = [0.0, yr, zr, 0.002, 3.0]
-    pull = 1.0 + 40.0 * k ** 3
+    zg = M.ground(0.0, yr)                          # the ground under it
+    zr = max(z0 - dz, zg + 0.002)
+    landed = k >= T_HIT
+    if landed:
+        sim = math.sqrt(2 * (zr_top := (z0 - zg - 0.3)) / G_MIR) if (z0 - zg - 0.3) > 0 else 711.0
+        dz = z0 - zr
+    rk = [0.0, yr, zr, 0.002 if not landed else 0.0, 3.0]
+    pull = 1.0 + 40.0 * kf ** 3 + 6.0 * max(0.0, k - T_HIT)
     cam = np.array([0.06 * pull, yr + 0.06 * pull, zr + 0.03 * pull])
     tgt = np.array([0.0, yr - 0.02 * pull ** 0.5, zr - 0.05 * pull])
-    img = M.cliff_frame(cam, tgt, fovy=60 + 8 * k, rock=rk)
+    w = (lambda x: x * x * (3 - 2 * x))(min(1.0, max(0.0, (kf - 0.75) / 0.25)))
+    tgt = tgt * (1 - w) + np.array([0.0, yr, zr]) * w           # at the end: look at where it lands
+    img = M.cliff_frame(cam, tgt, fovy=60 + 8 * kf, rock=rk)
+    if landed:
+        # the dust thrown up where it hit: a soft pale burst growing and thinning (low gravity: it hangs)
+        r_, u_, f_ = U.TR.cam_basis(cam, tgt, (0, 0, 1))
+        TY = math.tan(math.radians((60 + 8 * kf) / 2)); TX = TY * U.W / U.H
+        v = np.array([0.0, yr, zr]) - cam; zz = v @ f_
+        if zz > 0:
+            x = ((v @ r_) / zz / TX + 1) / 2 * U.W; y = (1 - (v @ u_) / zz / TY) / 2 * U.H
+            q = (k - T_HIT) / (1 - T_HIT)
+            lay = Image.new('RGBA', img.size, (0, 0, 0, 0)); dl = ImageDraw.Draw(lay)
+            for j in range(7):
+                rr = (18 + 110 * q ** 0.6) * (0.5 + 0.12 * j)
+                dy = -rr * 0.5
+                a = int(235 * (1 - q) ** 1.1 * (1 - j / 8))
+                dl.ellipse([x - rr * 1.3, y + dy - rr * 0.7, x + rr * 1.3, y + dy + rr * 0.7], fill=(225, 228, 232, a))
+            from PIL import ImageFilter
+            lay = lay.filter(ImageFilter.GaussianBlur(10))
+            img = img.convert('RGBA'); img.alpha_composite(lay); img = img.convert('RGB')
     # the clock (minutes of the real fall)
     f = ImageFont.truetype(os.path.join(U.TOOLS, 'fonts', 'Unbounded.ttf'), 64)
     try: f.set_variation_by_axes([600])
     except Exception: pass
+    sim = min(sim, 711.0)
     mm, ss = int(sim // 60), int(sim % 60)
     txt = f"{mm}:{ss:02d}"
     dr = ImageDraw.Draw(img)
@@ -241,7 +269,7 @@ def shot_rockfall(t):
     dr.text(((U.W - w) / 2 + 3, 150 + 3), txt, font=f, fill=(0, 0, 0))
     dr.text(((U.W - w) / 2, 150), txt, font=f, fill=(255, 214, 140))
     f2 = ImageFont.truetype(os.path.join(U.TOOLS, 'fonts', 'Commissioner.ttf'), 30)
-    lab = f"падає {dz:.1f} км".replace('.', ',')
+    lab = (f"падає {dz:.1f} км" if not landed else f"дно: {dz:.1f} км").replace('.', ',')
     w2 = dr.textlength(lab, font=f2)
     dr.text(((U.W - w2) / 2 + 2, 235 + 2), lab, font=f2, fill=(0, 0, 0)); dr.text(((U.W - w2) / 2, 235), lab, font=f2, fill=(230, 235, 240))
     return img

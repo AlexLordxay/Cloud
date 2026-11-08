@@ -77,7 +77,14 @@ def height(x, y, P, fine):
     # the plain below: rolling, cratered
     if s > 0.8:
         k = smooth(0.8, 1.0, s)
-        z += k * (0.5 * fbm(x * 0.12, y * 0.12, 9.1, P, 4, 2.0, 0.5) + crater(x, y, 4.0, 3.0, P))
+        # the floor: hummocky, cratered at every scale
+        fl = 0.5 * fbm(x * 0.12, y * 0.12, 9.1, P, 4, 2.0, 0.5) + 0.12 * fbm(x * 0.7, y * 0.7, 3.7, P, 5, 2.1, 0.55)
+        fl += crater(x, y, 4.0, 3.0, P) + 0.9 * crater(x, y, 1.3, 7.0, P) + 0.8 * crater(x, y, 0.35, 8.0, P)
+        # the talus at the foot of the wall: a fan of rubble, lumpy, with big blocks
+        d = (y - e) / RUN - 1.0
+        tal = 1.6 * max(0.0, 1.0 - d / 0.35) ** 2 * (0.7 + 0.5 * fbm(x * 0.5, 0.3, 2.9, P, 3, 2.0, 0.5))
+        tal += 0.06 * abs(fbm(x * 4.0, y * 4.0, 1.9, P, 4, 2.1, 0.55)) * max(0.0, 1.0 - d / 0.5)
+        z += k * (fl + tal)
     if fine:
         # metres-scale relief near the camera: regolith, small craters, stones
         z += 0.0015 * fbm(x * 900.0, y * 900.0, 1.3, P, 3, 2.0, 0.5) + 0.004 * fbm(x * 180.0, y * 180.0, 2.7, P, 3, 2.0, 0.5)
@@ -166,7 +173,8 @@ def render(img, mask, RW, RH, ox, oy, oz, rx, ry, rz, ux, uy, uz, fx, fy, fz, TX
             # albedo: grey ice, the scarp face brighter (fresh), dark streaks, light bands of layers
             zz = hgt(GC, GM, GF, x, y)
             face = smooth(0.35, 0.75, 1.0 - nz)
-            al = 0.30 * (1.0 + 0.25 * fbm(x * 0.6, y * 0.6, 4.0, P, 4, 2.0, 0.5) + 0.12 * fbm(x * 40, y * 40, 5.0, P, 3, 2.0, 0.5))
+            al = 0.30 * (1.0 + 0.25 * fbm(x * 0.6, y * 0.6, 4.0, P, 4, 2.0, 0.5) + 0.12 * fbm(x * 40, y * 40, 5.0, P, 3, 2.0, 0.5)
+                         + 0.30 * fbm(x * 0.07, y * 0.07, 6.3, P, 3, 2.0, 0.5) + 0.10 * fbm(x * 4.0, y * 4.0, 8.8, P, 3, 2.0, 0.5))
             al *= 1.0 + face * (0.35 + 0.25 * math.sin(zz * 3.1 + 2.0 * fbm(x * 0.5, zz * 0.3, 1.0, P, 2, 2.0, 0.5)))
             # shadow towards the Sun: march the heightfield
             lit = max(nx * Sx + ny * Sy + nz * Sz, 0.0)

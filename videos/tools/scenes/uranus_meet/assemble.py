@@ -13,8 +13,9 @@ OUT = os.path.join(WORK, 'frames')
 W, H, FPS = 720, 1280, 30
 TL = json.load(open(os.path.join(HERE, 'timeline.json')))
 ORDER = TL['order']
-XF = {'scale': 10, 'herschel': 8, 'orbit': 8, 'ringdive': 8, 'under': 0, 'clouds': 0, 'mystery': 10, 'moons': 8,
-      'mirphoto': 8, 'rockfall': 6, 'voyager': 8, 'skynow': 10, 'final': 10}
+DIP = {'mystery': 14, 'voyager': 12}       # through black: out of the bright clouds into space; off the cliff's floor
+XF = {'scale': 10, 'herschel': 8, 'orbit': 8, 'ringdive': 8, 'under': 0, 'clouds': 0, 'mystery': 0, 'moons': 8,
+      'mirphoto': 8, 'rockfall': 6, 'voyager': 0, 'skynow': 10, 'final': 10}
 
 def shot_frame(name, i):
     d = os.path.join(WORK, 'shots', name)
@@ -70,6 +71,15 @@ def frame(g):
         t14 = TL['phrases'][14]['t0'] - s['t0']         # «Тут найхолодніше…»
         kf = (lt - (t14 - 0.3)) / (s['t1'] - s['t0'] - t14 + 0.3)
         if kf > 0: img = frost(img, 0.72 * min(1.0, kf) ** 0.8)
+    # dips to black: the end of the shot before, and the start of this one
+    n0 = DIP.get(name, 0)
+    if n0 and i < n0:
+        img = Image.eval(img, lambda v, a=(i + 1) / (n0 + 1): int(v * a ** 1.3))
+    if k + 1 < len(ORDER):
+        nx = ORDER[k + 1]; n1 = DIP.get(nx['name'], 0)
+        left = int(round(nx['t0'] * FPS)) - g
+        if n1 and left <= n1:
+            img = Image.eval(img, lambda v, a=(left - 0.5) / (n1 + 0.5): int(v * max(0.0, a) ** 1.3))
     xf = XF.get(name, 0)
     if k > 0 and xf and i < xf:
         p = ORDER[k - 1]
