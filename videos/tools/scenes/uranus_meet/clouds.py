@@ -671,7 +671,7 @@ def cam_at(t):
     y = lerp(-300.0, -1700.0, k)
     x0 = -600.0 + 420.0 * math.sin(2.2)
     x = x0 + 150.0 * k
-    z = ZTOP + 190.0 - 250.0 * (k ** 1.3) + 25.0 * math.sin(k * 7.0)
+    z = ZTOP + 190.0 - 175.0 * (k ** 1.3) + 30.0 * math.sin(k * 7.0)
     pos = np.array([x, y, z])
     tgt = np.array([x + 300.0, y - 2600.0, z + 120.0 - 250.0 * e])
     f, r, u = look(pos, tgt, roll=-0.10 * math.cos(2.2) * (1 - e))
