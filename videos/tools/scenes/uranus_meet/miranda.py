@@ -23,7 +23,7 @@ A_MIR = 129900.0     # km, its orbit
 # the coarse grid (km)
 CX0, CY0, CN, CH = -40.0, -40.0, 4096, 80.0 / 4096
 # the mid grid along the fall (km)
-MX0, MY0, MN, MH = -4.0, -1.5, 3072, 9.0 / 3072
+MX0, MY0, MN, MH = -4.0, -1.5, 3072, 11.0 / 3072
 # the fine grid at the rim, round the start (km)
 FX0, FY0, FN, FH = -0.5, -0.6, 2048, 1.0 / 2048
 

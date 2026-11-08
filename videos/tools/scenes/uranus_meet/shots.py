@@ -223,16 +223,17 @@ def shot_rockfall(t):
     e = M.edge_y(0.0, M.PERM); z0 = M.ground(0.0, e - 0.004)
     prof = 0.0
     sim = 711.0 * kf ** 1.7
+    # where the fall ends: the floor under the fall line (the talus), and when it gets there
+    zg = M.ground(0.0, e + M.RUN * 0.995 + 0.035)
+    t_land = math.sqrt(2 * max(z0 - 0.3 - zg, 0.01) / G_MIR)
+    landed = k >= T_HIT or sim >= t_land
+    sim = min(sim, t_land)
     dz = 0.3 + 0.5 * G_MIR * sim * sim
     prof = min(0.999, dz / M.HC)
     sc = 1.0 - (1.0 - prof) ** (1 / 1.12)
     yr = e + sc * M.RUN + 0.035
-    zg = M.ground(0.0, yr)                          # the ground under it
-    zr = max(z0 - dz, zg + 0.002)
-    landed = k >= T_HIT
-    if landed:
-        sim = math.sqrt(2 * (zr_top := (z0 - zg - 0.3)) / G_MIR) if (z0 - zg - 0.3) > 0 else 711.0
-        dz = z0 - zr
+    zr = max(z0 - dz, M.ground(0.0, yr) + 0.002)
+    dz = z0 - zr
     rk = [0.0, yr, zr, 0.002 if not landed else 0.0, 3.0]
     pull = 1.0 + 40.0 * kf ** 3 + 6.0 * max(0.0, k - T_HIT)
     cam = np.array([0.06 * pull, yr + 0.06 * pull, zr + 0.03 * pull])
@@ -247,7 +248,8 @@ def shot_rockfall(t):
         v = np.array([0.0, yr, zr]) - cam; zz = v @ f_
         if zz > 0:
             x = ((v @ r_) / zz / TX + 1) / 2 * U.W; y = (1 - (v @ u_) / zz / TY) / 2 * U.H
-            q = (k - T_HIT) / (1 - T_HIT)
+            k_land = T_HIT * min(1.0, t_land / 711.0) ** (1 / 1.7)
+            q = max(0.0, (k - k_land) / (1 - k_land))
             lay = Image.new('RGBA', img.size, (0, 0, 0, 0)); dl = ImageDraw.Draw(lay)
             for j in range(7):
                 rr = (18 + 110 * q ** 0.6) * (0.5 + 0.12 * j)
@@ -269,7 +271,7 @@ def shot_rockfall(t):
     dr.text(((U.W - w) / 2 + 3, 150 + 3), txt, font=f, fill=(0, 0, 0))
     dr.text(((U.W - w) / 2, 150), txt, font=f, fill=(255, 214, 140))
     f2 = ImageFont.truetype(os.path.join(U.TOOLS, 'fonts', 'Commissioner.ttf'), 30)
-    lab = (f"падає {dz:.1f} км" if not landed else f"дно: {dz:.1f} км").replace('.', ',')
+    lab = (f"падає {dz:.1f} км" if not landed else "").replace('.', ',')
     w2 = dr.textlength(lab, font=f2)
     dr.text(((U.W - w2) / 2 + 2, 235 + 2), lab, font=f2, fill=(0, 0, 0)); dr.text(((U.W - w2) / 2, 235), lab, font=f2, fill=(230, 235, 240))
     return img
