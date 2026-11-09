@@ -20,7 +20,7 @@ WORK = os.path.join(TOOLS, 'work', 'parade'); SITE = os.path.join(TOOLS, 'work',
 VIDEOS = os.path.abspath(os.path.join(TOOLS, '..'))
 FF = __import__('imageio_ffmpeg').get_ffmpeg_exe()
 SC = json.load(open(os.path.join(HERE, 'scene.json'))); B = SC['beats']; DUR = SC['duration']; FPS = 30
-METEOR_K = 0.3
+METEOR_K = 0.15
 W, H = 1080, 1920
 GOLD, BLUE, GREEN, RED = (247, 198, 107), (156, 194, 255), (130, 230, 170), (255, 130, 100)
 
@@ -320,7 +320,7 @@ def frames():
 def sound():
     subprocess.run(['node', os.path.join(HERE, 'music.js')], check=True, cwd=TOOLS)
     # glints for the meteors and soft pops for the badges (synthesised)
-    # 10.11: the author — the meteor glints cut the ear: 70 % quieter (METEOR_K), the rest of the mix level unchanged
+    # 10.11: the author — the meteor glints cut the ear: 85 % quieter (twice down) (METEOR_K), the rest of the mix level unchanged
     SR = 44100; N = int(DUR * SR); mix = np.zeros(N); mixm = np.zeros(N)
     def add(x, at, k, mix=mix):
         i0 = int(at * SR); j0 = min(N, i0 + len(x));
