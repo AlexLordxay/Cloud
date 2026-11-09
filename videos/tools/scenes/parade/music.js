@@ -37,7 +37,7 @@ function score({ organ, FL, REG_MID, lv }, S, T) {
   });
   CH.forEach(([a, ns, d], i) => { const b = CH[i + 1] ? CH[i + 1][0] : T; if (b - a < 2.5 || d < 0.27) return; organ(a + 0.7, b - 0.2, ns[2] + 24, FL, 0.04, 2600, 1.0, 1.2, 4.6 + 0.1 * (i % 4)); });
   // the meteors: a light high note each, like a glint
-  for (const m of S.meteors || []) organ(m, m + 1.4, 88 + (Math.round(m * 7) % 3) * 2, FL, 0.03, 4200, 0.02, 1.2);
+  for (const m of S.meteors || []) organ(m, m + 1.4, 88 + (Math.round(m * 7) % 3) * 2, FL, 0.021, 4200, 0.02, 1.2);
 }
 
 (async () => {

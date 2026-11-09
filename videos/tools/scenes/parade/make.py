@@ -20,6 +20,7 @@ WORK = os.path.join(TOOLS, 'work', 'parade'); SITE = os.path.join(TOOLS, 'work',
 VIDEOS = os.path.abspath(os.path.join(TOOLS, '..'))
 FF = __import__('imageio_ffmpeg').get_ffmpeg_exe()
 SC = json.load(open(os.path.join(HERE, 'scene.json'))); B = SC['beats']; DUR = SC['duration']; FPS = 30
+METEOR_K = 0.3
 W, H = 1080, 1920
 GOLD, BLUE, GREEN, RED = (247, 198, 107), (156, 194, 255), (130, 230, 170), (255, 130, 100)
 
@@ -319,17 +320,19 @@ def frames():
 def sound():
     subprocess.run(['node', os.path.join(HERE, 'music.js')], check=True, cwd=TOOLS)
     # glints for the meteors and soft pops for the badges (synthesised)
-    SR = 44100; N = int(DUR * SR); mix = np.zeros(N)
-    def add(x, at, k):
+    # 10.11: the author — the meteor glints cut the ear: 70 % quieter (METEOR_K), the rest of the mix level unchanged
+    SR = 44100; N = int(DUR * SR); mix = np.zeros(N); mixm = np.zeros(N)
+    def add(x, at, k, mix=mix):
         i0 = int(at * SR); j0 = min(N, i0 + len(x));
         if i0 < N: mix[i0:j0] += k * x[:j0 - i0]
     tt = np.arange(int(1.2 * SR)) / SR
     for m in B['meteors']:
         f0 = 2400 + 300 * ((m * 7) % 3); x = np.sin(2 * np.pi * f0 * tt) * np.exp(-tt / 0.35) * np.minimum(1, tt / 0.01)
-        x += 0.5 * np.sin(2 * np.pi * f0 * 1.5 * tt) * np.exp(-tt / 0.25); add(x, m, 0.12)
+        x += 0.5 * np.sin(2 * np.pi * f0 * 1.5 * tt) * np.exp(-tt / 0.25); add(x, m, 0.12, mixm)
     tp = np.arange(int(0.12 * SR)) / SR; pop = np.sin(2 * np.pi * np.cumsum(800 * (1 + 0.6 * np.exp(-tp / 0.02))) / SR) * np.exp(-tp / 0.03)
     for at in [B['mercury'] + 1.4, B['venus'] + 1.6, B['mars'] + 1.2, B['jupiter'] + 1.6, B['ruler'], B['card'] + 0.4, B['card'] + 1.6, B['card'] + 6.5, B['card'] + 7.1]: add(pop, at, 0.25)
-    st = np.stack([mix, mix], 1); st = st / max(1e-9, np.abs(st).max()) * 0.6
+    sc = 0.6 / max(1e-9, np.abs(mix + mixm).max()); mix = (mix + METEOR_K * mixm) * sc
+    st = np.stack([mix, mix], 1)
     import wave
     with wave.open(os.path.join(WORK, 'sfx.wav'), 'wb') as w:
         w.setnchannels(2); w.setsampwidth(2); w.setframerate(SR); w.writeframes((st * 32767).astype(np.int16).tobytes())
@@ -341,6 +344,11 @@ def sound():
 
 def encode():
     out = os.path.join(VIDEOS, 'parade.mp4')
+    if not os.path.exists(os.path.join(WORK, 'out', 'f_00000.jpg')):   # no frames here: keep the picture, swap the sound
+        old = os.path.join(WORK, 'old.mp4'); os.replace(out, old)
+        subprocess.run([FF, '-y', '-loglevel', 'error', '-i', old, '-i', os.path.join(WORK, 'mix.wav'), '-map', '0:v', '-map', '1:a',
+                        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out], check=True)
+        os.remove(old); print('written (sound only)', out); return
     subprocess.run([FF, '-y', '-loglevel', 'error', '-framerate', str(FPS), '-i', os.path.join(WORK, 'out', 'f_%05d.jpg'), '-i', os.path.join(WORK, 'mix.wav'),
                     '-map', '0:v', '-map', '1:a', '-t', f'{DUR:.2f}', '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p',
                     '-profile:v', 'high', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', out], check=True)
