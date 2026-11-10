@@ -25,11 +25,11 @@ HW, HH = W // 2, H // 2                 # the haze is marched at half resolution
 FPS = 30
 DUR = 5.6
 FOV = math.radians(62)
-HUB = 0.16                              # a(t) = exp(HUB t): ×2.45 over the shot
-V = 2.6                                 # the camera's physical speed (units/s)
+HUB = 0.09                              # a(t) = exp(HUB t): ×1.65 over the shot
+V = 3.6                                 # the camera's physical speed (units/s)
 FOG = 11.0                              # the haze's mean free path (units) — how far one sees into it
 SMAX = 34.0                             # the march length
-NSTEP = 110
+NSTEP = 130
 SEED = 7
 ROT = (0.939209, -0.342924, -0.017026, 0.150755, 0.367325, 0.917794, -0.308480, -0.864567, 0.396692)   # a fixed random rotation: no grid-aligned features
 
@@ -81,7 +81,7 @@ def density(x, y, z):
 
 # ------------------------------------------------------------------------------------------------------- the haze
 @njit(parallel=True, cache=True)
-def march(img, cc0, cc1, cc2, fw, rt, up, a, tanh, aspect, nstep, smax, fog, jit):
+def march(img, cc0, cc1, cc2, fw, rt, up, a, tanh, aspect, nstep, smax, fog, jit, ksig, kem):
     h, w = img.shape[0], img.shape[1]
     ds = smax / nstep
     for py in prange(h):
@@ -102,8 +102,8 @@ def march(img, cc0, cc1, cc2, fw, rt, up, a, tanh, aspect, nstep, smax, fog, jit
                 x = cc0 + dx * s / a; y = cc1 + dy * s / a; z = cc2 + dz * s / a
                 d = density(x, y, z)
                 if d > 0.0:
-                    sig = d * 0.045                       # extinction: optically thin -> brightness follows the column
-                    em = d * d * 0.030                        # emission (the haze glows by itself: it is hot)
+                    sig = d * 0.045 * ksig                       # extinction: optically thin -> brightness follows the column
+                    em = d * d * 0.030 * kem                        # emission (the haze glows by itself: it is hot)
                     # colour: thin -> grey-gold, dense -> warm white-gold
                     hot = min(d, 1.0)
                     cr = 1.00; cg = 0.56 + 0.28 * hot; cb = 0.22 + 0.40 * hot
@@ -122,11 +122,11 @@ def march(img, cc0, cc1, cc2, fw, rt, up, a, tanh, aspect, nstep, smax, fog, jit
 # ------------------------------------------------------------------------------------------------------- the clumps
 def make_clumps():
     rng = np.random.default_rng(SEED)
-    n = 220000
+    n = 260000
     p = np.empty((n, 3))
-    p[:, 0] = rng.uniform(-22, 22, n); p[:, 1] = rng.uniform(-14, 14, n); p[:, 2] = rng.uniform(-4, 58, n)
+    p[:, 0] = rng.uniform(-22, 22, n); p[:, 1] = rng.uniform(-14, 14, n); p[:, 2] = rng.uniform(-4, 72, n)
     d = np.array([density(*q) for q in p])
-    keep = rng.uniform(0, 1, n) < np.clip(d, 0, 1.4) ** 2 * 0.07
+    keep = rng.uniform(0, 1, n) < np.clip(d, 0, 1.4) ** 2 * 0.10
     p = p[keep]
     m = len(p)
     size = 0.035 * np.exp(rng.normal(0, 0.45, m))                       # physical radius — fixed
@@ -203,7 +203,9 @@ def frame(t, CL, rng):
     a = scale(t); cc = cam_c(t); fw, rt, up = basis(t)
     tanh = math.tan(FOV / 2); aspect = W / H
     haze = np.zeros((HH, HW, 4), np.float32)
-    march(haze, cc[0], cc[1], cc[2], fw, rt, up, a, tanh, aspect, NSTEP, SMAX, FOG, int(t * FPS) & 1023)
+    # matter thins as space stretches (density ~ a^-3): the haze grows clearer — one sees deeper — and a little dimmer
+    ksig = a ** -2.0; kem = a ** -0.8
+    march(haze, cc[0], cc[1], cc[2], fw, rt, up, a, tanh, aspect, NSTEP, SMAX * a, FOG, int(t * FPS) & 1023, ksig, kem)
     big = np.stack([ndimage.zoom(haze[..., c], 2, order=1) for c in range(4)], -1)
     big = ndimage.gaussian_filter(big, (0.8, 0.8, 0))
     lin = big[..., :3].astype(np.float64).copy()
@@ -217,7 +219,7 @@ def frame(t, CL, rng):
     px = W / 2 + x / z * f; py = H / 2 - y / z * f
     rad = np.clip(size / z * f, 0.6, 7.0)
     # the haze in front dims a clump (Beer–Lambert with the mean free path) and they fade in from the deep
-    att = np.exp(-z / (FOG * 0.9)) * np.clip((SMAX - z) / 6, 0, 1) * np.clip((z - 0.6) / 2.0, 0, 1)
+    att = np.exp(-z / (FOG * 0.9 * a * a)) * np.clip((SMAX * a - z) / 6, 0, 1) * np.clip((z - 0.6) / 2.0, 0, 1)
     # a Gaussian's total flux ~ (size/z)^2 -> its peak stays ~constant for resolved ones; unresolved ones dim as 1/z^2
     inten = lum * att * 2.4 * np.minimum(1.0, (size / z * f / 0.6) ** 2)
     cr = np.ones_like(warm); cg = 0.84 + 0.10 * warm; cb = 0.62 + 0.26 * warm
