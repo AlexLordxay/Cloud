@@ -29,8 +29,9 @@ HUB = 0.16                              # a(t) = exp(HUB t): ×2.45 over the sho
 V = 2.6                                 # the camera's physical speed (units/s)
 FOG = 11.0                              # the haze's mean free path (units) — how far one sees into it
 SMAX = 34.0                             # the march length
-NSTEP = 72
+NSTEP = 110
 SEED = 7
+ROT = (0.939209, -0.342924, -0.017026, 0.150755, 0.367325, 0.917794, -0.308480, -0.864567, 0.396692)   # a fixed random rotation: no grid-aligned features
 
 
 # ------------------------------------------------------------------------------------------------------- the noise
@@ -59,17 +60,23 @@ def vnoise(x, y, z):
 def density(x, y, z):
     # a soft, filamentary fBm: a domain-warped base + ridged detail; ~0..1.5
     s = 0.33
+    r0, r1, r2, r3, r4, r5, r6, r7, r8 = ROT
+    x, y, z = r0 * x + r1 * y + r2 * z, r3 * x + r4 * y + r5 * z, r6 * x + r7 * y + r8 * z
     wx = vnoise(x * 0.21 + 3.1, y * 0.21, z * 0.21) - 0.5
     wy = vnoise(x * 0.21, y * 0.21 + 7.7, z * 0.21) - 0.5
     x2, y2, z2 = x + 2.2 * wx, y + 2.2 * wy, z + 1.4 * (wx - wy)
     f = 0.0; amp = 0.55; fr = s
+    r0, r1, r2, r3, r4, r5, r6, r7, r8 = ROT
     for o in range(4):
-        n = vnoise(x2 * fr, y2 * fr, z2 * fr)
+        # each octave turned by the rotation again (the value noise's lattice would otherwise line up with the view
+        # and show as streaks running to the vanishing point)
+        x2, y2, z2 = r0 * x2 + r1 * y2 + r2 * z2, r3 * x2 + r4 * y2 + r5 * z2, r6 * x2 + r7 * y2 + r8 * z2
+        n = vnoise(x2 * fr + 17.3 * o, y2 * fr, z2 * fr)
         if o >= 2:
             n = 1.0 - abs(2.0 * n - 1.0)          # ridges: thin bright sheets and threads
         f += amp * n; amp *= 0.5; fr *= 2.03
-    d = f - 0.36
-    return d * 2.2 if d > 0 else 0.0
+    d = f - 0.47
+    return d * 3.2 if d > 0 else 0.0
 
 
 # ------------------------------------------------------------------------------------------------------- the haze
@@ -86,26 +93,28 @@ def march(img, cc0, cc1, cc2, fw, rt, up, a, tanh, aspect, nstep, smax, fog, jit
             dz = fw[2] + rt[2] * sx + up[2] * sy
             n = math.sqrt(dx * dx + dy * dy + dz * dz); dx /= n; dy /= n; dz /= n
             T = 1.0; r = 0.0; g = 0.0; b = 0.0
-            s = ds * (0.5 + 0.5 * _h(px, py, jit))          # jittered start (no banding)
+            u0 = _h(px, py, jit)                            # jittered start (no banding)
             for k in range(nstep):
+                # steps grow with distance: fine near the camera (no aliasing of the detail), coarse in the deep
+                q0 = (k + u0) / nstep; q1 = (k + 1 + u0) / nstep
+                s = smax * q0 * q0; ds = smax * (q1 * q1 - q0 * q0)
                 # physical distance s -> comoving position
                 x = cc0 + dx * s / a; y = cc1 + dy * s / a; z = cc2 + dz * s / a
                 d = density(x, y, z)
                 if d > 0.0:
-                    sig = d / fog * 2.4                   # extinction
-                    em = d * 0.075                        # emission (the haze glows by itself: it is hot)
+                    sig = d * 0.045                       # extinction: optically thin -> brightness follows the column
+                    em = d * d * 0.030                        # emission (the haze glows by itself: it is hot)
                     # colour: thin -> grey-gold, dense -> warm white-gold
                     hot = min(d, 1.0)
-                    cr = 1.00; cg = 0.80 + 0.12 * hot; cb = 0.55 + 0.22 * hot
+                    cr = 1.00; cg = 0.56 + 0.28 * hot; cb = 0.22 + 0.40 * hot
                     att = math.exp(-sig * ds)
                     w_ = T * em * ds
                     r += w_ * cr; g += w_ * cg; b += w_ * cb
                     T *= att
                     if T < 0.01:
                         break
-                s += ds
             # the deep glow beyond the march (the haze never ends)
-            r += T * 0.020; g += T * 0.016; b += T * 0.011
+            r += T * 0.006; g += T * 0.0045; b += T * 0.003
             img[py, px, 0] = r; img[py, px, 1] = g; img[py, px, 2] = b
             img[py, px, 3] = T
 
@@ -182,7 +191,7 @@ def post(lin, t, rng):
     x = lin + glow
     yy, xx = np.mgrid[0:H, 0:W]
     v = 1 - 0.28 * (((xx - W / 2) / (W / 2)) ** 2 + ((yy - H / 2) / (H / 2)) ** 2) ** 1.4
-    x = x * v[..., None] * 1.25
+    x = x * v[..., None] * 1.05
     out = tonemap(x)
     g = rng.normal(0, 1, (H // 2, W // 2)).astype(np.float32)
     g = np.repeat(np.repeat(g, 2, 0), 2, 1)
@@ -206,12 +215,12 @@ def frame(t, CL, rng):
     z, x, y, size, lum, warm = z[ok], x[ok], y[ok], size[ok], lum[ok], warm[ok]
     f = (H / 2) / tanh
     px = W / 2 + x / z * f; py = H / 2 - y / z * f
-    rad = np.maximum(size / z * f, 0.6)
+    rad = np.clip(size / z * f, 0.6, 7.0)
     # the haze in front dims a clump (Beer–Lambert with the mean free path) and they fade in from the deep
-    att = np.exp(-z / (FOG * 0.9)) * np.clip((SMAX - z) / 6, 0, 1)
+    att = np.exp(-z / (FOG * 0.9)) * np.clip((SMAX - z) / 6, 0, 1) * np.clip((z - 0.6) / 2.0, 0, 1)
     # a Gaussian's total flux ~ (size/z)^2 -> its peak stays ~constant for resolved ones; unresolved ones dim as 1/z^2
-    inten = lum * att * 1.6 * np.minimum(1.0, (size / z * f / 0.6) ** 2)
-    cr = np.ones_like(warm); cg = 0.86 + 0.08 * warm; cb = 0.66 + 0.22 * warm
+    inten = lum * att * 2.4 * np.minimum(1.0, (size / z * f / 0.6) ** 2)
+    cr = np.ones_like(warm); cg = 0.84 + 0.10 * warm; cb = 0.62 + 0.26 * warm
     order = np.argsort(-z)
     splat(lin, None, px[order], py[order], rad[order], inten[order], cr[order], cg[order], cb[order], 0.0)
     return post(lin, t, rng)
