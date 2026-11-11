@@ -28,7 +28,7 @@ P_LABEL = 3.8                  # «усе, що ти бачиш у небі»
 A_IN0, A_IN1 = 7.8, 10.0       # the atom emerges
 A_LABEL = 10.2                 # «атом водню», «0,1 нм»
 A0 = 78.0                      # px per Bohr radius at the end (the atom ~ 560 px across)
-NDOT = 7000
+NDOT = 5200
 
 
 def smooth(k):
@@ -99,7 +99,7 @@ class Atom:
         R = np.hypot(xx - cx, yy - cy) / scale
         R = np.maximum(R, 1e-4)
         sig = 2 * R * special.k1(2 * R)
-        img[y0:y1, x0:x1] += (alpha * 0.30 * sig)[..., None] * np.array([0.30, 0.58, 1.00])
+        img[y0:y1, x0:x1] += (alpha * 0.42 * sig)[..., None] * np.array([0.30, 0.58, 1.00])
         # the dots
         ang = 0.05 * t
         c, s = math.cos(ang), math.sin(ang)
@@ -109,8 +109,8 @@ class Atom:
         ok = (px >= 0) & (px < W) & (py >= 0) & (py < H)
         dots = np.zeros((H, W), np.float32)
         np.add.at(dots, (py[ok], px[ok]), 1.0)
-        dots = ndimage.gaussian_filter(dots, 0.8)
-        img += (alpha * 2.2 * dots)[..., None] * np.array([0.62, 0.84, 1.00])
+        dots = ndimage.gaussian_filter(dots, 0.7)
+        img += (alpha * 1.5 * dots)[..., None] * np.array([0.62, 0.84, 1.00])
 
 
 def text_layer(t, p, a, k):
@@ -135,7 +135,7 @@ def text_layer(t, p, a, k):
         sc = A0 * k
         s = 'атом водню'
         w = d.textlength(s, font=f)
-        yb = a[1] + 3.9 * sc
+        yb = a[1] + 4.7 * sc
         d.text((a[0] - w / 2, yb + 18), s, font=f, fill=int(200 * al))
         d.line([(a[0] - sc, yb), (a[0] + sc, yb)], fill=int(170 * al), width=2)
         for xx in (a[0] - sc, a[0] + sc):
@@ -152,7 +152,7 @@ def frame(t, atom, K1img, rng):
     p, a, k = layout(t)
     if t < PULL + 0.6:
         # the pull-back: the K1 picture inside a disc that shrinks exponentially into the point
-        q = smooth(t / PULL) if t < PULL else 1.0
+        q = smooth(t / PULL) ** 1.4 if t < PULL else 1.0
         rad = math.exp(math.log(1.25 * math.hypot(W, H) / 2) * (1 - q) + math.log(2.5) * q)
         if rad > 2.6:
             zoom = rad / (math.hypot(W, H) / 2)
