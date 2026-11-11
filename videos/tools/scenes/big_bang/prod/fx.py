@@ -110,7 +110,7 @@ def load(name, maxdim=None):
     return _IMG[key]
 
 
-def warp(img, cx, cy, scale, rot=0.0, sx=W / 2, sy=H / 2, out=None, gain=1.0, border=0.0):
+def warp(img, cx, cy, scale, rot=0.0, sx=W / 2, sy=H / 2, out=None, gain=1.0, border=0.0, mode=cv2.BORDER_CONSTANT):
     """draw img so that its point (cx, cy) lands at screen (sx, sy), scale = screen px per image px, rot (rad)"""
     c, s = math.cos(rot) * scale, math.sin(rot) * scale
     M = np.array([[c, -s, sx - (c * cx - s * cy)], [s, c, sy - (s * cx + c * cy)]], np.float32)
@@ -118,7 +118,7 @@ def warp(img, cx, cy, scale, rot=0.0, sx=W / 2, sy=H / 2, out=None, gain=1.0, bo
     if scale < 0.6:                                      # minify through a pre-blurred copy (no aliasing)
         interp = cv2.INTER_LINEAR
         img = blur(img, 0.45 / scale)
-    r = cv2.warpAffine(img, M, (W, H), flags=interp, borderMode=cv2.BORDER_CONSTANT, borderValue=(border,) * 3)
+    r = cv2.warpAffine(img, M, (W, H), flags=interp, borderMode=mode, borderValue=(border,) * 3)
     if gain != 1.0: r *= gain
     if out is not None:
         out += r

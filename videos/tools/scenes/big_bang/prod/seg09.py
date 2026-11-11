@@ -37,12 +37,12 @@ def photon(T):
     k = 0
     while t < T:
         dt = min(0.35, T - t)
-        a = _DIR[k]; sp = 260.0
+        a = _DIR[k]; sp = 420.0
         x, y = pts[-1]
         pts.append((x + math.cos(a) * sp * dt, y + math.sin(a) * sp * dt))
         # keep it in the middle of the frame
         x, y = pts[-1]
-        pts[-1] = (fx.W * 0.5 + (x - fx.W * 0.5) * 0.92, fx.H * 0.5 + (y - fx.H * 0.5) * 0.92)
+        pts[-1] = (fx.W * 0.5 + (x - fx.W * 0.5) * 0.985, fx.H * 0.5 + (y - fx.H * 0.5) * 0.985)
         t += dt; k += 1
     return pts
 
@@ -68,7 +68,7 @@ def frame(T):
     if T < CLEAR1:
         pts = photon(T)
         trail = np.zeros((H // 2, W // 2), np.float32)
-        tail = pts[-5:]
+        tail = pts[-3:]
         for k in range(len(tail) - 1):
             p0 = (int(tail[k][0] / 2), int(tail[k][1] / 2)); p1 = (int(tail[k + 1][0] / 2), int(tail[k + 1][1] / 2))
             cv2.line(trail, p0, p1, (0.15 + 0.85 * k / len(tail)) ** 2, 2, cv2.LINE_AA)

@@ -5,6 +5,7 @@
 #       «inhales» and blooms into light that fills the frame — seg03's flight dissolves in under the bloom.
 import math, os, sys
 import numpy as np
+import cv2
 from scipy import special
 from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,7 +23,16 @@ _rng = np.random.default_rng(3)
 def texture():
     global _tex
     if _tex is None:
-        _tex = fx.to_lin(np.asarray(Image.open(os.path.join(fx.BB, 'render', 'seg01', 'f_00247.jpg')).convert('RGB')))
+        t = fx.to_lin(np.asarray(Image.open(os.path.join(fx.BB, 'render', 'seg01', 'f_00247.jpg')).convert('RGB')))
+        # extend the frame beyond its edges with a soft, blurred continuation of the haze (no hard frame edge, no
+        # visible mirror seams) — the shrinking disc shows a little of it at the start of the pull-back
+        H, W = t.shape[:2]
+        ext = cv2.copyMakeBorder(t, H, H, W, W, cv2.BORDER_REFLECT)
+        soft = cv2.GaussianBlur(ext, (0, 0), 45)
+        m = np.zeros(ext.shape[:2], np.float32); m[H:2 * H, W:2 * W] = 1
+        m = cv2.GaussianBlur(m, (0, 0), 40)[..., None]
+        m[H + 60:2 * H - 60, W + 60:2 * W - 60] = 1
+        _tex = (ext * m + soft * (1 - m)).astype(np.float32)
     return _tex
 
 
@@ -45,12 +55,14 @@ def frame(T):
     # the pull-back (К3): seg01's last frame inside a disc that shrinks exponentially into the point
     if t < k3.PULL + 0.6:
         q = fx.smooth(t / k3.PULL) ** 1.4 if t < k3.PULL else 1.0
-        rad = math.exp(math.log(1.25 * math.hypot(W, H) / 2) * (1 - q) + math.log(2.5) * q)
+        # the texture's zoom starts at exactly 1 (seg01's last frame, no jump); the disc is a little larger
+        zoom = math.exp(math.log(2.0 / (math.hypot(W, H) / 2)) * q)
+        rad = 1.25 * zoom * math.hypot(W, H) / 2
         if rad > 2.6:
-            zoom = rad / (math.hypot(W, H) / 2)
             boost = min((1.0 / max(zoom, 1e-3)) ** 0.55, 18.0)
             fade = 1.0 - fx.smooth((t - (k3.PULL - 0.5)) / 0.7)
-            layer = fx.warp(texture(), W / 2, H / 2, zoom, sx=p[0], sy=p[1])
+            tx = texture()
+            layer = fx.warp(tx, tx.shape[1] / 2, tx.shape[0] / 2, zoom, sx=p[0], sy=p[1])
             img += layer * fx.disc_mask(p[0], p[1], rad, 0.18) ** 1.5 * (boost * fade)
     # the point
     pw = 6.0 * fx.smooth((t - (k3.PULL - 0.6)) / 0.7) * (1.0 + 0.06 * math.sin(7.0 * t) + 0.04 * math.sin(11.3 * t))
