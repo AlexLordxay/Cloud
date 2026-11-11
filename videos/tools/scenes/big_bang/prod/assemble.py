@@ -196,7 +196,7 @@ def mix_audio(out_wav):
         music = os.path.join(BB, 'music.mp3')
     if os.path.exists(music):
         fc = ('[0:a]aresample=48000,pan=stereo|c0=c0|c1=c0,volume=1.0,asplit=2[v][vk];'
-              '[1:a]aresample=48000,volume=0.255[m];'
+              '[1:a]aresample=48000,volume=0.128[m];'
               '[m][vk]sidechaincompress=threshold=0.03:ratio=5:attack=40:release=600:makeup=1[md];'
               '[v][md]amix=inputs=2:duration=longest:normalize=0,'
               f'atrim=0:{DUR},loudnorm=I=-14:TP=-1.5:LRA=11,volume=1.4dB,alimiter=limit=0.87:attack=3:release=60:level=disabled[a]')
