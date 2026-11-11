@@ -44,7 +44,7 @@ def disc_of(asset):
     if asset not in _disc:
         img = fx.load(asset, 2400)
         g = img.mean(-1)
-        m = (g > max(0.02, np.percentile(g, 50) * 1.5)).astype(np.uint8)
+        m = (g > max(0.02, 0.3 * np.percentile(g, 99))).astype(np.uint8)        # the object vs the dark sky
         n, lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
         big = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))          # the largest object (one sand grain of many)
         ys, xs = np.nonzero(lab == big)
@@ -83,17 +83,17 @@ def frame(T):
     labels = []
     for nm, asset, ls, lab in OBJ:
         rpx = ppm * 10 ** ls / 2
-        if 2.0 < rpx < 1500:
+        if 2.0 < rpx < 520:
             im, cx, cy, r = disc_of(asset)
             sc = rpx / r
-            vis = fx.smooth((math.log10(rpx) - math.log10(2.0)) / 0.5) * fx.smooth((math.log10(1500) - math.log10(rpx)) / 0.8)
+            vis = fx.smooth((math.log10(rpx) - math.log10(2.0)) / 0.5) * fx.smooth((math.log10(520) - math.log10(rpx)) / 0.45)
             lay = fx.warp(im, cx, cy, sc)
             if nm == 'sand':                                      # just the one grain (the photo shows 36 in a grid)
                 lay *= fx.disc_mask(W / 2, H / 2, rpx * 1.3, 0.25)
             img = img * (1 - 0.92 * vis * fx.disc_mask(W / 2, H / 2, rpx * 1.02, 0.04)) + lay * vis
             if 25 < rpx < 900:
                 al = fx.smooth((math.log10(rpx) - math.log10(25)) / 0.25) * fx.smooth((math.log10(900) - math.log10(rpx)) / 0.25)
-                labels.append((W / 2, H / 2 + max(rpx, 30) + 18, lab, 30, al * 0.85, fx.FONT_L, 'mt'))
+                labels.append((W / 2, H / 2 + max(rpx, 30) + 18, lab, 30, al * vis * 0.85, fx.FONT_L, 'mt'))
     # the atom's cloud — always the same on screen; by the end it is a light-year across
     _atom.step()
     a_al = 1.0 - 0.55 * post
