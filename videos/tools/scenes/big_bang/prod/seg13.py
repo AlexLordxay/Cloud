@@ -23,7 +23,7 @@ _rng = np.random.default_rng(13)
 def casA(T, name, maxd, gain):
     im = fx.load(name, maxd)
     h, w = im.shape[:2]
-    sc = 1.08 * max(fx.W / w, fx.H / h) * (1 + 0.012 * (T - T0))
+    sc = 1.38 * max(fx.W / w, fx.H / h) * (1 + 0.012 * (T - T0))   # (inside the hexagonal Webb footprint)
     return fx.warp(im, w / 2 + 0.006 * w * (T - T0), h / 2, sc) * gain
 
 

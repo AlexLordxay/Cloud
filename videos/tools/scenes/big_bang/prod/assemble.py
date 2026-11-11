@@ -92,18 +92,27 @@ def hud(T):
     return None
 
 
-CREDITS = [  # (t0, t1, text) — small, lower left, for the real images
+CREDITS = [  # (t0, t1, text) — small, lower left, for the real images (full credits: posts.md / the description)
+    (50.8, 51.8, 'Фото: A. Klepnev (CC BY 4.0)'),
+    (51.9, 54.0, 'Фото: NASA, NASA/SDO'),
+    (54.6, 60.0, 'Фото: ESO / S. Brunier'),
+    (60.6, 70.5, 'Галактики: NASA, ESA, HUDF Team'),
+    (71.0, 77.0, 'Фото: ESO (NGC 1232)'),
+    (142.8, 146.0, 'Фото: Carlos Delgado (CC BY-SA 4.0)'),
     (163.4, 175.2, 'Фото: NASA'),
     (179.8, 197.0, 'Карта: ESA / Planck Collaboration'),
     (264.0, 275.6, 'Візуалізація: модель космічної павутини'),
     (276.0, 281.0, 'Фото: ESO / S. Brunier'),
-    (281.0, 285.2, 'Фото: NASA, ESA, Hubble'),
+    (281.0, 285.2, 'Фото: NASA, ESA, Hubble Heritage Team'),
+    (285.4, 293.4, 'Фото: Lviatour (CC BY-SA 4.0)'),
     (293.6, 302.2, 'Фото: ESO'),
     (302.4, 305.4, 'Зображення: ALMA (ESO/NAOJ/NRAO)'),
     (305.6, 308.6, 'Фото: NASA'),
+    (309.0, 318.4, 'Фото: B. Wetzel, H. Schaefer (NCI)'),
     (332.8, 337.0, 'Фото: NASA Earth Observatory'),
-    (339.6, 343.4, 'Фото: NASA, ESA, Hubble (HUDF)'),
-    (349.2, 357.4, 'Фото: NASA, ESA, Hubble'),
+    (339.6, 343.4, 'Фото: NASA, ESA, HUDF Team'),
+    (349.2, 357.4, 'Фото: NASA, ESA, Hubble Heritage (NGC 1132)'),
+    (357.8, 362.0, 'Фото: ESO / S. Brunier'),
 ]
 ART = [(0.0, 8.3), (21.6, 32.4)]          # «художня візуалізація» (the glowing haze: an artist's impression)
 SUB = (25.0, 28.6)                         # the «Підписатися» button

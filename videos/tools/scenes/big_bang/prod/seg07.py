@@ -97,8 +97,8 @@ def frame(T):
     pts = cv2.resize(half, (W, H), interpolation=cv2.INTER_LINEAR)
     img += pts[..., None] * np.array([0.95, 0.93, 1.0], np.float32)
     # out of the white
-    wht = 1 - fx.ramp(T, T0, T0 + 1.6)
-    img = img + wht * 6.0
+    wht = 1 - fx.ramp(T, T0, T0 + 1.0)
+    img = img + wht * 4.0
     out = fx.finish(img, _rng, exposure=1.0, thr=0.6, vig=0.24, grain=0.011).astype(np.float32) / 255
     al = fx.ramp(T, 91.4, 92.2) * (1 - fx.ramp(T, 96.6, 97.4))
     if al > 0:
