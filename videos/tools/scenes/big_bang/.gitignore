@@ -5,3 +5,4 @@ render/
 music.wav
 render_*.log
 assets/*.fits
+assets/planck_cmb_equirect.npy
