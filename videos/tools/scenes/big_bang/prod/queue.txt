@@ -9,3 +9,5 @@ seg09
 seg11
 seg12
 seg13
+seg16
+seg17
