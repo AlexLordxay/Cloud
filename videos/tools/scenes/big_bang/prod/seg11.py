@@ -33,7 +33,7 @@ def planck_colours(T):
 def texture():
     global _tex
     if _tex is None:
-        m = np.load(os.path.join(fx.ASSETS, 'planck_cmb_equirect.npy'))
+        m = np.load(os.path.join(fx.ASSETS, 'planck_cmb_equirect_4096x2048.npy'))
         m = cv2.resize(m, (4096, 2048), interpolation=cv2.INTER_AREA)
         _tex = planck_colours(m).astype(np.float32)
     return _tex

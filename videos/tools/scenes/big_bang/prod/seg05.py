@@ -28,11 +28,15 @@ _rng = np.random.default_rng(5)
 _disc = {}
 
 
+from scipy.interpolate import PchipInterpolator
+# the atom's size (log10 m) through the «click»: fast between the objects, slower while each one passes
+_KEY = [(SNAP0, LA0), (50.85, -4.6), (51.55, -2.2), (51.95, 5.6), (52.65, 8.3), (53.05, 9.0), (53.75, 10.9),
+        (54.3, 13.8), (SNAP1, LA1)]
+_LS = PchipInterpolator([k[0] for k in _KEY], [k[1] for k in _KEY])
+
+
 def logsize(T):
-    # the atom's size (log10 m) vs time: a smooth S through the «click», lingering a touch around each object
-    k = fx.smoother((T - SNAP0) / (SNAP1 - SNAP0))
-    k = k + 0.035 * math.sin(k * 2 * math.pi * 3)                     # three soft «dwells»
-    return LA0 + (LA1 - LA0) * min(max(k, 0.0), 1.0)
+    return float(_LS(min(max(T, SNAP0), SNAP1)))
 
 
 def disc_of(asset):
@@ -40,8 +44,10 @@ def disc_of(asset):
     if asset not in _disc:
         img = fx.load(asset, 2400)
         g = img.mean(-1)
-        m = g > max(0.02, np.percentile(g, 50) * 1.5)
-        ys, xs = np.nonzero(m)
+        m = (g > max(0.02, np.percentile(g, 50) * 1.5)).astype(np.uint8)
+        n, lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
+        big = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))          # the largest object (one sand grain of many)
+        ys, xs = np.nonzero(lab == big)
         cx, cy = xs.mean(), ys.mean()
         r = np.percentile(np.hypot(xs - cx, ys - cy), 97)
         _disc[asset] = (img, cx, cy, r)
@@ -63,8 +69,8 @@ def frame(T):
     if pre > 0:
         z = math.exp(0.10 * t + 0.9 * max(0.0, t - 2.0) ** 1.7 * 0.12)
         a = np.zeros((270, 480), np.float32)
-        fbm_grid(a, -1.6 / z, -0.9 / z, 3.2 / 480 / z, 3.2 / 480 / z, 0.5 * t + 6.0, 5, 0.58, 2.1, 1, 0.9)
-        th = np.clip((a - 0.62) / 0.22, 0, 1) ** 2.2 * 0.35 * pre * (0.35 + 0.65 * fx.ramp(T, T0, T0 + 1.0))
+        fbm_grid(a, -1.6 / z, -0.9 / z, 5.0 / 480 / z, 5.0 / 480 / z, 0.5 * t + 6.0, 5, 0.58, 2.1, 1, 0.9)
+        th = np.clip((a - 0.62) / 0.22, 0, 1) ** 2.2 * 0.13 * pre * (0.35 + 0.65 * fx.ramp(T, T0, T0 + 1.0))
         th = cv2.resize(th, (W, H), interpolation=cv2.INTER_LINEAR)
         img += th[..., None] * np.array([0.55, 0.62, 1.0], np.float32)
     post = fx.ramp(T, SNAP1 - 1.2, SNAP1 + 0.4)

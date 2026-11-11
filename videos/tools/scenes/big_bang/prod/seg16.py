@@ -12,7 +12,7 @@ import fx, web, sphere
 
 T0, T1 = 332.6, 349.6
 E = (332.6, 337.2); M = (336.4, 339.8); G = (339.0, 343.6); WB = (342.8, 346.8); PL = (346.0, 349.6)
-UA = (4230.0, 1960.0)                 # Ukraine in earth_night.jpg (8192²)
+UA = (3300.0, 2260.0)                 # Ukraine in earth_night.jpg (8192²): Kyiv ≈ (3230, 2200), the Black Sea below
 _rng = np.random.default_rng(16)
 
 

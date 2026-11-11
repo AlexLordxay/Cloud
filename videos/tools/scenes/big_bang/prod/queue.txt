@@ -11,3 +11,7 @@ seg12
 seg13
 seg16
 seg17
+seg05
+seg10
+seg14
+seg15
