@@ -1,0 +1,49 @@
+# Ліцензії та джерела зображень (фільм «Великий вибух був не вибухом»)
+
+Канал монетизований: використано лише Public Domain (NASA/US Gov), CC0, CC BY, CC BY-SA (будь-яка версія, у т.ч. 3.0 IGO).
+Ліцензію кожного файлу звіряно на сторінці-джерелі (для ESO / ESA-Hubble / ESA-Webb — на сторінках
+«Usage of images» кожного сайту; для NASA — images-api.nasa.gov та політика NASA; для Chandra — chandra.harvard.edu/photo/image_use.html).
+Дата перевірки: 2026-11-11.
+
+Загальні сторінки політик:
+- ESO: https://www.eso.org/public/outreach/copyright/ — «Creative Commons Attribution 4.0 International», адаптація дозволена, кредит обов'язковий.
+- ESA/Hubble: https://esahubble.org/copyright/ — CC BY 4.0, кредит обов'язковий.
+- ESA/Webb: https://esawebb.org/copyright/ — CC BY 4.0, кредит обов'язковий.
+- Chandra: https://chandra.harvard.edu/photo/image_use.html — «no claim to copyright is being asserted», матеріали SAO/CXC створені для NASA; використання за правилами NASA, бажано дати кредит. Окремі мультихвильові зображення з чужими даними можуть мати копірайт (див. нотатки).
+- NASA: https://www.nasa.gov/nasa-brand-center/images-and-media/ — матеріали NASA не захищені авторським правом (Public Domain); без натяку на схвалення NASA.
+
+## Таблиця файлів
+
+| Файл | Що | Сторінка-джерело | Прямий URL файлу | Ліцензія | Кредит | Нотатки |
+|---|---|---|---|---|---|---|
+| `earth_bluemarble.jpg` | «Blue Marble», Apollo 17, AS17-148-22727, повний диск Землі на чорному, 4579×4579 | https://images.nasa.gov/details/as17-148-22727 (images-api: `as17-148-22727`, JSC) | https://images-assets.nasa.gov/image/as17-148-22727/as17-148-22727~orig.jpg | Public Domain (NASA) | NASA / Apollo 17 crew (AS17-148-22727) | Оригінальна орієнтація NASA/JSC (Африка зверху-зліва). Без обробки. |
+| `sun_visible.jpg` | Сонце у видимому світлі (HMI intensitygram) | _див. розділ «Не вдалося отримати»_ | | | | |
+| `sun_aia.jpg` | Повний диск Сонця, SDO/AIA 171 Å (золоте), 4096×3940 (обрізано нижній підпис із датою) | https://images.nasa.gov/details/PIA26681 (JPL Photojournal PIA26681) | https://images-assets.nasa.gov/image/PIA26681/PIA26681~orig.jpg | Public Domain (NASA) | NASA/GSFC/Solar Dynamics Observatory (SDO/AIA, зображення 2025-09-10) | Знизу обрізано напис «SDO/AIA 171 2025-09-10 15:55:22 UT». |
+| `hudf.jpg` | Hubble Ultra Deep Field, 6200×6200 | https://esahubble.org/images/heic0406a/ | https://cdn.esahubble.org/archives/images/large/heic0406a.jpg | CC BY 4.0 (ESA/Hubble) | NASA, ESA, and S. Beckwith (STScI) and the HUDF Team | Без обробки (original = large). |
+| `spiral_galaxy.jpg` | NGC 1232, VLT/FORS1, face-on спіраль; 7938×8000 (оригінал 10027×10105 зменшено LANCZOS) | https://www.eso.org/public/images/eso9845d/ | https://cdn.eso.org/images/large/eso9845d.jpg | CC BY 4.0 (ESO) | ESO | Адаптація (зменшення). |
+| `lamp_filament.jpg` | Нитка розжарення лампи | _див. «Не вдалося отримати»_ | | | | |
+| `sand_grain.jpg` | Піщинки, макро | _див. «Не вдалося отримати»_ | | | | |
+| `holmdel_horn.jpg` | Рупорна антена Holmdel (Penzias & Wilson) | _див. «Не вдалося отримати»_ | | | | |
+| `casA_webb.jpg` | Cassiopeia A, JWST NIRCam+MIRI (weic2311a), 4008×4009, у «компасній» орієнтації | https://esawebb.org/images/weic2311a/ | https://cdn.esawebb.org/archives/images/large/weic2311a.jpg | CC BY 4.0 (ESA/Webb; NASA-матеріал, PD) | NASA, ESA, CSA, D. Milisavljevic (Purdue University), T. Temim (Princeton University), I. De Looze (UGent), J. DePasquale (STScI) | Зображення повернуте на ~45° (так опубліковано). |
+| `casA_chandra.jpg` | Cassiopeia A у рентгені (Chandra, 3 діапазони: червоний 0.5–1.5 keV, зелений 1.5–2.5, синій 4–6), 3600×3055 | https://chandra.harvard.edu/photo/2013/casa/ | https://chandra.harvard.edu/photo/2013/casa/casa.tif (конвертовано TIFF→JPEG q95) | Public Domain / «no claim to copyright» (NASA/SAO, політика Chandra) | X-ray: NASA/CXC/SAO | Політика: https://chandra.harvard.edu/photo/image_use.html |
+| `casA_elements.jpg` | Cas A, карта елементів у рентгені Chandra (Fe — синій, S/Si — зелений, Mg/Ne — червоний); 3600×3600 | https://chandra.harvard.edu/photo/2012/casa/ | https://chandra.harvard.edu/photo/2012/casa/casa_xray.tif (→JPEG q95) | Public Domain / «no claim to copyright» (NASA/GSFC/CXC; автори — Hwang (GSFC) і Laming (NRL, US Gov)) | X-ray: NASA/CXC/GSFC/U.Hwang & J.Laming | Це одна кольорова композитна карта, а не окремі карти Si/S/Ca/Fe; зображення піксельне (низька роздільність даних). Права-сторона ілюстрації M. Weiss з тієї ж сторінки НЕ взята. |
+| `jades_field.jpg` | JWST NIRCam, поле JADES (GOODS-S) з JADES-GS-z14-0, **без** анотацій; 8000×7816 (оригінал 12407×12121 зменшено LANCZOS) | https://esawebb.org/images/jades5/ | https://cdn.esawebb.org/archives/images/large/jades5.jpg | CC BY 4.0 (ESA/Webb; NASA-матеріал, PD) | NASA, ESA, CSA, J. Olmsted (STScI), S. Carniani (Scuola Normale Superiore), JADES Collaboration | **JADES-GS-z14-0 у пікселях цього файлу: x=4804, y=3624** (початок координат — лівий верхній кут; галактика ≈ 3×4 px завбільшки). У повному оригіналі 12407×12121: (7451, 5621). |
+| `jades_field_annotated.jpg` | Те саме поле з вирізкою-збільшенням та підписом «JADES-GS-z14-0» (для довідки), 8000×7816, той самий масштаб/кадр що й `jades_field.jpg` | https://esawebb.org/images/jades4/ | https://cdn.esawebb.org/archives/images/large/jades4.jpg | CC BY 4.0 (ESA/Webb; NASA-матеріал, PD) | NASA, ESA, CSA, STScI, B. Robertson (UC Santa Cruz), B. Johnson (CfA), S. Tacchella (Cambridge), P. Cargile (CfA) | Положення знайдено як центр білої рамки на `jades_field_annotated.jpg` (рамка 7391–7513 × 5561–5682 в оригіналі) + центроїд червонуватого об'єкта на неанотованому зображенні. Позицію перевірено візуально. |
+| `antennae.jpg` | Галактики Антени (NGC 4038/4039), Hubble, 3915×3885 | https://esahubble.org/images/heic0615a/ | https://cdn.esahubble.org/archives/images/large/heic0615a.jpg | CC BY 4.0 (ESA/Hubble) | NASA, ESA, and the Hubble Heritage Team (STScI/AURA)-ESA/Hubble Collaboration. Acknowledgement: B. Whitmore (Space Telescope Science Institute) and James Long (ESA/Hubble) | Без обробки. |
+| `andromeda.jpg` | M31 | _див. «Не вдалося отримати» / нижче_ | | | | |
+| `milkyway_panorama.jpg` | Панорама Чумацького Шляху, 6000×3000 | https://www.eso.org/public/images/eso0932a/ | https://cdn.eso.org/images/large/eso0932a.jpg | CC BY 4.0 (ESO) | ESO/S. Brunier | Без обробки. |
+| `dark_cloud.jpg` | Темна пилова хмара Barnard 68, VLT/FORS, 4193×4193 | https://www.eso.org/public/images/eso0102a/ | https://cdn.eso.org/images/large/eso0102a.jpg | CC BY 4.0 (ESO) | ESO | Без обробки. |
+| `hltau_alma.jpg` | ALMA, протопланетний диск HL Tau, 1800×1800 | https://www.eso.org/public/images/eso1436a/ | https://cdn.eso.org/images/large/eso1436a.jpg | CC BY 4.0 (ESO) | ALMA (ESO/NAOJ/NRAO) | Максимум, що є в ESO (original TIFF 1800×1800). |
+| `earth_night.jpg` | «Black Marble»: Африка, Європа і Близький Схід уночі (Suomi NPP VIIRS), 8192×8192, глобус на чорному, без кордонів | https://images.nasa.gov/details/GSFC_20171208_Archive_e001591 | https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e001591/GSFC_20171208_Archive_e001591~orig.jpg | Public Domain (NASA) | NASA Earth Observatory image by Robert Simmon, using Suomi NPP VIIRS data provided courtesy of Chris Elvidge (NOAA National Geophysical Data Center) | Україна — у верхній середній частині диска, північніше Чорного моря: орієнтовно x 2900–3800, y 2050–2550 (Київ ≈ (3230, 2200)); яскрава пляма Москви ≈ (3600, 1920). |
+| `red_blood_cells.jpg` | СЕМ еритроцитів | _див. «Не вдалося отримати»_ | | | | |
+| `elliptical_galaxy.jpg` | Еліптична галактика NGC 1132 (Hubble), 3482×3785 | https://esahubble.org/images/heic0804a/ | https://cdn.esahubble.org/archives/images/large/heic0804a.jpg | CC BY 4.0 (ESA/Hubble) | NASA, ESA and the Hubble Heritage (STScI/AURA)-ESA/Hubble Collaboration. Acknowledgment: M. West (ESO, Chile) | Без обробки. У кадрі є слабкі фонові галактики. |
+| `alice_event.jpg` | ALICE, подія Pb–Pb | _див. «Не вдалося отримати»_ | | | | |
+| `gaia_sky.jpg` | Карта неба Gaia | _див. «Не вдалося отримати»_ | | | | |
+| `planck_cmb_equirect.npy` | Planck 2018 (PR3), SMICA-nosz, I (температура), µК, float32 8192×4096, equirect (довгота галактична l: 0°…360° зліва направо, пікселі по центру; широта b: +90° зверху). **Не в git** (134 МБ > ліміту 50 МБ; див. `.gitignore`) — відтворюється `planck_convert.py` | https://irsa.ipac.caltech.edu/data/Planck/release_3/all-sky-maps/maps/component-maps/cmb/ | `.../COM_CMB_IQU-smica-nosz_2048_R3.00_full.fits` (384 МБ; видалено після конвертації) | Дані Planck — публічні (ESA Planck Legacy Archive / NASA-IRSA). Явного ліцензійного тексту в PLA/IRSA не знайдено (pla.esac.esa.int недоступна; cosmos.esa.int/web/planck/pla лише описує «all public products»). Використання з обов'язковим підтвердженням (acknowledgement). | «Based on observations obtained with Planck (http://www.esa.int/Planck), an ESA science mission with instruments and contributions directly funded by ESA Member States, NASA, and Canada.» Цитування: Planck Collaboration 2020, A&A 641, A4 (PR3, Component separation). | Взято колонку `I_STOKES_INP` (офіційно заінпейнтована площина Галактики; значення вже в µК, хоч заголовок каже K_CMB). Середньоквадратичне ≈ 108 µК. Перетворення: HEALPix NESTED→RING, білінійна інтерполяція у сітку. |
+| `planck_cmb_equirect_4096x2048.npy` | Те саме, зменшено вдвічі (середнє 2×2), float32, µК — файл < 50 МБ, у git | — | — | як вище | як вище | |
+| `planck_cmb_preview.jpg` | Прев'ю: кольорова шкала Planck (синій→білий→помаранчево-червоний), ±300 µК, 8192×4096 | — | — | як вище | як вище | Шкала апроксимована 7 вузлами (0,0,255)…(100,0,0). |
+| `planck_convert.py` | Скрипт відтворення `.npy` та прев'ю з FITS | — | — | — | — | |
+
+## Не вдалося отримати (станом на кінець цього запису)
+
+_(оновлюється нижче)_
