@@ -83,10 +83,10 @@ def frame(T):
     labels = []
     for nm, asset, ls, lab in OBJ:
         rpx = ppm * 10 ** ls / 2
-        if 2.0 < rpx < 2600:
+        if 2.0 < rpx < 1500:
             im, cx, cy, r = disc_of(asset)
             sc = rpx / r
-            vis = fx.smooth((math.log10(rpx) - math.log10(2.0)) / 0.5) * fx.smooth((math.log10(2600) - math.log10(rpx)) / 0.35)
+            vis = fx.smooth((math.log10(rpx) - math.log10(2.0)) / 0.5) * fx.smooth((math.log10(1500) - math.log10(rpx)) / 0.5)
             lay = fx.warp(im, cx, cy, sc)
             if nm == 'sand':                                      # just the one grain (the photo shows 36 in a grid)
                 lay *= fx.disc_mask(W / 2, H / 2, rpx * 1.3, 0.25)

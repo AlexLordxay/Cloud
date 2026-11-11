@@ -100,7 +100,7 @@ CREDITS = [  # (t0, t1, text) — small, lower left, for the real images (full c
     (71.0, 77.0, 'Фото: ESO (NGC 1232)'),
     (142.8, 146.0, 'Фото: Carlos Delgado (CC BY-SA 4.0)'),
     (163.4, 175.2, 'Фото: NASA'),
-    (179.8, 197.0, 'Карта: ESA / Planck Collaboration'),
+    (181.2, 197.0, 'Карта: ESA / Planck Collaboration'),
     (264.0, 275.6, 'Візуалізація: модель космічної павутини'),
     (276.0, 281.0, 'Фото: ESO / S. Brunier'),
     (281.0, 285.2, 'Фото: NASA, ESA, Hubble Heritage Team'),
@@ -216,8 +216,8 @@ def main():
     out = os.path.abspath(out)
     wav = os.path.join(BB, 'render', 'final_audio.wav')
     mix_audio(wav)
-    enc = ['-c:v', 'libx264', '-preset', 'veryfast' if PREVIEW else 'slow', '-crf', '24' if PREVIEW else '17',
-           '-pix_fmt', 'yuv420p', '-tune', 'grain' if not PREVIEW else 'film']
+    enc = ['-c:v', 'libx264', '-preset', 'veryfast' if PREVIEW else 'slow', '-crf', '24' if PREVIEW else '19',
+           '-pix_fmt', 'yuv420p', '-tune', 'film'] + ([] if PREVIEW else ['-maxrate', '16M', '-bufsize', '32M'])
     p = subprocess.Popen(['ffmpeg', '-v', 'error', '-y', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{ow}x{oh}',
                           '-r', str(FPS), '-i', '-', '-ss', str(t_from), '-to', str(t_to), '-i', wav] + enc +
                          ['-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', '-shortest', out], stdin=subprocess.PIPE)
