@@ -38,9 +38,9 @@ def texture():
 
 def layout(t):
     pull = 1.0 - 0.18 * fx.smooth((t - k3.A_IN0) / (k3.A_IN1 + 1.0 - k3.A_IN0))
-    k = pull * (1.0 + 0.012 * t)
+    k = pull * (1.0 + 0.03 * t)                                   # a steady push in
     side = fx.smooth((t - (k3.A_IN0 - 0.4)) / 2.6) * (1 - fx.ramp(t, K4 + 0.1, K4 + 1.5))
-    p = (fx.W / 2 - 250.0 * side * k + 6 * math.sin(0.4 * t), fx.H / 2 + 4 * math.sin(0.33 * t))
+    p = (fx.W / 2 - 250.0 * side * k + 14 * math.sin(0.4 * t), fx.H / 2 + 10 * math.sin(0.33 * t))
     a = (fx.W / 2 + 330.0 * k + 3 * math.sin(0.3 * t + 1), fx.H / 2 - 10 * k)
     return p, a, k
 
@@ -81,7 +81,7 @@ def frame(T):
     _atom.step()
     fadeout = 1 - fx.ramp(t, K4 - 0.1, K4 + 0.9)
     alpha = fx.smooth((t - k3.A_IN0) / (k3.A_IN1 - k3.A_IN0)) * fadeout
-    if alpha > 0: _atom.draw(img, a[0], a[1], k3.A0 * k, alpha, t)
+    if alpha > 0: _atom.draw(img, a[0], a[1], k3.A0 * k, alpha, 4.5 * t)      # (turns: 0,22 rad/s — its volume shows)
     out = fx.finish(img, _rng, exposure=1.0, thr=0.5, vig=0.25, grain=0.010).astype(np.float32) / 255
     # labels
     items = []

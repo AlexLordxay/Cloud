@@ -13,6 +13,8 @@ import fx
 T0, T1 = 163.4, 180.2
 TV0 = fx.phrase('І частину')[0] - 0.4
 TV1 = fx.phrase('І частину')[1] + 0.6
+VB = fx.phrase('двоє радіоастрономів')[0] - 0.2
+VC = fx.phrase('А отримали')[0] - 0.2
 _rng = np.random.default_rng(10)
 _yy, _xx = np.mgrid[0:fx.H, 0:fx.W].astype(np.float32)
 _u = (_xx - fx.W / 2) / (fx.W / 2); _v = (_yy - fx.H / 2) / (fx.H / 2)
@@ -43,10 +45,17 @@ def frame(T):
     aA = 1 - fx.ramp(T, TV0, TV0 + 1.2)
     aT = fx.ramp(T, TV0, TV0 + 1.2) * (1 - fx.ramp(T, TV1 - 0.6, TV1 + 0.2))
     if aA > 0:
+        # three views of one photograph, dissolving: the whole antenna -> the two radio astronomers on its platform
+        # («двоє радіоастрономів…») -> the great horn («…Нобелівську премію»)
         im = fx.load('holmdel_horn.jpg', 4000)
         h, w = im.shape[:2]
-        sc = max(W / w, H / h) * (1.04 + 0.012 * (T - T0))
-        img += fx.warp(im, w * 0.5, h * 0.5, sc) * (1.0 * aA)
+        cover = max(W / w, H / h)
+        views = [(T0, VB, (1000, 700), 1.04, 1.12), (VB, VC, (800, 880), 2.3, 2.6), (VC, TV0 + 1.2, (1350, 560), 1.75, 1.95)]
+        for k, (a, b, (cx, cy), z0, z1) in enumerate(views):
+            wa = (fx.ramp(T, a - 0.5, a + 0.5) if k else 1.0) * (1 - fx.ramp(T, b - 0.5, b + 0.5) if k < 2 else 1.0)
+            if wa <= 0: continue
+            q = (T - a) / max(b - a, 1e-3)
+            img += fx.warp(im, cx - 25 * q, cy, cover * (z0 + (z1 - z0) * q)) * (wa * aA)
     if aT > 0:
         img += snow(T) * aT
     return fx.finish(img, _rng, exposure=1.0, thr=0.85, bk=0.5, vig=0.28, grain=0.012)

@@ -45,9 +45,26 @@ CS = 70                                               # cell size (px)
 OX, OY = (fx.W - 18 * CS) / 2, 118
 
 
-def cell_xy(col, row):
-    y = OY + row * CS + (24 if row >= 7 else 0)
-    return OX + col * CS, y
+_CAM = None
+
+
+def cam(T):
+    # (centre x, centre y, zoom) in table space: the whole table -> to H -> along to He -> down to Fe/O/Au -> back out
+    keys = [(TAB0, 960, 470, 1.0), (H_LAB - 0.3, 760, 330, 1.45), (HE_LAB, 1180, 330, 1.45), (FE + 0.4, 960, 420, 1.3),
+            (T1, 960, 470, 1.05)]
+    if T <= keys[0][0]: return keys[0][1:]
+    for (a, x0, y0, z0), (b, x1, y1, z1) in zip(keys, keys[1:]):
+        if T <= b:
+            k = fx.smoother((T - a) / (b - a))
+            return x0 + (x1 - x0) * k, y0 + (y1 - y0) * k, z0 + (z1 - z0) * k
+    return keys[-1][1:]
+
+
+def cell_xy(col, row, T=None):
+    x = OX + col * CS; y = OY + row * CS + (24 if row >= 7 else 0)
+    if T is None: return x, y
+    cx, cy, z = cam(T)
+    return fx.W / 2 + (x - cx) * z, fx.H / 2 + (y - cy) * z
 
 
 _er = np.random.default_rng(80)
@@ -80,29 +97,32 @@ def frame(T):
     img += cv2.resize(half, (W, H))[..., None] * np.array([0.98, 0.95, 1.0], np.float32)
     # the lit cells: H and He
     tab = fx.ramp(T, TAB0, TAB0 + 1.6) * (1 - fx.ramp(T, T1 - 1.0, T1))
+    cs = CS * cam(T)[2]
     for sym, col, row in CELLS[:2]:
-        x, y = cell_xy(col, row)
+        x, y = cell_xy(col, row, T)
         lit = tab * (0.75 + 0.1 * math.sin(T * 2.0 + col))
         c = np.array([0.55, 0.75, 1.0], np.float32) if sym == 'H' else np.array([1.0, 0.85, 0.6], np.float32)
-        img[int(y) + 2:int(y + CS) - 2, int(x) + 2:int(x + CS) - 2] += c * 0.55 * lit
+        img[max(int(y) + 2, 0):max(int(y + cs) - 2, 0), max(int(x) + 2, 0):max(int(x + cs) - 2, 0)] += c * 0.55 * lit
     out = fx.finish(img, _rng, exposure=1.0, thr=0.5, vig=0.26, grain=0.011).astype(np.float32) / 255
     if tab > 0:
         m = np.zeros((H, W), np.float32)
         items = []
         ghost = fx.ramp(T, FE, FE + 0.8)
         for sym, col, row in CELLS:
-            x, y = cell_xy(col, row)
+            x, y = cell_xy(col, row, T)
             lit = sym in ('H', 'He')
             missing = sym in ('Fe', 'O', 'Au')
             al = tab * (0.9 if lit else 0.16 + (0.5 * ghost * (0.75 + 0.25 * math.sin(T * 4)) if missing else 0))
-            x0, y0, x1, y1 = int(x) + 2, int(y) + 2, int(x + CS) - 2, int(y + CS) - 2
+            x0, y0, x1, y1 = int(x) + 2, int(y) + 2, int(x + cs) - 2, int(y + cs) - 2
+            if x1 < 0 or y1 < 0 or x0 >= W - 1 or y0 >= H - 1: continue
+            x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, W - 1), min(y1, H - 1)
             m[y0, x0:x1] = np.maximum(m[y0, x0:x1], al); m[y1, x0:x1] = np.maximum(m[y1, x0:x1], al)
             m[y0:y1, x0] = np.maximum(m[y0:y1, x0], al); m[y0:y1, x1] = np.maximum(m[y0:y1, x1], al)
-            items.append((x + CS / 2, y + CS / 2, sym, 24 if not lit else 28, al * (1.0 if lit else 1.3),
+            items.append((x + cs / 2, y + cs / 2, sym, int((24 if not lit else 28) * cam(T)[2]), al * (1.0 if lit else 1.3),
                           fx.FONT_L if not lit else fx.FONT_M, 'mm'))
-        hx, hy = cell_xy(0, 0); ex, ey = cell_xy(17, 0)
-        items.append((hx + CS + 14, hy + CS / 2, '≈ 75 %', 28, tab * fx.ramp(T, H_LAB, H_LAB + 0.6), fx.FONT_L, 'lm'))
-        items.append((ex - 14, ey + CS / 2, '≈ 25 %', 28, tab * fx.ramp(T, HE_LAB, HE_LAB + 0.6), fx.FONT_L, 'rm'))
+        hx, hy = cell_xy(0, 0, T); ex, ey = cell_xy(17, 0, T)
+        items.append((hx + cs + 14, hy + cs / 2, '≈ 75 %', 28, tab * fx.ramp(T, H_LAB, H_LAB + 0.6), fx.FONT_L, 'lm'))
+        items.append((ex - 14, ey + cs / 2, '≈ 25 %', 28, tab * fx.ramp(T, HE_LAB, HE_LAB + 0.6), fx.FONT_L, 'rm'))
         m = np.maximum(m * 0.55, fx.text_mask(items))
         out = out * (1 - m[..., None]) + m[..., None] * np.array([0.92, 0.95, 1.0], np.float32)
     return (np.clip(out, 0, 1) * 255 + 0.5).astype(np.uint8)
