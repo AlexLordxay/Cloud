@@ -1,3 +1,6 @@
 test/k1/
 test/*.log
 test/k3/
+render/
+music.wav
+render_*.log

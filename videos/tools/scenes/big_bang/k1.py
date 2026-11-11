@@ -206,9 +206,9 @@ def frame(t, CL, rng):
     # matter thins as space stretches (density ~ a^-3): the haze grows clearer — one sees deeper — and a little dimmer
     ksig = a ** -2.0; kem = a ** -0.8
     march(haze, cc[0], cc[1], cc[2], fw, rt, up, a, tanh, aspect, NSTEP, SMAX * a, FOG, int(t * FPS) & 1023, ksig, kem)
-    big = np.stack([ndimage.zoom(haze[..., c], 2, order=1) for c in range(4)], -1)
-    big = ndimage.gaussian_filter(big, (0.8, 0.8, 0))
-    lin = big[..., :3].astype(np.float64).copy()
+    import cv2                                          # (fast upscale + soften; same look as zoom + gaussian)
+    big = cv2.resize(haze[..., :3], (W, H), interpolation=cv2.INTER_LINEAR)
+    lin = cv2.GaussianBlur(big, (0, 0), 0.8).astype(np.float64)
 
     p, size, lum, warm = CL
     rel = (p - cc) * a                                    # physical, from the camera
