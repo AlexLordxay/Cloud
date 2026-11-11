@@ -33,6 +33,11 @@
   розчинення між сегментами, HUD/підписи/«Підписатися»/кінцева картка, мікс голосу (`voice_tl.mp3`) і музики (`music.wav`).
   Помічники: знімки+ліцензії → `big_bang/assets/` (+`LICENSES.md`, карта «Планка» `planck_cmb_equirect.npy`); музика → `big_bang/music.js`,
   `music.mp3`. Higgsfield не використовувати (автор спить, згоди немає). Фінал: `videos/big_bang.mp4` (у git — частинами <95 МБ).
+- **Стан нічної роботи (11.11 ~01:40):** усі 17 сегментів написано (`big_bang/prod/seg01–17.py`), черга рендеру —
+  `prod/rqueue.py` + `prod/queue.txt` (кадри в `big_bang/render/<seg>/`, gitignored; ~0,3–2,5 с/кадр). Знімки й ліцензії —
+  `big_bang/assets/LICENSES.md`; музика готова (`music.js`, `make_music.sh`, `music.mp3`; −20,6 LUFS). Мікс −14 LUFS.
+  Збірка: `python3 prod/assemble.py` → `videos/big_bang.mp4` (`--preview` → `test/preview.mp4`). Субтитри `videos/big_bang.srt`,
+  описи `big_bang/posts.md`. Якщо контейнер новий: потрібні `pip install opencv-python-headless`, повний рендер ≈ 1,5–2 год.
 - **Новий контейнер:** `cd videos/tools && npm install; pip install imageio-ffmpeg matplotlib scipy tifffile imagecodecs astronomy-engine shapely numba`.
   Гілка `claude/ukrainian-conversation-tvi8yz` (усе закомічено й запушено). **Higgsfield баланс 18,47 кр.**
 - **Правила (усі старі):** українською, на «ви», коротко; перед роботою питати й називати час; голос не пришвидшувати, без тегів
