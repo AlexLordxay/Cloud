@@ -4,3 +4,4 @@ test/k3/
 render/
 music.wav
 render_*.log
+assets/*.fits
