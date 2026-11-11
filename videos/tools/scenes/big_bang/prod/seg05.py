@@ -30,8 +30,8 @@ _disc = {}
 
 from scipy.interpolate import PchipInterpolator
 # the atom's size (log10 m) through the «click»: fast between the objects, slower while each one passes
-_KEY = [(SNAP0, LA0), (50.85, -4.6), (51.55, -2.2), (51.95, 5.6), (52.65, 8.3), (53.05, 9.0), (53.75, 10.9),
-        (54.3, 13.8), (SNAP1, LA1)]
+_KEY = [(SNAP0, LA0), (50.75, -4.6), (51.55, -1.8), (51.85, 5.0), (52.75, 8.3), (53.65, 11.0), (54.25, 13.8),
+        (SNAP1, LA1)]                                        # slow while sand / Earth / Sun pass, fast in between
 _LS = PchipInterpolator([k[0] for k in _KEY], [k[1] for k in _KEY])
 
 
@@ -86,7 +86,7 @@ def frame(T):
         if 2.0 < rpx < 1500:
             im, cx, cy, r = disc_of(asset)
             sc = rpx / r
-            vis = fx.smooth((math.log10(rpx) - math.log10(2.0)) / 0.5) * fx.smooth((math.log10(1500) - math.log10(rpx)) / 0.5)
+            vis = fx.smooth((math.log10(rpx) - math.log10(2.0)) / 0.5) * fx.smooth((math.log10(1500) - math.log10(rpx)) / 0.8)
             lay = fx.warp(im, cx, cy, sc)
             if nm == 'sand':                                      # just the one grain (the photo shows 36 in a grid)
                 lay *= fx.disc_mask(W / 2, H / 2, rpx * 1.3, 0.25)
