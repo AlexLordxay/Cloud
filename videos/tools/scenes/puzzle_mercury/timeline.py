@@ -7,26 +7,24 @@ import imageio_ffmpeg
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FF = imageio_ffmpeg.get_ffmpeg_exe()
-V, FIX = 'voice.mp3', 'voice.mp3'
+V, FIX = 'voice_v2.mp3', 'voice_v2.mp3'
+# 11.11 — the new format: harder clues, the answer at the end of the same video, no «tomorrow» (voice_v2.mp3, 1,84 кр.)
 # (beat it starts, file, from, to, pause after)
 PHRASES = [
-    ('hook', V, 0.0, 2.36, 0.55),      # Вчорашня відповідь — Венера!
-    ('q', V, 2.72, 3.75, 0.9),         # А де я тепер?
-    ('c1', V, 4.08, 5.18, 0.5),        # Підказка перша:
-    (None, V, 5.5, 8.8, 1.1),          #   Сонце тут майже втричі більше, ніж у вас на небі.
-    ('c2', V, 9.18, 10.18, 0.5),       # Підказка друга:
-    (None, V, 10.48, 12.5, 1.1),       #   небо чорне навіть удень.
-    ('c3', V, 12.86, 13.88, 0.5),      # Підказка третя:
-    (None, V, 14.2, 17.45, 0.35),      #   удень тут плюс чотириста тридцять,
-    (None, V, 17.55, 19.63, 1.0),      #   а вночі — мінус сто вісімдесят градусів.
-    ('o1', V, 19.97, 20.73, 0.6),      # Місяць,
-    ('o2', V, 20.74, 21.42, 0.6),      # Марс
-    ('o3', V, 21.43, 22.22, 0.8),      # чи Меркурій?
-    ('write', V, 22.48, 24.21, 0.6),   # Пиши відповідь у коментарях!
+    ('hook', V, 0.0, 2.34, 0.4),       # Вчорашня відповідь — Венера!
+    ('q', V, 2.77, 5.17, 0.5),         # А тепер: на якій я планеті?
+    ('c1', V, 5.65, 6.63, 0.3),        # Підказка перша:
+    (None, V, 6.99, 11.02, 0.7),       #   від світанку до світанку тут минає два місцеві роки.
+    ('c2', V, 11.65, 12.60, 0.3),      # Підказка друга:
+    (None, V, 12.85, 15.97, 0.7),      #   рік тут коротший за три земні місяці.
+    ('c3', V, 16.53, 17.45, 0.3),      # Підказка третя:
+    (None, V, 17.73, 21.57, 0.7),      #   Сонце тут до трьох разів більше, ніж у вас на небі.
+    ('o1', V, 22.30, 24.44, 0.4),      # Місяць, Марс чи Меркурій?
+    ('write', V, 24.76, 26.61, 0.5),   # Пиши відповідь у коментарях!
 ]
-COUNT = [(V, 24.55, 25.0), (V, 25.36, 25.96), (V, 26.28, 26.8)]   # Три. Два. Один. — 2 s each
-TAIL = [('cut', V, 27.1, 30.16, 0.55),  # Правильну відповідь скажу завтра, у новій загадці.
-        ('sub', V, 30.45, 32.24, 1.3)]  # Підпишись, щоб не пропустити!
+COUNT = [(V, 27.15, 27.58), (V, 28.06, 28.60), (V, 29.12, 29.57)]   # Три. Два. Один.
+CD = 1.1                                                            # s per number
+ANS = (V, 30.03, 32.34)                                             # Правильна відповідь — Меркурій!
 
 
 def layout(tempo=1.0):
@@ -35,12 +33,13 @@ def layout(tempo=1.0):
         if beat: B[beat] = round(t - (0.05 if beat != 'hook' else 0), 3)
         parts.append([a, b, round(t, 3), f]); t += (b - a) / tempo + gap
     B['opts'] = B['o1'] - 0.15
-    B['n3'] = round(t, 3); B['n2'] = B['n3'] + 2; B['n1'] = B['n3'] + 4
-    for k, (f, a, b) in enumerate(COUNT): parts.append([a, b, round(B['n3'] + 2 * k + 0.05, 3), f])
-    t = B['n3'] + 6.05
-    for beat, f, a, b, gap in TAIL:
-        B[beat] = round(t - 0.15, 3); parts.append([a, b, round(t, 3), f]); t += (b - a) / tempo + gap
-    B['end'] = round(t, 2)
+    B['o2'] = round(B['o1'] + 0.75, 3); B['o3'] = round(B['o1'] + 1.35, 3)   # the cards as the names are said
+    B['n3'] = round(t, 3); B['n2'] = round(B['n3'] + CD, 3); B['n1'] = round(B['n3'] + 2 * CD, 3); B['cd'] = CD
+    for k, (f, a, b) in enumerate(COUNT): parts.append([a, b, round(B['n3'] + CD * k + 0.05, 3), f])
+    t = B['n3'] + 3 * CD + 0.05
+    B['ans'] = round(t - 0.15, 3); parts.append([ANS[1], ANS[2], round(t, 3), ANS[0]]); t += ANS[2] - ANS[1]
+    B['bye'] = round(t + 1.2, 3); B['sub'] = B['bye']
+    B['end'] = round(B['bye'] + 2.8, 2)
     return B, parts
 
 
@@ -63,6 +62,6 @@ if __name__ == '__main__':
     p = os.path.join(HERE, 'scene.json'); sc = json.load(open(p))
     sc['beats'] = B
     sc['narration'] = {'file': V, 'level': 1.0, 'tempo': tempo, 'parts': parts}
-    sc['out'] = {'answer': False, 'duration': B['end'], 'subscribe': B['sub']}
+    sc['out'] = {'answer': True, 'duration': B['end'], 'subscribe': B['sub']}
     sc['duration'] = B['end']
     json.dump(sc, open(p, 'w'), ensure_ascii=False, indent=1); print(json.dumps(B))

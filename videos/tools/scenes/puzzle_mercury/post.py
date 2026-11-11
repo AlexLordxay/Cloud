@@ -110,9 +110,10 @@ def arrow(img, cx, cy, alpha, t):
 
 def countdown(img, t):
     for n, t0 in ((3, B['n3']), (2, B['n2']), (1, B['n1'])):
-        if not (t0 <= t < t0 + 2.0): continue
-        u = (t - t0) / 2.0
-        a = min(1.0, (t - t0) / 0.15) * (1 - ease((t - t0 - 1.8) / 0.2) if n == 1 else 1)
+        cd = B.get('cd', 2.0)
+        if not (t0 <= t < t0 + cd): continue
+        u = (t - t0) / cd
+        a = min(1.0, (t - t0) / 0.15) * (1 - ease((t - t0 - (cd - 0.2)) / 0.2) if n == 1 else 1)
         lay = Image.new('RGBA', img.size, (0, 0, 0, 0)); d = ImageDraw.Draw(lay); (cx, cy), r = CD_C, CD_R
         d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=(20, 14, 10, int(150 * a)))
         d.arc((cx - r, cy - r, cx + r, cy + r), 0, 360, fill=(255, 255, 255, int(70 * a)), width=10)
@@ -128,7 +129,7 @@ _GLOBE = {}
 def globe(r, t):
     key = (r, int(t * 10))
     if key in _GLOBE: return _GLOBE[key]
-    if 'tex' not in _GLOBE: _GLOBE['tex'] = np.asarray(Image.open(os.path.join(TOOLS, '../../planetarium/textures/venus_atmosphere_2k.jpg')).convert('RGB'), np.float32) / 255
+    if 'tex' not in _GLOBE: _GLOBE['tex'] = np.asarray(Image.open(os.path.join(TOOLS, '../../planetarium/textures/' + TX.get('globe', 'venus_atmosphere_2k.jpg'))).convert('RGB'), np.float32) / 255
     tex = _GLOBE['tex']; th, tw = tex.shape[:2]
     S = 2 * r + 80; y, x = (np.mgrid[0:S, 0:S] - S / 2 + 0.5) / r
     rr = x * x + y * y; inside = rr < 1; z = np.sqrt(np.clip(1 - rr, 0, 1))
@@ -186,18 +187,20 @@ def titled(im, t):
     if not ANSWER:
         no_answer(img, t); return img.convert('RGB')
     # the answer: Venus's globe and its name
-    ka = k_win(t, ans + 1.15, bye, 0.4)
+    ka = k_win(t, ans + 1.15, DUR + 1, 0.4)
     if ka > 0:
         r = int(150 * (0.85 + 0.15 * ease((t - ans - 1.15) / 0.5)))
         g = globe(r, t)
         if ka < 1: g = g.copy(); g.putalpha(g.getchannel('A').point(lambda v: int(v * ka)))
         img.alpha_composite(g, (540 - g.size[0] // 2, 340 - g.size[1] // 2))
-        text(img, 'ВЕНЕРА!', f_ans, 540, 570, ka, GOLD)
-        text(img, '+465 °C · тиск ×92 · Сонця не видно', f_sub, 540, 655, ka * k_in(t, ans + 1.6, 0.4))
+        text(img, TX.get('answer', 'ВЕНЕРА!'), f_ans, 540, 570, ka, GOLD)
+        text(img, TX.get('answer_sub', '+465 °C · тиск ×92 · Сонця не видно'), f_sub, 540, 655, ka * k_in(t, ans + 1.6, 0.4))
     # goodbye
     kz = k_win(t, bye, DUR + 1, 0.4)
-    text(img, 'Наступна загадка —', f_bye, 540, 300, kz); text(img, 'ЗАВТРА', f_bye, 540, 375, kz, GOLD)
-    if t > bye + 0.6: C.draw_subscribe(img, 540, 500, t - bye - 0.6, DUR - bye - 0.6 + 1, align='center')
+    if TX.get('next', 'Наступна загадка —'):
+        text(img, 'Наступна загадка —', f_bye, 540, 300, kz); text(img, 'ЗАВТРА', f_bye, 540, 375, kz, GOLD)
+        if t > bye + 0.6: C.draw_subscribe(img, 540, 500, t - bye - 0.6, DUR - bye - 0.6 + 1, align='center')
+    elif t > bye: C.draw_subscribe(img, 540, 760, t - bye, DUR - bye + 1, align='center')
     return img.convert('RGB')
 
 
