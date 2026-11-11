@@ -4,6 +4,7 @@ import json, math, os
 import numpy as np
 import cv2
 from PIL import Image, ImageDraw, ImageFont
+Image.MAX_IMAGE_PIXELS = None
 
 BB = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # videos/tools/scenes/big_bang
 ASSETS = os.path.join(BB, 'assets')

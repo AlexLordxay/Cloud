@@ -21,7 +21,7 @@ _rng = np.random.default_rng(4)
 def foam(T):
     t = T - T0
     zoom = 1.0 + 0.035 * t                                  # the slow push in
-    s = 3.2 / SW / zoom
+    s = 5.0 / SW / zoom
     a = np.zeros((SH, SW), np.float32); b = np.zeros((SH, SW), np.float32)
     fbm_grid(a, -1.6 / zoom, -0.9 / zoom, s, s, 0.55 * t, 5, 0.58, 2.1, 1, 0.9)
     fbm_grid(b, -1.6 / zoom + 9.0, -0.9 / zoom, s * 2.3, s * 2.3, 0.9 * t + 4.0, 4, 0.6, 2.2, 0, 0.4)
@@ -37,13 +37,13 @@ def frame(T):
     thread, veil = foam(T)
     fin = fx.ramp(T, 32.0, 33.6)                              # out of the haze's dissolve
     dim = 1 - 0.65 * fx.ramp(T, ATOM_IN[0], ATOM_IN[1])
-    lum = (thread * 0.55 + veil * 0.10) * fin * dim
+    lum = (thread * 0.16 + veil * 0.035) * fin * dim
     col = np.empty((SH, SW, 3), np.float32)
-    col[..., 0] = lum * 0.55 + veil * 0.02; col[..., 1] = lum * 0.62; col[..., 2] = lum * 1.0 + veil * 0.05
+    col[..., 0] = lum * 0.62; col[..., 1] = lum * 0.74; col[..., 2] = lum * 1.0 + veil * 0.012
     img = cv2.resize(col, (fx.W, fx.H), interpolation=cv2.INTER_LINEAR)
     # sparks: virtual particles flashing in and out
     n = 30
-    xs = _rng.uniform(0, fx.W, n); ys = _rng.uniform(0, fx.H, n); pw = _rng.uniform(0.2, 1.4, n) * fin * dim
+    xs = _rng.uniform(0, fx.W, n); ys = _rng.uniform(0, fx.H, n); pw = _rng.uniform(0.2, 1.0, n) * fin * dim
     sp = np.zeros((fx.H, fx.W), np.float32)
     xi = np.clip(xs.astype(int), 0, fx.W - 1); yi = np.clip(ys.astype(int), 0, fx.H - 1)
     sp[yi, xi] = pw * 6

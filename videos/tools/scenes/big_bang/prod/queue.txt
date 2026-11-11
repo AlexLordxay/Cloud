@@ -1,3 +1,6 @@
 seg01
 seg02
 seg03
+seg04
+seg06
+seg07
