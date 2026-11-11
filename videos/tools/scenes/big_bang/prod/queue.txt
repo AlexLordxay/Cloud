@@ -6,3 +6,5 @@ seg06
 seg07
 seg08
 seg09
+seg11
+seg12
