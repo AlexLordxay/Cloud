@@ -1,17 +1,17 @@
-# «Як насправді рухаються планети» — captions over render.py's frames. Voice (voice.mp3) in three parts: 0.3 s (to «ніж у
-# нас»), 19.8 s (to «всі планети»), 30.3 s (to the end); a pause before «І головне» and before «За рік». DRAW: the count of
+# «Як насправді рухаються планети» — captions over render.py's frames. Voice (voice_all.mp3 = voice.mp3 + hook_v2.mp3, the
+# re-recorded «А ти уявляєш…?» at 0.15 s) in parts: «Насправді…» 3.0 s, to «ніж у нас» from 5.0 s, 19.8 s (to «всі планети»), 30.3 s (to the end); a pause before «І головне» and before «За рік». DRAW: the count of
 # Suns in the row (shot B). COUNTER: the km flown since the video began (230 km/s round the Galaxy).
 import os, sys
 sys.path[:0] = [os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), os.path.dirname(os.path.abspath(__file__))]
 
 DURATION = 56.0
 CAPTIONS = [
-    (-1.0, 2.45, 'hook', 'Ти уявляєш\nСонячну систему\nтак?'),
-    (2.85, 4.5, 'cap', 'Насправді все інакше'),
-    (4.8, 8.5, 'cap', 'Між Сонцем і Меркурієм\nвмістилося б 40 Сонць'),
-    (8.85, 11.15, 'cap', 'А до Нептуна — понад 3 000'),
-    (11.7, 14.3, 'cap', 'У кіно Сонце над Меркурієм —\nна пів неба'),
-    (14.75, 18.95, 'cap', 'Насправді воно лише до 3 разів\nбільше, ніж у нас'),
+    (-1.0, 2.85, 'hook', 'А ти уявляєш\nСонячну систему\nтак?'),
+    (3.0, 4.75, 'cap', 'Насправді все інакше'),
+    (5.05, 8.75, 'cap', 'Між Сонцем і Меркурієм\nвмістилося б 40 Сонць'),
+    (9.1, 11.4, 'cap', 'А до Нептуна — понад 3 000'),
+    (11.95, 14.55, 'cap', 'У кіно Сонце над Меркурієм —\nна пів неба'),
+    (15.0, 19.2, 'cap', 'Насправді воно лише до 3 разів\nбільше, ніж у нас'),
     (19.85, 21.8, 'cap', 'І головне: Сонце не стоїть\nна місці'),
     (22.05, 26.95, 'cap', 'Воно мчить навколо центру\nГалактики — понад 200 км/с'),
     (27.2, 29.15, 'cap', '…і несе з собою всі планети'),
@@ -46,7 +46,7 @@ def _suns(t):
     return 41.6 + (3229 - 41.6) * sm((t - 9.1) / 1.9)
 
 def DRAW(img, t, g):
-    al = g['fade'](t, 5.0, 11.15, 0.35)
+    al = g['fade'](t, 5.05, 11.4, 0.35)
     if al > 0:
         n = int(_suns(t))
         g['draw_block'](img, f'{n:,}'.replace(',', ' '), g['f_tick'], 330, al, fill=g['SUN'])
