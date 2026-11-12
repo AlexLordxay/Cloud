@@ -287,9 +287,15 @@ def merc_frame(t):
     im = Image.open(os.path.join(MERC, f'f_{i:05d}.jpg')).convert('RGB').resize((W, H), Image.LANCZOS)
     a = np.asarray(im, np.float32) / 255
     if i not in _sunpos:
-        m = a.mean(-1) > 0.97
+        # the disc: the peak of the blurred brightness (glare streaks and lit ground don't pull it off), then the
+        # saturated pixels round that peak give the radius
+        lum = Image.fromarray((a.mean(-1) * 255).astype(np.uint8)).resize((W // 4, H // 4), Image.BILINEAR).filter(ImageFilter.GaussianBlur(6))
+        L_ = np.asarray(lum, np.float32); py, px = np.unravel_index(np.argmax(L_), L_.shape)
+        cx, cy = px * 4 + 2, py * 4 + 2
+        yy, xx = np.mgrid[0:H, 0:W]
+        m = (a.mean(-1) > 0.97) & ((xx - cx) ** 2 + (yy - cy) ** 2 < 150 ** 2)
         ys, xs = np.nonzero(m)
-        _sunpos[i] = (xs.mean(), ys.mean(), math.sqrt(len(xs) / math.pi)) if len(xs) > 20 else (W / 2, H * 0.3, 40)
+        _sunpos[i] = (xs.mean(), ys.mean(), math.sqrt(len(xs) / math.pi)) if len(xs) > 20 else (cx, cy, 40)
     return a, _sunpos[i]
 
 def shot_C(t):
