@@ -336,7 +336,7 @@ def shot_D(t):
     sxr, syr = sx0 * ca + sy0 * sa, -sx0 * sa + sy0 * ca       # PIL rotate is counter-clockwise for positive angles
     # view centre: from the Sun (zoomed in) to the galaxy's centre
     f = ramp(t, 19.6, 23.6) * (1 - ramp(t, 27.4, 29.8))
-    vx, vy = lerp(sxr, 0, f), lerp(syr, 0, f)
+    vx, vy = lerp(sxr, 0, f), lerp(syr, 250 / (H / mw.size[0] * 1.02), f)   # whole galaxy: raised so the Sun clears the captions
     fit = H / S * 1.02                                          # px per source px at zoom 1 (the whole galaxy in the height)
     sc = fit * zoom
     # the window straight from the picture: output pixel (X, Y) -> source = centre + R(-rot) * ((X, Y) - frame centre) / sc + view
@@ -365,7 +365,7 @@ def shot_D(t):
     r = 22 + 10 * (1 - k)
     d.ellipse((px - r, py - r, px + r, py + r), outline=(255, 225, 170, int(230 * k)), width=3)
     label(img, px, py + r + 30, 'Сонце', 30, fill=(255, 225, 170), a=k * (1 - ramp(t, 27.4, 28.2)))
-    label(img, W / 2, 560, 'художня ілюстрація', 24, fill=(190, 198, 215), a=win(t, 20.0, 28.6, 0.6) * 0.85)
+    label(img, W / 2, 1620, 'художня ілюстрація', 24, fill=(190, 198, 215), a=win(t, 20.0, 28.6, 0.6) * 0.85)
     return img.convert('RGB')
 
 # ---------------------------------------------------------------- E/F: the helices, the myth
@@ -389,7 +389,7 @@ def shot_EF(t):
     # camera: beside the path, the motion pointing up the screen, slowly swinging round
     sw = math.radians(-60 + (t - 29.2) * 3.0)
     side = nrm(math.cos(sw) * np.cross(V, [0, 0, 1]) + math.sin(sw) * E2 * 0.8 + np.cross(V, [0, 0, 1]) * 0.2)
-    tgt = S - V * 2.4
+    tgt = S - V * 1.2
     cam = Cam(tgt + side * 7.2, tgt, fov=48, up=V)
     cv = stars_bg(dx=(t - 29) * 10, dy=(t - 29) * 40, k=0.7)
     def P(p, tt): return (1 - my) * real_pos(*p, tt) + my * myth_pos(*p, tt)
