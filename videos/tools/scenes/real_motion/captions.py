@@ -3,10 +3,11 @@
 # Suns in the row (shot B). COUNTER: the km flown since the video began (230 km/s round the Galaxy).
 import os, sys
 sys.path[:0] = [os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), os.path.dirname(os.path.abspath(__file__))]
+import warp
 
-DURATION = 56.0
+DURATION = 58.4
 CAPTIONS = [
-    (-1.0, 2.85, 'hook', 'А ти уявляєш\nСонячну систему\nтак?'),
+    (-1.0, 2.75, 'hook', 'А ти уявляєш\nСонячну систему\nтак?'),
     (3.0, 4.75, 'cap', 'Насправді все інакше'),
     (5.05, 8.75, 'cap', 'Між Сонцем і Меркурієм\nвмістилося б 40 Сонць'),
     (9.1, 11.4, 'cap', 'А до Нептуна — понад 3 000'),
@@ -30,13 +31,26 @@ CREDITS = [(0.0, 11.1, 'Тло: ESO/S. Brunier (CC BY 4.0) · текстури: 
            (11.3, 19.3, 'Рельєф Меркурія: NASA/JHUAPL/USGS, MESSENGER'),
            (19.6, 29.3, 'Ілюстрація: NASA/JPL-Caltech/R. Hurt'),
            (29.6, 52.2, 'Тло: ESO/S. Brunier (CC BY 4.0) · текстури: Solar System Scope (CC BY 4.0)')]
+# all the times above are on the first recording's clock: onto the new one (warp.py)
+_N = warp.new
+CAPTIONS = [(_N(a), _N(b), k, x) for a, b, k, x in CAPTIONS]
+# the spoken captions follow the new recording's phrases exactly (scene.json parts; «За рік…» + «далі…» share one caption)
+import json as _json
+_P = _json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scene.json')))['narration']['parts']
+_SPAN = [(at, at + (b - a)) for a, b, at in _P]
+_SPAN = _SPAN[:9] + [(_SPAN[9][0], _SPAN[10][1])] + _SPAN[11:]
+CAPTIONS = [CAPTIONS[0]] + [(s0 - 0.05, s1 + 0.12, k, x) for (s0, s1), (_, _, k, x) in zip(_SPAN[1:], CAPTIONS[1:])]
+NAMES = [(_N(a), _N(b), x) for a, b, x in NAMES]
+SUBS = [(_N(a), _N(b), x) for a, b, x in SUBS]
+CREDITS = [(_N(a), _N(b), x) for a, b, x in CREDITS]
+COUNTER['show'] = tuple(_N(x) for x in COUNTER['show'])
 CUTS = []
 FADE_IN = 0
 HOOK_SIZE = 76
 HOOK_Y = 470
-SUBSCRIBE_AT = 17.0
+SUBSCRIBE_AT = 17.3
 SUBSCRIBE_Y = 1700
-END_CARD = 52.4
+END_CARD = 54.8
 END_TITLE = 'Справжнє небо\nі Сонячна система —\nна сайті'
 
 def _suns(t):
@@ -46,8 +60,8 @@ def _suns(t):
     return 41.6 + (3229 - 41.6) * sm((t - 9.1) / 1.9)
 
 def DRAW(img, t, g):
-    al = g['fade'](t, 5.05, 11.4, 0.35)
+    al = g['fade'](t, 4.95, warp.new(11.4), 0.35)
     if al > 0:
-        n = int(_suns(t))
+        n = int(_suns(warp.old(t)))
         g['draw_block'](img, f'{n:,}'.replace(',', ' '), g['f_tick'], 330, al, fill=g['SUN'])
         g['draw_block'](img, 'Сонць у ряд', g['f_end3'], 420, al, fill=(200, 208, 224))

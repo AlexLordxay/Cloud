@@ -11,6 +11,7 @@ import math, os, sys, json
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 from multiprocessing import Pool
+import warp
 
 HERE = os.path.dirname(os.path.abspath(__file__)); TOOLS = os.path.dirname(os.path.dirname(HERE))
 TEX = os.path.abspath(os.path.join(TOOLS, '../../planetarium/textures'))
@@ -449,7 +450,7 @@ def frame(t):
 def job(i):
     p = os.path.join(OUT, f'f_{i:05d}.jpg')
     if os.path.exists(p): return
-    frame(i / FPS).save(p, quality=93)
+    frame(warp.old(i / FPS)).save(p, quality=93)   # the layout's own clock (warp.py)
 
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)

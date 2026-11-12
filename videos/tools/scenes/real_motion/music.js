@@ -182,7 +182,7 @@ function createSceneMusic(ctx, dest) {
     // a hush (19.2 s), then A major opening out with «Сонце не стоїть на місці» and the Galaxy; the helices rise in minor
     // (F G Am…), the myth (39.9 s) dark and thin (Dm, E), «вони летять разом із ним» (42.9 s) resolves to A major; the
     // counter and the call (44.9 s) in a calm Am figure; the end card.
-    const HUSH = 19.2, GAL = 19.8, HEL = 30.0, MYTH = 39.9, REAL = 42.9, CALL = 44.9, END = 56.0, E8 = BEAT / 2;
+    const HUSH = 19.1, GAL = 19.66, HEL = 30.56, MYTH = 41.15, REAL = 44.25, CALL = 46.8, END = 58.4, E8 = BEAT / 2;   // the re-recorded voice's clock (warp.py)
     const FL = [[1, 1], [2, 0.35]];
     const CH = { Am: [57, 60, 64], F: [53, 57, 60], C: [55, 60, 64], G: [55, 59, 62], A: [57, 61, 64], Dm: [50, 53, 57], E: [52, 56, 59] };
     const P1 = ['Am', 'Am', 'F', 'G'];                                  // 0–19.2, ~4.8 s each
