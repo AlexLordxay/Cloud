@@ -1,0 +1,17 @@
+{
+  "title": "Кільця Сатурна",
+  "duration": 50.2,
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "audio": {
+    "music": "scene"
+  },
+  "narration": {
+    "file": "voice.mp3",
+    "level": 1.0,
+    "parts": [
+      [0, 46.4, 0.2]
+    ]
+  }
+}
