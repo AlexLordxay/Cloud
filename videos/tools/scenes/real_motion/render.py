@@ -66,8 +66,12 @@ def A(key):
 def stars_bg(dx=0.0, dy=0.0, k=1.0):
     """the photographic star field, panned by (dx, dy) px; k: brightness"""
     S = A('stars'); h, w = S.shape[:2]
-    x0 = int((w - W) / 2 + dx) % (w - W); y0 = int((h - H) / 2 + dy) % (h - H)
-    return S[y0:y0 + H, x0:x0 + W] * k
+    # clamped (never wraps round: a wrap is a jump) and sub-pixel (no 1-2-1 px judder on slow pans)
+    fx = min(max((w - W) / 2 + dx, 0.0), w - W - 1.001); fy = min(max((h - H) / 2 + dy, 0.0), h - H - 1.001)
+    x0, y0 = int(fx), int(fy); ax, ay = fx - x0, fy - y0
+    c = S[y0:y0 + H + 1, x0:x0 + W + 1]
+    c = c[:, :W] * (1 - ax) + c[:, 1:W + 1] * ax
+    return (c[:H] * (1 - ay) + c[1:H + 1] * ay) * k
 
 def to_img(a): return Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8))
 
@@ -391,7 +395,7 @@ def shot_EF(t):
     side = nrm(math.cos(sw) * np.cross(V, [0, 0, 1]) + math.sin(sw) * E2 * 0.8 + np.cross(V, [0, 0, 1]) * 0.2)
     tgt = S - V * 1.2
     cam = Cam(tgt + side * 7.2, tgt, fov=48, up=V)
-    cv = stars_bg(dx=(t - 29) * 10, dy=(t - 29) * 40, k=0.7)
+    cv = stars_bg(dx=(t - 29) * 5, dy=(t - 29) * 14, k=0.7)
     def P(p, tt): return (1 - my) * real_pos(*p, tt) + my * myth_pos(*p, tt)
     # trails: the last 3 years of each path
     segs_e, segs_o = [], []
@@ -423,7 +427,7 @@ def shot_EF(t):
 
 # ---------------------------------------------------------------- G: the Earth and the Moon
 def shot_G(t):
-    cv = stars_bg(dx=(t - 44) * 6, dy=(t - 44) * 26, k=0.8)
+    cv = stars_bg(dx=(t - 44) * 5, dy=(t - 44) * 16, k=0.8)
     cam = Cam([0, -10, 0], [0, 0, 0], fov=30)
     L = nrm([-1.0, 0.35, 0.25])
     rz = 330 * (1 + 0.025 * (t - 44.5))
