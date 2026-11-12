@@ -266,14 +266,29 @@ def shot_G(t):
     k = sm((t - 39.4) / 7.0)
     return kb_crop(im, 39.4, 47.0, t, lerp(0.47, 0.53, k), 0.5, 1.0, 1.12)
 
-SHOTS = [(0.0, 4.3, shot_A), (4.0, 8.7, shot_B), (8.4, 14.2, shot_C), (13.8, 17.9, shot_D2), (17.6, 27.2, shot_D),
-         (27.0, 33.9, shot_E), (33.6, 39.7, shot_F), (39.4, 99, shot_G)]
+SHOTS = [(0.0, 4.3, shot_A), (3.8, 8.9, shot_B), (8.2, 14.3, shot_C), (13.6, 17.9, shot_D2), (17.2, 27.2, shot_D),
+         (27.0, 34.0, shot_E), (33.3, 39.9, shot_F), (39.1, 99, shot_G)]          # dissolves of 0.5–0.8 s
+
+_BAND = {}
+def bands(cap_y=1445):
+    """a soft darkening behind the name lines (y 290–450) and the captions (cap_y ± 110), so white text reads on bright shots"""
+    if cap_y not in _BAND:
+        y = np.arange(H, dtype=np.float32)
+        b = 0.5 * np.exp(-((y - 370) / 110) ** 2) + 0.6 * np.exp(-((y - cap_y) / 150) ** 2)
+        _BAND[cap_y] = (1 - b)[:, None, None]
+    return _BAND[cap_y]
 
 def frame(t):
     act = [(a, b, f) for a, b, f in SHOTS if a <= t <= b]
-    if len(act) == 1: return act[0][2](t)
-    (a1, b1, f1), (a2, b2, f2) = act[0], act[-1]
-    return Image.blend(f1(t), f2(t), sm((t - a2) / (b1 - a2)))
+    if len(act) == 1: im = act[0][2](t)
+    else:
+        (a1, b1, f1), (a2, b2, f2) = act[0], act[-1]
+        im = Image.blend(f1(t), f2(t), sm((t - a2) / (b1 - a2)))
+    a = np.asarray(im, np.float32) / 255
+    lum = a.mean(-1, keepdims=True)
+    k = win(t, 33.75, 39.15, 0.4)                     # Daphnis: the caption goes up (the moon sits low in the picture)
+    band = bands(1445) * (1 - k) + bands(640) * k
+    return to_img(a * (1 - (1 - band) * np.clip(lum * 2.2, 0, 1)))       # only where the picture is bright
 
 def job(i):
     p = os.path.join(OUT, f'f_{i:05d}.jpg')
