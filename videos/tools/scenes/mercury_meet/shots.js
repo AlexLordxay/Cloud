@@ -2,6 +2,12 @@
 // patch centre; "look" is the point aimed at. One degree on Mercury is 42.6 km.
 // Hokusai: 114 km across, floor ~-3 km, centre at the patch centre. The Sun rises in the east (az 90).
 module.exports = {
+  // «Як насправді рухаються планети» (real_motion): the honest Sun over Hokusai at dawn, 1.4° wide, still, a slow push
+  rm_sun: { site: 'hokusai', dur: 8.4, fov: 24, expo: 1.6, mesh: 2048,
+    sunEl: [[0, 3.3], [8.4, 3.6]], keys: [
+    { t: 0, pos: [-152, 14, 2], look: [20, 9.5, 6] },
+    { t: 8.4, pos: [-139, 13.4, 2], look: [20, 9.5, 6] },
+  ] },
   // the hook: west of Hokusai, low, looking east across the crater into the dawn; the Sun comes up, stops, sinks back
   // and comes up again (near perihelion Mercury's orbit outruns its spin for a few days)
   hook: { site: 'hokusai', dur: 6.9, fov: 30, expo: 1.6, mesh: 2048,
