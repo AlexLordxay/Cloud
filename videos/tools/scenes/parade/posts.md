@@ -54,3 +54,15 @@
 Save this so you don't oversleep, and send it to someone you'll watch it with 👇
 Sky computed for Ukraine (50° N); directions are similar across mid-northern latitudes. Visualization: Nebozvid. Voiceover: my voice, made with AI.
 #planetparade #planets #astronomy #space #venus #jupiter #mars #mercury #leonids #meteorshower #stargazing #nightsky #reels
+
+## ENGLISH — YouTube Shorts (videos/parade_en.mp4; Settings → Video language: English, Title & description language: English)
+**Title:** 4 Planets in One Sky — November 16 🪐 #shorts
+**Description:**
+On November 16, step outside before dawn and you'll see four planets at once: Venus and Mercury low in the southeast, Mars and Jupiter high in the south — so close your finger can cover both, though they're almost 600 million km apart.
+Why together? This week all four lie on the same side of the Sun as seen from Earth, so they rise before it.
+Bonus: the Leonid meteor shower — dust from comet Tempel–Tuttle hitting our atmosphere at 71 km/s (44 mi/s), the fastest meteors of the year.
+⏰ Best: November 16–22, about 40 minutes before sunrise. Look southeast and south. No telescope needed — just a clear sky and an open horizon.
+Save this so you don't oversleep, and send it to someone you'll watch it with!
+Sky computed for Ukraine (50° N); directions and timing are similar across mid-northern latitudes (Europe, the USA, Canada). Planet sizes to scale; the 3D view from above is from the Nebozvid site (distances stylised). Voiceover: my voice, made with AI.
+#planetparade #astronomy #shorts
+**Tags:** planet parade, planetary alignment, planet parade november 2026, 4 planets, venus, mercury, mars, jupiter, mars jupiter conjunction, leonids, leonid meteor shower, meteor shower 2026, morning planets, stargazing, night sky, astronomy, space, shorts
