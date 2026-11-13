@@ -42,6 +42,20 @@ def blast(n):
     rush = bp(white(n), 250, 2200) * env(n, 0.25, 1.6, T0 + 0.25) * (0.5 + 0.5 * lfo(n, 9)) * 0.35
     return crack + thump + whump + rumble + rush
 
+def boom_far(n):
+    """a detonation heard from far away: the highs are gone, a soft low thump, then thunder rolling and echoing off the land"""
+    T0 = 0.15
+    t = np.arange(n) / SR - T0
+    f = 30 + 20 * np.exp(-np.maximum(t, 0) / 0.5)
+    thump = np.sin(2 * np.pi * np.cumsum(f) / SR) * env(n, 0.06, 0.8, T0) * 1.2
+    body = lp(white(n), 220) * env(n, 0.08, 1.0, T0) * 1.2
+    roll = np.zeros(n)
+    for k, (dt, g) in enumerate([(0.0, 1.0), (0.45, 0.7), (1.1, 0.55), (1.8, 0.4), (2.7, 0.28)]):   # echoes off hills
+        roll += lp(brown(n), 110 + 20 * k) * env(n, 0.25, 1.1 + 0.3 * k, T0 + 0.1 + dt) * g
+    roll *= (0.6 + 0.4 * lfo(n, 5)) * 2.0
+    air = bp(white(n), 120, 600) * env(n, 0.3, 1.6, T0 + 0.2) * 0.25
+    return thump + body + roll + air
+
 def fire(n):
     roar = lp(brown(n), 180) * (0.55 + 0.45 * lfo(n, 1.5)) * 1.6
     whoosh = bp(white(n), 180, 1400) * (0.25 + 0.75 * lfo(n, 2.2) ** 2) * 0.35
@@ -74,6 +88,10 @@ def save(name, x):
 
 if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
-    save('blast_synth.wav', stereo(blast, SR * 8))
-    save('fire_synth.wav', stereo(fire, SR * 16))
-    save('wind_synth.wav', stereo(wind, SR * 21))
+    # the wavs in sfx/ are the ones the author approved (13.11, «v2»): regenerate only what is named on the command line,
+    # e.g. python3 synth_sfx.py boom_far — the noise comes out different on every run
+    import sys
+    todo = sys.argv[1:] or ['boom_far']
+    recipes = {'boom_far': (boom_far, 6), 'blast': (blast, 8), 'fire': (fire, 16), 'wind': (wind, 21)}
+    for k in todo:
+        f_, sec = recipes[k]; save(f'{k}_synth.wav' if k != 'boom_far' else 'boom_far_synth.wav', stereo(f_, SR * sec))
