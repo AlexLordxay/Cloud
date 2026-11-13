@@ -87,11 +87,20 @@ def events():
     """flashes: (unit vector, t0, energy); the cascade speeds up from 10.9 s to 15.4 s; one at the focus at 13.6 s"""
     global _EV
     if _EV is None:
-        pts = pick_targets(64)
-        ts = 10.9 + 4.5 * np.sort(rng.random(len(pts))) ** 0.6
-        _EV = [(v, float(t0), float(rng.uniform(0.6, 1.3))) for (v, la, lo), t0 in zip(pts, ts)]
+        pts = pick_targets(140)
+        # what the camera sees while the cascade runs: most flashes there (in frame), a few beyond the limb's glow
+        seen = lambda v, t: float(v @ nrm(cam_at(t)[0])) > 0.45
+        vis = [q for q in pts if seen(q[0], 11.8)]; rest = [q for q in pts if not seen(q[0], 11.8)]
+        pick = vis[:46] + rest[:14]
+        ts = 10.9 + 4.5 * np.sort(rng.random(len(pick))) ** 0.6
+        _EV = [(v, float(t0), float(rng.uniform(0.6, 1.3))) for (v, la, lo), t0 in zip(pick, ts)]
         _EV.append((FOCUS, 13.6, 1.6))
-        _EV.insert(0, (ll(52.0, -1.0 + 0) if False else pts[0][0], 0.9, 1.2))   # the hook: one far flash at 0.9 s
+        # the hook: one flash at 0.9 s, well inside the frame — among the lights nearest the middle of the view
+        p0, g0, up0, fov0 = cam_at(0.9); fwd = nrm(g0 - p0)
+        def score(v):
+            d = nrm(v - p0); return float(d @ fwd) if seen(v, 0.9) else -9
+        hook = max(pts, key=lambda q: score(q[0]))[0]
+        _EV.insert(0, (hook, 0.9, 1.4))
     return _EV
 
 def flash_curve(dt):
@@ -152,9 +161,10 @@ def earth(o, f, r, u, k, t, S, st, flashes, bg):
         day = (sample(M['day'], Uh, Vh) / 255) ** 2.0
         night = sample(M['night'], Uh, Vh) / 255
         land = sample(M['land'], Uh, Vh)
-        cl = sample(M['clouds'], Uh, Vh) * np.clip((80 - np.abs(lat_h)) / 10, 0, 1)    # no cloud seam at the poles
+        pm = np.clip((86 - np.abs(lat_h)) / 16, 0, 1)                              # no cloud seam at the poles: fade to an even veil
+        cl = sample(M['clouds'], Uh, Vh) * pm + 0.32 * (1 - pm)
         mu = Ph @ S
-        lit = np.clip(mu * 1.15 + 0.05, 0, 1) ** 0.9
+        lit = np.clip((mu + 0.10) / 0.95, 0, 1) ** 1.3                            # a soft twilight band, no hard circle
         view = np.clip(-(Ph * dh).sum(-1), 0, 1)
         # the world's wounds
         if st['soot'] > 0:
@@ -180,7 +190,7 @@ def earth(o, f, r, u, k, t, S, st, flashes, bg):
         # city lights on the night side, going out after the war
         lights = np.clip((night - 0.22) / 0.55, 0, 1) ** 1.6
         nightk = np.clip(-mu * 6 + 0.25, 0, 1)
-        far = 1 + 1.4 * float(np.clip((np.linalg.norm(o) - 1.5) / 2.0, 0, 1))      # exposure for the far views
+        far = 1 + 0.5 * float(np.clip((np.linalg.norm(o) - 1.5) / 2.0, 0, 1))      # exposure for the far views
         ground = ground + lights[:, None] * np.array([1.0, 0.70, 0.36]) * 1.6 * far * nightk[:, None] * (1 - st['lights_out']) * (1 - cl[:, None] * 0.6)
         # clouds (dimmed with the Sun), then the soot over them (stratospheric: dark brown, a little lit)
         ccol = np.array([1.0, 1.0, 1.0]) * (lit * sun_k * 1.05 + 0.012)[:, None]
@@ -190,7 +200,7 @@ def earth(o, f, r, u, k, t, S, st, flashes, bg):
         # the detonations: light falling on clouds and ground round each one
         for fv, inten, orng in flashes:
             d2 = np.clip(1 - Ph @ fv, 0, 2) * 2 * 6371.0 ** 2               # (distance in km)^2
-            fall = inten * 0.45 * 20.0 ** 2 / (d2 + 20.0 ** 2)
+            fall = inten * 0.45 * 20.0 ** 2 / (d2 + 20.0 ** 2) + min(inten, 6.0) * 0.06 * 160.0 ** 2 / (d2 + 160.0 ** 2)   # + the flash scattered over the cloud deck
             col = np.array([0.85, 0.92, 1.0]) * (1 - orng) + np.array([1.0, 0.55, 0.22]) * orng
             g = g + fall[:, None] * col * (0.35 + 0.9 * cl[:, None])
         soot_col = np.array([0.20, 0.14, 0.09]) * (lit * sun_k * 0.9 + 0.02)[:, None]
@@ -374,21 +384,31 @@ def slerp(a, b, k):
     return (math.sin((1 - k) * om) * a + math.sin(k * om) * b) / math.sin(om)
 R.slerp = slerp
 
+def glow(img, cx, cy, r, col, k):
+    """a fireball's light: a hot core and a wide soft halo, on a sprite big enough that its edge is never seen"""
+    s = int(r * 16 + 8); yy, xx = np.mgrid[0:s, 0:s] - s / 2 + 0.5
+    d = np.sqrt(xx * xx + yy * yy)
+    g = np.exp(-(d / r) ** 2) + 0.22 * np.exp(-(d / (2.6 * r)) ** 2) + 0.05 * np.exp(-(d / (6 * r)) ** 2)
+    g = g * np.clip(1 - d / (s / 2), 0, 1) ** 2
+    R.add(img, g[..., None] * np.asarray(col) * k, cx, cy)
+
 # ---------------------------------------------------------------- post: bloom, flare, tone map
 def bloom(img):
-    bright = np.clip(img - 0.9, 0, None)
+    """float bloom (no 8-bit steps): the bright parts blurred at three sizes on a 1/4-size copy; a horizontal streak
+    through the hottest cores (blurred along x only, so it never makes a box)"""
+    from scipy.ndimage import gaussian_filter, uniform_filter1d
+    bright = np.clip(img - 1.1, 0, 12).astype(np.float32)
     if bright.max() <= 0: return img
-    out = img.copy()
-    b8 = (np.clip(bright, 0, 8) / 8 * 255).astype(np.uint8)
-    for r_, k_ in ((6, 0.9), (24, 0.6), (80, 0.45)):
-        bl = np.asarray(Image.fromarray(b8).filter(ImageFilter.GaussianBlur(r_)), np.float32) / 255 * 8
-        out += bl * k_
-    # an anamorphic streak through the brightest cores
-    core = np.clip(img - 2.5, 0, None)
+    small = bright.reshape(H // 4, 4, W // 4, 4, 3).mean((1, 3))
+    acc = np.zeros_like(small)
+    for r_, k_ in ((1.5, 0.8), (6, 0.5), (20, 0.35)):
+        acc += gaussian_filter(small, (r_, r_, 0)) * k_
+    out = img + np.repeat(np.repeat(acc, 4, 0), 4, 1)
+    core = np.clip(img - 3.0, 0, 8).astype(np.float32).mean(-1)
     if core.max() > 0:
-        c8 = (np.clip(core, 0, 6) / 6 * 255).astype(np.uint8)
-        st = np.asarray(Image.fromarray(c8).resize((W // 8, H), Image.BILINEAR).filter(ImageFilter.BoxBlur(18)).resize((W, H), Image.BILINEAR), np.float32) / 255 * 6
-        out += st * np.array([0.55, 0.7, 1.0]) * 0.5
+        cs = core.reshape(H // 4, 4, W // 4, 4).mean((1, 3))
+        st = uniform_filter1d(uniform_filter1d(cs, 41, axis=1), 41, axis=1)
+        out += np.repeat(np.repeat(st, 4, 0), 4, 1)[..., None] * np.array([0.55, 0.7, 1.0]) * 1.2
     return out
 
 def tonemap(x):
@@ -421,9 +441,9 @@ def frame(t):
         dvec = X - p; dist = np.linalg.norm(dvec); dn = dvec / dist
         bq = dn @ p; cq = p @ p - 1; disc = bq * bq - cq
         if disc > 0 and (-bq - math.sqrt(disc)) < dist - 2 * KM: continue
-        size = max(1.2, k * (0.8 + 1.4 * min(dt, 2)) * KM / z[0])
+        size = max(1.2, k * (0.8 + 1.4 * min(dt, 2)) * KM / z[0], 3.0 * min(inten, 6.0) ** 0.6 * (dt < 1.5))
         col = np.array([0.9, 0.95, 1.0]) * (1 - orng) + np.array([1.0, 0.6, 0.25]) * orng
-        R.glowdot(img, x[0], y[0], size, tuple(col), min(8.0, inten * e * 1.2))
+        glow(img, x[0], y[0], size, col, min(8.0, inten * e * 1.2))
         # the shock ring racing out over the clouds (seen from orbit), 0.3–3 s
         if 0.15 < dt < 3.5:
             ring_km = 6 + 90 * (dt - 0.15) ** 0.7
