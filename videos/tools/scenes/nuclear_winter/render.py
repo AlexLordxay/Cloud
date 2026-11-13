@@ -269,12 +269,20 @@ def draw_puffs(img, puffs):
         if rp < 0.7 or al <= 0.01: continue
         n = max(3, int(rp * 2))
         if x + n < 0 or x - n > W or y + n < 0 or y - n > H: continue
-        A_ = np.asarray(Image.fromarray((a0 * 255).astype(np.uint8)).resize((n, n), Image.BILINEAR), np.float32) / 255 * al
-        T_ = np.asarray(Image.fromarray((top * 255).astype(np.uint8)).resize((n, n), Image.BILINEAR), np.float32)[..., None] / 255
-        col = np.array(ct) * T_ + np.array(cb) * (1 - T_)
         x0 = int(x - n / 2); y0 = int(y - n / 2)
         xa, ya, xb, yb = max(0, x0), max(0, y0), min(W, x0 + n), min(H, y0 + n)
         if xa >= xb or ya >= yb: continue
+        if n > 2048:
+            # a puff right at the camera: scale only the part on screen (a whole n x n sprite would not fit in memory)
+            S_ = a0.shape[0] / n; box = ((xa - x0) * S_, (ya - y0) * S_, (xb - x0) * S_, (yb - y0) * S_)
+            A_ = np.asarray(Image.fromarray((a0 * 255).astype(np.uint8)).resize((xb - xa, yb - ya), Image.BILINEAR, box=box), np.float32) / 255 * al
+            T_ = np.asarray(Image.fromarray((top * 255).astype(np.uint8)).resize((xb - xa, yb - ya), Image.BILINEAR, box=box), np.float32)[..., None] / 255
+            col = np.array(ct) * T_ + np.array(cb) * (1 - T_)
+            img[ya:yb, xa:xb] = img[ya:yb, xa:xb] * (1 - A_[..., None]) + col * A_[..., None]
+            continue
+        A_ = np.asarray(Image.fromarray((a0 * 255).astype(np.uint8)).resize((n, n), Image.BILINEAR), np.float32) / 255 * al
+        T_ = np.asarray(Image.fromarray((top * 255).astype(np.uint8)).resize((n, n), Image.BILINEAR), np.float32)[..., None] / 255
+        col = np.array(ct) * T_ + np.array(cb) * (1 - T_)
         sa = A_[ya - y0:yb - y0, xa - x0:xb - x0, None]; sc = col[ya - y0:yb - y0, xa - x0:xb - x0]
         img[ya:yb, xa:xb] = img[ya:yb, xa:xb] * (1 - sa) + sc * sa
 
@@ -396,11 +404,15 @@ R.slerp = slerp
 
 def glow(img, cx, cy, r, col, k):
     """a fireball's light: a hot core and a wide soft halo, on a sprite big enough that its edge is never seen"""
-    s = int(r * 16 + 8); yy, xx = np.mgrid[0:s, 0:s] - s / 2 + 0.5
+    s = int(r * 16 + 8); x0 = int(round(cx - s / 2)); y0 = int(round(cy - s / 2))
+    xa, ya, xb, yb = max(0, x0), max(0, y0), min(W, x0 + s), min(H, y0 + s)
+    if xa >= xb or ya >= yb: return
+    # only the part of the sprite that is on screen (the same values R.add would paste; a fireball at the camera is huge)
+    yy, xx = np.meshgrid(np.arange(ya, yb) - y0 - s / 2 + 0.5, np.arange(xa, xb) - x0 - s / 2 + 0.5, indexing='ij')
     d = np.sqrt(xx * xx + yy * yy)
     g = np.exp(-(d / r) ** 2) + 0.22 * np.exp(-(d / (2.6 * r)) ** 2) + 0.05 * np.exp(-(d / (6 * r)) ** 2)
     g = g * np.clip(1 - d / (s / 2), 0, 1) ** 2
-    R.add(img, g[..., None] * np.asarray(col) * k, cx, cy)
+    img[ya:yb, xa:xb] += g[..., None] * np.asarray(col) * k
 
 # ---------------------------------------------------------------- post: bloom, flare, tone map
 def bloom(img):
