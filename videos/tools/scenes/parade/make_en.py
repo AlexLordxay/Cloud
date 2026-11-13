@@ -351,16 +351,23 @@ def frames():
 
 
 def voice():
-    """voice_en.mp3 cut between the sentences (in the middle of each pause) and laid on the new clock"""
-    cuts = [0.0] + [(EN_T1[k] + EN_T0[k + 1]) / 2 for k in range(18)] + [EN_T1[-1] + 0.25]
-    ins, parts = ['-i', os.path.join(HERE, 'voice_en.mp3')], []
-    split = f'[0:a]asplit=19' + ''.join(f'[c{k}]' for k in range(19))
+    """voice_en.mp3 cut between the sentences (in the middle of each pause) and laid on the new clock (numpy: an ffmpeg
+    asplit → amix graph of 19 branches deadlocks)"""
+    SR = 44100
+    raw = subprocess.run([FF, '-loglevel', 'error', '-i', os.path.join(HERE, 'voice_en.mp3'), '-f', 's16le', '-ac', '1', '-ar', str(SR), '-'], capture_output=True, check=True).stdout
+    x = np.frombuffer(raw, np.int16).astype(np.float32) / 32768
+    cuts = [0.0] + [(EN_T1[k] + EN_T0[k + 1]) / 2 for k in range(18)] + [len(x) / SR]
+    out = np.zeros(int(DUR * SR) + SR, np.float32)
     for k in range(19):
-        parts.append(f'[c{k}]atrim={cuts[k]:.3f}:{cuts[k + 1]:.3f},asetpts=PTS-STARTPTS,afade=t=in:d=0.02,adelay={int((cuts[k] + OFF[k]) * 1000)}:all=1[v{k}]')
-    graph = split + ';' + ';'.join(parts) + ';' + ''.join(f'[v{k}]' for k in range(19)) + f'amix=inputs=19:normalize=0,apad,atrim=0:{DUR:.2f}[a]'
-    out = os.path.join(WORK, 'voice.wav')
-    subprocess.run([FF, '-y', '-loglevel', 'error', *ins, '-filter_complex', graph, '-map', '[a]', '-ar', '44100', out], check=True)
-    return out
+        a, b = int(cuts[k] * SR), int(cuts[k + 1] * SR); seg_ = x[a:b].copy()
+        n = min(len(seg_), 400); seg_[:n] *= np.linspace(0, 1, n); seg_[-n:] *= np.linspace(1, 0, n)   # no clicks at the cuts (all in silence)
+        o = int((cuts[k] + OFF[k]) * SR); out[o:o + len(seg_)] += seg_
+    out = out[:int(DUR * SR)]
+    path = os.path.join(WORK, 'voice.wav')
+    import wave
+    with wave.open(path, 'wb') as w:
+        w.setnchannels(1); w.setsampwidth(2); w.setframerate(SR); w.writeframes((np.clip(out, -1, 1) * 32767).astype(np.int16).tobytes())
+    return path
 
 
 def sound():
@@ -368,7 +375,7 @@ def sound():
     nb = {k: (round(new(v), 2) if not isinstance(v, list) else [round(new(x), 2) for x in v]) for k, v in B.items()}
     json.dump({'duration': DUR, 'beats': nb, 'tr': 2}, open(os.path.join(WORK, 'scene_en.json'), 'w'), indent=1)
     env = dict(os.environ, PARADE_SCENE=os.path.join(WORK, 'scene_en.json'), PARADE_MUSIC=os.path.join(WORK, 'music.wav'))
-    subprocess.run(['node', os.path.join(HERE, 'music.js')], check=True, cwd=TOOLS, env=env)
+    if not os.path.exists(os.path.join(WORK, 'music.wav')) or 'music' in sys.argv: subprocess.run(['node', os.path.join(HERE, 'music.js')], check=True, cwd=TOOLS, env=env)
     v = voice()
     SR = 44100; N = int(DUR * SR); mix = np.zeros(N); mixm = np.zeros(N)
     def add(x, at, k, mix=mix):
