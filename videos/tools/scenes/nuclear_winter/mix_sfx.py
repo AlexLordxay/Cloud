@@ -15,20 +15,21 @@ CUES = [('boom_far.mp3', 0.70, -3, 1.00, 0, None, None)]                        
 for i, (t, g, p) in enumerate([(11.0, -9, 1.05), (11.6, -11, 0.92), (12.1, -8, 1.10), (12.6, -12, 0.88),
                                (13.0, -10, 1.0), (14.15, -9, 0.95), (14.6, -12, 1.08), (15.05, -11, 0.9)]):
     CUES.append(('boom_far.mp3', t - 0.2, g, p, 0, None, None))                       # the cascade, each a little different
-CUES += [('blast_close.mp3', 12.2, 1, 1.0, 0, None, None),                             # crack at ~13.75 s, the close one
-         ('firestorm.mp3', 16.0, -9, 1.0, 1.2, 6.8, 8.0), ('firestorm.mp3', 22.6, -10, 0.94, 1.5, 6.6, 8.0),
-         ('firestorm.mp3', 28.4, -13, 0.9, 1.5, 3.0, 4.6),                              # fire → fading into the smoke
-         ('wind_cold.mp3', 34.0, -8, 1.0, 2.0, 8.6, 10.0), ('wind_cold.mp3', 42.4, -9, 0.95, 2.0, 8.0, 10.0),
-         ('wind_cold.mp3', 50.0, -14, 0.9, 1.5, 2.5, 4.5)]                              # the winter, dying away by 54.5 s
+CUES += [('blast_synth.wav', 13.45, 0, 1.0, 0, None, None),                            # synthesised: crack at 13.75 s
+         ('boom_far.mp3', 13.55, -3, 0.75, 0, None, None),                             # …with the far boom, lower, for body
+         ('fire_synth.wav', 15.8, -9, 1.0, 0, None, None),                              # firestorm 15.8–31.8 s (own fades)
+         ('wind_synth.wav', 33.6, -8, 1.0, 0, None, None)]                              # the winter's wind 33.6–54.6 s
+# (the AI firestorm / close blast / wind from Higgsfield had screams in them — replaced by synth_sfx.py)
 
 def chain(i, f, t, g, p, fi, fo, ln):
-    s = f'[{i}:a]aformat=sample_rates=44100:channel_layouts=mono,asetrate={int(44100 * p)},aresample=44100'
+    st = f.endswith('.wav')                                   # the synthesised ones are already wide stereo
+    s = f'[{i}:a]aformat=sample_rates=44100:channel_layouts={"stereo" if st else "mono"},asetrate={int(44100 * p)},aresample=44100'
     if ln: s += f',atrim=0:{ln}'
     if fi: s += f',afade=t=in:d={fi}'
     if fo: s += f',afade=t=out:st={fo}:d={(ln or 8) - fo}'
     # depth: a little sub on the booms; width: split into two slightly different channels; space: a big-hall echo
     if 'boom' in f or 'blast' in f: s += ',bass=g=5:f=60:w=0.8'
-    s += f',volume={g}dB,pan=stereo|c0=c0|c1=c0,stereowiden=delay=18:feedback=0.25:crossfeed=0.35:drymix=0.85'
+    s += f',volume={g}dB' + ('' if st else ',pan=stereo|c0=c0|c1=c0,stereowiden=delay=18:feedback=0.25:crossfeed=0.35:drymix=0.85')
     s += ',aecho=0.85:0.6:70|140|260:0.30|0.22|0.14'
     s += f',adelay={int(t * 1000)}:all=1[s{i}]'
     return s
