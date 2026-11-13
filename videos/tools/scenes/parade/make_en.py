@@ -410,7 +410,7 @@ SENT = ["On November sixteenth, step outside before dawn —|and you'll see four
         "The Leonid meteor shower is active:|dust from comet Tempel–Tuttle|hits our atmosphere at 71 km per second.",
         "Best from November 16 to 22,|about 40 minutes before sunrise.", "No telescope needed —|just a clear sky and an open view to the southeast.",
         "Save this so you don't oversleep,|and send it to someone you'll watch it with!"]
-SUB_Y = 1390
+SUB_Y = 1518                     # the LAST line's centre: the plate ends ~1558, just above the badges at 1600
 
 
 def sub_chunks():
@@ -441,7 +441,7 @@ def draw_sub(im, t, chunks, f):
         if a - 0.05 <= t < b + 0.12:
             al = min(1.0, (t - a + 0.05) / 0.12, (b + 0.12 - t) / 0.12)
             lines = wrap2(x, f); d0 = ImageDraw.Draw(im); lh = 60
-            y0 = SUB_Y - (len(lines) - 1) * lh / 2
+            y0 = SUB_Y - (len(lines) - 1) * lh
             ws = [d0.textlength(l_, font=f) for l_ in lines]
             lay = Image.new('RGBA', im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
             d.rounded_rectangle((W / 2 - max(ws) / 2 - 26, y0 - 40, W / 2 + max(ws) / 2 + 26, y0 + (len(lines) - 1) * lh + 40), radius=22, fill=(8, 10, 18, int(150 * al)))
