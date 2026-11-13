@@ -398,9 +398,75 @@ def sound():
                     '-filter_complex', mixf, '-map', '[a]', '-ar', '44100', os.path.join(WORK, 'mix.wav')], check=True)
 
 
+# ---------------- burned-in subtitles of the English voice (drawn over the finished frames: out → out_sub) ----------------
+SENT = ["On November sixteenth, step outside before dawn —|and you'll see four planets at once.", "Why together?", "Let's look from above.",
+        "From Earth, all four lie on the same side of the Sun this week —|so they rise before it|and shine together before sunrise.",
+        "Here's who's coming to the parade.", "Tiny Mercury —|a year there lasts just 88 days.",
+        "Venus — almost Earth's twin,|but under its clouds it's 465 °C.", "Mars — half the size of Earth,|and its red color is rust.",
+        "And Jupiter — 11 times wider than our planet:|more than 1,300 Earths would fit inside it.", "Now — the sky.",
+        "Look southeast:|low above the horizon shines Venus —|the brightest point in the sky after the Moon.", "And below it — Mercury.",
+        "Higher up, in the south,|Mars and Jupiter come so close|that your outstretched finger can cover them both.",
+        "Though in reality,|they're almost 600 million km apart.", "And if you're lucky —|you'll catch a meteor too.",
+        "The Leonid meteor shower is active:|dust from comet Tempel–Tuttle|hits our atmosphere at 71 km per second.",
+        "Best from November 16 to 22,|about 40 minutes before sunrise.", "No telescope needed —|just a clear sky and an open view to the southeast.",
+        "Save this so you don't oversleep,|and send it to someone you'll watch it with!"]
+SUB_Y = 1390
+
+
+def sub_chunks():
+    """each sentence in pieces of ≤ 2 lines × ~30 characters, broken after punctuation where possible; the time of a
+    sentence shared out by length"""
+    out = []
+    for k, sen in enumerate(SENT):
+        t0, t1 = EN_T0[k] + OFF[k], EN_T1[k] + OFF[k]
+        pieces = sen.split('|')
+        tot = sum(len(x) for x in pieces); a = t0
+        for x in pieces:
+            b = a + (t1 - a if x is pieces[-1] else (t1 - t0) * len(x) / tot); out.append((a, b, x)); a = b
+    return out
+
+
+def wrap2(s_, f, maxw=900):
+    d0 = ImageDraw.Draw(Image.new('L', (1, 1)))
+    if d0.textlength(s_, font=f) <= maxw: return [s_]
+    w = s_.split(); best = None
+    for i in range(1, len(w)):
+        a, b = ' '.join(w[:i]), ' '.join(w[i:]); m = max(d0.textlength(a, font=f), d0.textlength(b, font=f))
+        if best is None or m < best[0]: best = (m, [a, b])
+    return best[1]
+
+
+def draw_sub(im, t, chunks, f):
+    for a, b, x in chunks:
+        if a - 0.05 <= t < b + 0.12:
+            al = min(1.0, (t - a + 0.05) / 0.12, (b + 0.12 - t) / 0.12)
+            lines = wrap2(x, f); d0 = ImageDraw.Draw(im); lh = 60
+            y0 = SUB_Y - (len(lines) - 1) * lh / 2
+            ws = [d0.textlength(l_, font=f) for l_ in lines]
+            lay = Image.new('RGBA', im.size, (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
+            d.rounded_rectangle((W / 2 - max(ws) / 2 - 26, y0 - 40, W / 2 + max(ws) / 2 + 26, y0 + (len(lines) - 1) * lh + 40), radius=22, fill=(8, 10, 18, int(150 * al)))
+            im.alpha_composite(lay)
+            for i, l_ in enumerate(lines): text(im, l_, f, W / 2, y0 + i * lh, al, (255, 255, 255), blur=6)
+            return
+
+
+def _sub_job(i):
+    chunks = _sub_job.chunks if hasattr(_sub_job, 'chunks') else None
+    if chunks is None: _sub_job.chunks = chunks = sub_chunks()
+    im = Image.open(os.path.join(WORK, 'out', f'f_{i:05d}.jpg')).convert('RGBA')
+    draw_sub(im, i / FPS, chunks, fc(44, 700))
+    im.convert('RGB').save(os.path.join(WORK, 'out_sub', f'f_{i:05d}.jpg'), quality=92)
+
+
+def subtitles():
+    os.makedirs(os.path.join(WORK, 'out_sub'), exist_ok=True)
+    n = int(round(DUR * FPS))
+    with Pool(4) as p: p.map(_sub_job, range(n), chunksize=16)
+
+
 def encode():
     out = os.path.join(VIDEOS, 'parade_en.mp4')
-    subprocess.run([FF, '-y', '-loglevel', 'error', '-framerate', str(FPS), '-i', os.path.join(WORK, 'out', 'f_%05d.jpg'), '-i', os.path.join(WORK, 'mix.wav'),
+    subprocess.run([FF, '-y', '-loglevel', 'error', '-framerate', str(FPS), '-i', os.path.join(WORK, 'out_sub', 'f_%05d.jpg'), '-i', os.path.join(WORK, 'mix.wav'),
                     '-map', '0:v', '-map', '1:a', '-map_metadata', '-1', '-t', f'{DUR:.2f}', '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p',
                     '-profile:v', 'high', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-movflags', '+faststart', out], check=True)
     print('written', out)
@@ -411,5 +477,6 @@ if __name__ == '__main__':
     if sys.argv[1:2] == ['test']:
         for a in sys.argv[2:]: frame(int(round(float(a) * FPS))).save(os.path.join(WORK, f'test_{a}.jpg'), quality=90)
         sys.exit()
+    if sys.argv[1:2] == ['subs']: subtitles(); encode(); sys.exit()
     if 'sound' not in sys.argv[1:]: frames()
-    sound(); encode()
+    subtitles(); sound(); encode()
