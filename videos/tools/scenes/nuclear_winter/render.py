@@ -226,7 +226,7 @@ def earth(o, f, r, u, k, t, S, st, flashes, bg):
     shell = (~hit | True) & (bb < ATM) & (tc > 0)
     if shell.any():
         Pc = o + tc[..., None] * d
-        Pc = Pc / np.linalg.norm(Pc, axis=-1, keepdims=True)
+        Pc = Pc / np.maximum(np.linalg.norm(Pc, axis=-1, keepdims=True), 1e-9)   # the ray through the centre: no 0/0
         mu_c = (Pc * S).sum(-1)
         h_ = np.clip((bb - 1) / (ATM - 1), 0, 1)
         dens = np.exp(-h_ * 3.2) * np.clip((ATM - bb) / (ATM - 1), 0, 1) * (~hit)
@@ -476,7 +476,7 @@ def frame(t):
         fade = 1 - sm((t - 34) / 5)
         puffs += [(x, y, rp, z, ct, cb, a * fade) for x, y, rp, z, ct, cb, a in fp]
     if puffs: draw_puffs(img, puffs)
-    img = bloom(img)
+    img = bloom(np.nan_to_num(img, nan=0.0, posinf=12.0, neginf=0.0))   # one NaN would spread over the whole bloom
     # a soft vignette
     yy, xx = np.mgrid[0:H, 0:W]; vig = 1 - 0.35 * (((xx - W / 2) / W) ** 2 + ((yy - H / 2) / H) ** 2) * 2
     img = img * vig[..., None]
