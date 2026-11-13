@@ -47,6 +47,15 @@ def maps():
             z = rng.random((1024 // s + 2, 2048 // s + 2)).astype(np.float32)
             det += np.asarray(Image.fromarray((z * 255).astype(np.uint8)).resize((2048 + 2 * s, 1024 + 2 * s), Image.BICUBIC), np.float32)[s:1024 + s, s:2048 + s] / 255 * a
         _M['clouds'] = np.clip((cl * 1.3 - 0.15) * (0.6 + 0.8 * det), 0, 1)
+        # the polar caps: clouds on a flat map seen from above the pole (no seam, no pinch at the pole), matched to the
+        # cloud cover of the 60–75° band
+        band = _M['clouds'][int(1024 * 15 / 180):int(1024 * 30 / 180)].mean()
+        cap = np.zeros((1024, 1024), np.float32)
+        for s_, a_ in ((128, 0.5), (48, 0.3), (16, 0.2)):
+            z = rng.random((1024 // s_ + 2, 1024 // s_ + 2)).astype(np.float32)
+            cap += np.asarray(Image.fromarray((z * 255).astype(np.uint8)).resize((1024 + 2 * s_, 1024 + 2 * s_), Image.BICUBIC), np.float32)[s_:1024 + s_, s_:1024 + s_] / 255 * a_
+        cap = np.clip((cap - cap.mean()) * 2.4 + band, 0, 1)
+        _M['cap'] = cap
     return _M
 
 def sample(img, u, v, bil=True):
@@ -161,8 +170,9 @@ def earth(o, f, r, u, k, t, S, st, flashes, bg):
         day = (sample(M['day'], Uh, Vh) / 255) ** 2.0
         night = sample(M['night'], Uh, Vh) / 255
         land = sample(M['land'], Uh, Vh)
-        pm = np.clip((86 - np.abs(lat_h)) / 16, 0, 1)                              # no cloud seam at the poles: fade to an even veil
-        cl = sample(M['clouds'], Uh, Vh) * pm + 0.32 * (1 - pm)
+        pm = np.clip((84 - np.abs(lat_h)) / 18, 0, 1)                              # near the poles: the planar cap clouds
+        capc = sample(M['cap'], (Ph[:, 0] * 1.6 + 1) / 2 % 1.0, np.clip((Ph[:, 1] * 1.6 + 1) / 2, 0, 0.999))
+        cl = sample(M['clouds'], Uh, Vh) * pm + capc * (1 - pm)
         mu = Ph @ S
         lit = np.clip((mu + 0.10) / 0.95, 0, 1) ** 1.3                            # a soft twilight band, no hard circle
         view = np.clip(-(Ph * dh).sum(-1), 0, 1)
