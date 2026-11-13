@@ -65,10 +65,13 @@ def draw_block(img, text, fnt, cy, alpha, fill=(255, 255, 255), spacing=14):
     d.multiline_text((x, y), text, font=fnt, fill=fill + (int(255 * alpha),), align='center', spacing=spacing)
     img.alpha_composite(lay)
 
+LOGO_PARTS = ('Небозв', 'ı', 'д')          # the wordmark; an English cut sets ('Nebozv', 'ı', 'd')
+SUB_TEXT = ('Підписатися', 'Ви підписані')  # the subscribe button before / after the tap; English: ('Follow', 'Following')
+
 def logo_layer(size):
     # The site's wordmark: Cormorant Italic Bold with the dawn-to-night gradient; a star replaces the dot of "і".
     f = font('CormorantItalic.ttf', size, 700)
-    pre, i_, post = 'Небозв', 'ı', 'д'
+    pre, i_, post = LOGO_PARTS
     d0 = ImageDraw.Draw(Image.new('L', (1, 1)))
     wpre = d0.textlength(pre, font=f)
     box = d0.textbbox((0, 0), pre + i_ + post, font=f)
@@ -129,7 +132,7 @@ def draw_subscribe(img, cx, cy, tl, dur, align='left', scale=1.0):
     done = tl >= tap
     press = 1 - 0.07 * max(0.0, 1 - abs(tl - tap) / 0.12)
     sc = scale * press
-    text = 'Ви підписані' if done else 'Підписатися'
+    text = SUB_TEXT[1] if done else SUB_TEXT[0]
     fill = (62, 66, 76) if done else (229, 31, 31)
     f = f_btn if scale == 1 else font('Commissioner.ttf', int(40 * scale), 700)
     d0 = ImageDraw.Draw(img)

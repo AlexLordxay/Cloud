@@ -6,9 +6,10 @@
 //   node scenes/parade/music.js   ->  work/parade/music.wav
 const fs = require('fs'), path = require('path');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
-const SC = JSON.parse(fs.readFileSync(path.join(__dirname, 'scene.json')));
-const T = SC.duration, OUT = path.resolve(__dirname, '../../work/parade/music.wav');
-const S = SC.beats;
+// PARADE_SCENE / PARADE_MUSIC: another timeline and output (the English cut: scene_en.json, its beats, "tr" semitones up)
+const SC = JSON.parse(fs.readFileSync(process.env.PARADE_SCENE || path.join(__dirname, 'scene.json')));
+const T = SC.duration, OUT = path.resolve(process.env.PARADE_MUSIC || path.resolve(__dirname, '../../work/parade/music.wav'));
+const S = Object.assign({ tr: SC.tr || 0 }, SC.beats);
 
 function score({ organ, FL, REG_MID, lv }, S, T) {
   // [start, notes, how full]
@@ -33,11 +34,11 @@ function score({ organ, FL, REG_MID, lv }, S, T) {
   ];
   CH.forEach(([a, ns, d], i) => {
     const b = (CH[i + 1] ? CH[i + 1][0] : T) + 0.8;
-    ns.forEach((m, j) => organ(a + j * 0.08, b, m + 12, d > 0.45 ? REG_MID : FL, lv(d, 0.03, 0.22), 700 + 2600 * d, 1.6, 1.6));
+    ns.forEach((m, j) => organ(a + j * 0.08, b, m + 12 + S.tr, d > 0.45 ? REG_MID : FL, lv(d, 0.03, 0.22), 700 + 2600 * d, 1.6, 1.6));
   });
-  CH.forEach(([a, ns, d], i) => { const b = CH[i + 1] ? CH[i + 1][0] : T; if (b - a < 2.5 || d < 0.27) return; organ(a + 0.7, b - 0.2, ns[2] + 24, FL, 0.04, 2600, 1.0, 1.2, 4.6 + 0.1 * (i % 4)); });
+  CH.forEach(([a, ns, d], i) => { const b = CH[i + 1] ? CH[i + 1][0] : T; if (b - a < 2.5 || d < 0.27) return; organ(a + 0.7, b - 0.2, ns[2] + 24 + S.tr, FL, 0.04, 2600, 1.0, 1.2, 4.6 + 0.1 * (i % 4)); });
   // the meteors: a light high note each, like a glint
-  for (const m of S.meteors || []) organ(m, m + 1.4, 88 + (Math.round(m * 7) % 3) * 2, FL, 0.021, 4200, 0.02, 1.2);
+  for (const m of S.meteors || []) organ(m, m + 1.4, 88 + S.tr + (Math.round(m * 7) % 3) * 2, FL, 0.021, 4200, 0.02, 1.2);
 }
 
 (async () => {

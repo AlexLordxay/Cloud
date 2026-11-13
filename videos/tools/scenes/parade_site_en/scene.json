@@ -1,0 +1,15 @@
+{
+ "title": "Planet parade — the view from the site (English labels)",
+ "date": "2026-11-16T04:20:00Z",
+ "rate": 0,
+ "duration": 16.2,
+ "fps": 30,
+ "width": 720,
+ "height": 1280,
+ "patches": [
+  [
+   "window.__rec = { state, byId,",
+   "window.__rec = { asteroidBelt, kuiperBelt, state, byId,"
+  ]
+ ]
+}

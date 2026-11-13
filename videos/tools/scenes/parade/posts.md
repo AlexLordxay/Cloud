@@ -46,3 +46,11 @@
 - **Обкладинка:** кадр 0:05 («16 листопада · 6:20 — 4 планети на світанку»).
 - **TikTok закріплений коментар (радили):** «15 листопада ввечері нагадаю тут — підпишись, щоб не проспати 🔔».
 - **Сторіз:** `videos/stories/parade_story.png` + наклейка «Опитування» («Так! 🙋» / «Проспимо 😅») або «Запитання» («З якого ви міста?»).
+
+## ENGLISH — Instagram Trial Reel (videos/parade_en.mp4, ~90 s; post 13.11 at 18:00 Kyiv, «Пробний ролик» ON)
+4 planets in one sky this week 🪐 On November 16, step outside before dawn: Venus and Mercury low in the southeast, Mars and Jupiter so close together your finger can cover both — though they're almost 600 million km apart.
+☄️ Bonus: the Leonid meteor shower — the fastest meteors, 71 km/s.
+⏰ Best: November 16–22, ~40 minutes before sunrise (Northern Hemisphere). No telescope needed.
+Save this so you don't oversleep, and send it to someone you'll watch it with 👇
+Sky computed for Ukraine (50° N); directions are similar across mid-northern latitudes. Visualization: Nebozvid. Voiceover: my voice, made with AI.
+#planetparade #planets #astronomy #space #venus #jupiter #mars #mercury #leonids #meteorshower #stargazing #nightsky #reels
