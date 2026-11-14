@@ -324,7 +324,10 @@ def magnetosphere(img, cam, p, t, M):
             P = field_line(Lx, phi, m, sp, sq_, s, M['comp'], M['tail'], n=140 if L > 9 else 90)
             P = P[(P @ s) > -46]
             if len(P) < 2: continue
-            polyline(img, cam, p, P, None, a=la * a0 * (0.9 if L < 9 else 0.65), layer=segs_f)
+            # a loop whose plane holds the line of sight collapses to a bright bar: fade it
+            eqd = math.cos(phi) * sp + math.sin(phi) * sq_; pn = nrm(np.cross(eqd, m))
+            edge = abs(float(pn @ nrm(-p)))
+            polyline(img, cam, p, P, None, a=la * a0 * (0.9 if L < 9 else 0.65) * min(1.0, max(0.0, (edge - 0.08) * 4)), layer=segs_f)
     if M.get('bow_a', 0) > 0:
         bp = bow_sheet(M['rbs'], s, bs1, bs2)
         x_, y_, z_ = cam.proj(bp[0])
@@ -745,7 +748,7 @@ def shot_S9(t):
     ]
     p, g, up, fov = linear_keys(t, keys)
     # the storm of 19–20.01.2026: the red oval down to ~50° magnetic latitude, seen low in the north from Ukraine
-    A = oval(th0=33.0, kg=0.5, kr=0.8, wg=1.2, wr=10.0, shift_r=4.0, steps=26, ground=0.0)
+    A = oval(th0=33.0, kg=0.45, kr=0.55, wg=1.2, wr=11.0, shift_r=4.5, steps=26, ground=0.0)
     img, cam, _ = earth_view(t, p, g, up, fov, SUN, A, star_pan=(t * 3, 0), step=2)
     return img
 
