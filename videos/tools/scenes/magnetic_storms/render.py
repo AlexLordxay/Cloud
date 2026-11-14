@@ -604,7 +604,7 @@ def flight_cam(t):
     if t <= 15.6: return _flight_a(t)
     p0, g0, u0, f0 = _flight_a(15.6)
     keys = [(15.6, p0, g0, u0, f0), (18.6, s * 2.0 + side * 48, s * 0.5, s, 47),
-            (20.8, s * 1.0 + side * 30, s * 0.0, s, 46), (22.6, s * 0.6 + side * 10.5 + MAG * 1.5, s * 0.1, s, 46)]
+            (20.4, s * 1.0 + side * 30, s * 0.0, s, 46), (22.9, s * 0.6 + side * 15.0 + MAG * 1.5, s * 0.1, s, 46)]
     return linear_keys(t, keys)
 
 def cme_state(t):
@@ -761,7 +761,7 @@ def shot_S11(t):
     v = photo('aurora_cv_IMG_3842.jpg', t, 61.8, 72.0, 1.0, 1.14, (0.5, 0.55), (0.56, 0.58))
     return v
 
-SHOTS = [(0.0, 5.2, shot_S1), (4.6, 8.8, shot_S2), (8.2, 12.8, shot_S3), (12.2, 22.6, shot_S4), (22.0, 25.8, shot_S5),
+SHOTS = [(0.0, 5.2, shot_S1), (4.6, 8.8, shot_S2), (8.2, 12.8, shot_S3), (12.2, 22.9, shot_S4), (22.0, 25.8, shot_S5),
          (25.2, 30.9, shot_S6), (30.3, 38.9, shot_S7), (38.3, 55.0, shot_S8), (54.4, 57.4, shot_S9), (56.8, 62.4, shot_S10),
          (61.8, 72.5, shot_S11)]
 LINEAR = {'shot_S2', 'shot_S3', 'shot_S5', 'shot_S10', 'shot_S11'}      # already display-referred (photos, real data)
