@@ -427,7 +427,7 @@ def draw_cme(img, cam, p, center, radius, axis, intensity, t):
     a_ = np.arctan2(Pn @ e2, Pn @ e1); pol = np.arccos(np.clip(c, -1, 1))
     fil = (0.35 + 0.65 * (0.5 + 0.5 * np.sin(a_ * 7 + pol * 11 + t * 0.3)) * (0.5 + 0.5 * np.sin(a_ * 17 - pol * 5 + 1.3)) ** 2)
     nose = np.clip((c + 0.25) / 1.25, 0, 1) ** 1.6
-    em = (shell / th) ** 2 * 0.3 * nose * fil
+    em = (shell / th) ** 2.5 * 0.22 * nose * fil
     # the flux-rope core: a dimmer, twisted blob behind the front
     cc = center - axis * radius * 0.15
     oc2 = p - cc; b2 = d @ oc2; c2 = oc2 @ oc2 - (radius * 0.45) ** 2; core = 2 * np.sqrt(np.maximum(b2 * b2 - c2, 0)) / (radius * 0.9)
@@ -565,8 +565,15 @@ def shot_S3(t):
     a = c2_interp(x)
     im = Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8))
     kk = min(1, max(0, k)) * 0.7 + sm(min(1, max(0, k))) * 0.3
-    scale = lerp(1.18, 1.42, kk)
-    cx = 512 + lerp(0, 40, kk) / scale; cy = 512 + (960 - 960) / scale + lerp(0, 30, kk) / scale
+    # the end: a dive into the occulter's white circle (the Sun's disc) — it becomes the Sun of the next shot
+    dive = sm((t - 11.9) / 0.9)
+    # where (and how big) the Sun of the next shot is right now: the occulter's white circle (r = 80 px) lands on it
+    pf, gf, uf, ff = flight_cam(max(t, 12.2)); camf = R.Cam(pf, gf, fov=ff, up=uf)
+    xs_, ys_, zs_ = camf.proj(SUN * D_SUN); rs_ = camf.k * R_SUN_S / zs_[0]
+    scale = math.exp(lerp(math.log(lerp(1.18, 1.42, kk)), math.log(rs_ / 80.0), dive))
+    sx = lerp(540 + lerp(0, -40, kk) * 0, float(xs_[0]), dive); sy = lerp(lerp(960, 930, kk), float(ys_[0]), dive)
+    ccx, ccy = lerp(512, 512.5, dive), lerp(512, 518.9, dive)
+    cx = ccx + (W / 2 - sx) / scale + lerp(lerp(0, 40, kk), 0, dive) / scale; cy = ccy + (H / 2 - sy) / scale
     v = np.asarray(view_crop(im, cx, cy, scale), np.float32) / 255
     # the timestamp strip and the square's corners: under a soft round vignette
     yy, xx = np.mgrid[0:H, 0:W]
