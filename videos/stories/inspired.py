@@ -29,14 +29,8 @@ def C(sz, w=500):
 gold, white, soft = (255, 214, 140), (255, 255, 255), (215, 222, 240)
 d = ImageDraw.Draw(img)
 
-# the question, as an Instagram question sticker
-q = 'Що надихнуло?'; fq = U(58, 700)
-qw = d.textlength(q, font=fq); bw, bh = qw + 120, 150; bx, by = (W - bw) / 2, 250
-pan = Image.new('RGBA', (W, H), (0, 0, 0, 0)); pd = ImageDraw.Draw(pan)
-pd.rounded_rectangle((bx, by, bx + bw, by + bh), 42, fill=(255, 255, 255, 235))
-img.alpha_composite(pan)
+# the question sticker is added by the author in Instagram (the space above the text is left for it)
 d = ImageDraw.Draw(img)
-d.text(((W - qw) / 2, by + (bh - 70) / 2), q, font=fq, fill=(20, 24, 40))
 
 def wrap(text, font, maxw):
     out, line = [], ''
