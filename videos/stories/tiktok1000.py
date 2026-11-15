@@ -45,9 +45,10 @@ ctext(300, n, f, gold, glow=28)
 ctext(640, 'ДЯКУЄМО!', U(84), white)
 lines = ['Тисяча людей, які разом', 'дивляться на небо']
 for i, t in enumerate(lines): ctext(800 + i * 72, t, C(56), white)
+ctext(1010, 'Ви — найкраща аудиторія!', U(50), gold, glow=16)
 body = ['Учора зранку нас було 633 —', 'а сьогодні вже 1 000!', '', 'Дякуємо за кожен лайк,', 'коментар і пересилання.', 'Попереду — ще більше космосу!']
 for i, t in enumerate(body):
-    if t: ctext(1110 + i * 64, t, C(48), soft)
+    if t: ctext(1150 + i * 64, t, C(48), soft)
 ctext(1720, 'НЕБОЗВІД', U(40), gold)
 ctext(1782, 'nebozvid.com.ua', C(36), soft, shadow=False)
 img.convert('RGB').save(OUT)
