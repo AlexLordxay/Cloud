@@ -374,8 +374,8 @@ def s3_view(t):
         k = sm((t - 14.9) / 1.0)
         c = lerp(whole[0], max(top - 60000, 30000), k * 0.0 + 0.0) if False else whole[0]
         return whole
-    if t < 26.4:
-        k = sm((t - 21.2) / 1.4) * (1 - sm((t - 25.4) / 1.0))
+    if t < 26.7:
+        k = sm((t - 21.0) / 1.9) * (1 - sm((t - 24.6) / 2.0))
         c = lerp(whole[0], GAP_MEAN - 2000, k); s = math.exp(lerp(math.log(whole[1]), math.log(32.0), k))
         return c, s
     return whole
@@ -530,7 +530,7 @@ def shot_S7(t):
     sun = R.sun_sprite(rs, glow=0.0, t=t)
     R.add(img, sun * 1.6, cx, cy)
     # the corona only while the Sun is fully covered
-    cover = max(0.0, 1 - abs(off) / (rs * 0.15)) * (1 - sm((k - 0.25) / 0.25))
+    cover = sm(1 - abs(off) / 70.0) * (1 - sm((k - 0.25) / 0.25))
     if cover > 0: R.add(img, corona(rs, t, 0.8 * cover), cx, cy)
     # the Moon: a black disc
     m = disc(rmoon)
@@ -551,7 +551,7 @@ def shot_S8(t):
     moon_globe(img, p, np.zeros(3), np.array([0, 0, 1.0]), 46.0 - 4 * sm((t - 56.2) / 8), np.zeros(3), RM, np.eye(3), sun, exag=2.0, step=1.2, gain=1.1)
     return img
 
-SHOTS = [(0.0, 4.6, shot_S1), (4.0, 10.0, shot_S2), (9.4, 33.0, shot_S3), (32.6, 36.2, shot_S4), (35.6, 45.4, shot_S5),
+SHOTS = [(0.0, 4.6, shot_S1), (4.0, 10.0, shot_S2), (9.4, 33.0, shot_S3), (32.6, 36.2, shot_S4), (35.6, 46.1, shot_S5),
          (45.0, 51.4, shot_S6), (51.0, 56.6, shot_S7), (56.2, 65.0, shot_S8)]
 
 def post(img, expo=1.0):
