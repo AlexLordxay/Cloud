@@ -1,0 +1,17 @@
+{
+  "title": "А ти уявляєш Місяць так?",
+  "duration": 65.0,
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "audio": {
+    "music": "scene"
+  },
+  "narration": {
+    "file": "voice.mp3",
+    "level": 1.0,
+    "parts": [
+      [0, 60.4, 0.25]
+    ]
+  }
+}
