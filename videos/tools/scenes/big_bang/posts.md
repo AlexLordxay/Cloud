@@ -23,7 +23,7 @@
 Надішли це тому, хто теж зроблений із зоряного пилу ✨ Підпишись, щоб не проґавити наступне.
 Справжнє небо в 3D — https://nebozvid.com.ua
 
-📚 Джерела фактів: Planck Collaboration 2018 (вік 13,787 ± 0,020 млрд років; реліктове випромінювання); Пензіас і Вілсон, 1965 (Нобелівська премія 1978); JADES-GS-z14-0 (JWST, 2024) і MoM-z14 (2025); Krauss & Scherrer 2007 (майбутнє далеких галактик); Sawala et al., Nature Astronomy 2025 (зіткнення з Андромедою).
+📚 Джерела фактів: Planck Collaboration 2018 (вік 13,787 ± 0,020 млрд років; реліктове випромінювання); Пензіас і Вілсон, 1965 (Нобелівська премія 1978); JADES-GS-z14-0 (JWST, 2024) і MoM-z14 (2025); Krauss & Scherrer 2007 (майбутнє далеких галактик); Sawala et al., Nature Astronomy 2025 і Wu et al., ApJL 2026 (зіткнення з Андромедою: ~50 % проти ~90 % за 10 млрд років).
 
 🖼 Зображення (дякуємо!):
 • Карта реліктового випромінювання: ESA / Planck Collaboration (дані Planck 2018 SMICA, NASA/IPAC IRSA). Based on observations obtained with Planck (http://www.esa.int/Planck), an ESA science mission with instruments and contributions directly funded by ESA Member States, NASA, and Canada.
