@@ -302,9 +302,9 @@ def terrain_cam(t):
     fwd_ground = nrm(ll(9.62, -20.08) * RM - ll(lat, lon) * RM)
     upv = nrm(P)
     fwd_ground = nrm(fwd_ground - upv * float(fwd_ground @ upv))
-    pitch = lerp(-0.20, -0.16, k) + 1.25 * sm((k - 0.66) / 0.34)
+    pitch = lerp(-0.20, -0.12, k)                     # keep the crater and the horizon in view to the end
     look = nrm(fwd_ground * math.cos(pitch) + upv * math.sin(pitch))
-    return P, P + look * 100, upv, lerp(56.0, 24.0, sm((k - 0.7) / 0.3))
+    return P, P + look * 100, upv, 56.0
 
 def shot_S2(t):
     p, g, up, fov = terrain_cam(t)
@@ -362,8 +362,10 @@ def s3_view(t):
     """(centre in km above Earth's surface, km per px)"""
     # 9.4–14.9: pull out from the Moon down to the whole system; 14.9–21: follow the stack up; 21–26: look at the
     # overshoot at the Moon; 26–33: the whole system again
-    tot = GAP_MEAN + RE + RM
-    whole = (GAP_MEAN / 2, (tot + 60000) / (H * 0.92))
+    # the whole system: the Earth's centre at y = 1760, the Moon's top (mean distance) at y = 500 (clear of the logo and
+    # the counters above it)
+    sw = (RE + GAP_MEAN + 2 * RM) / (1760 - 500)
+    whole = (-RE + (1760 - H / 2) * sw, sw)
     if t < 14.9:
         k = sm((t - 9.6) / 4.6)
         c = lerp(GAP_MEAN + RM, whole[0], k); s = math.exp(lerp(math.log(60.0), math.log(whole[1]), k))
