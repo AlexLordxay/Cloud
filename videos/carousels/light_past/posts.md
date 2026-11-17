@@ -1,10 +1,12 @@
-# Карусель «Ти дивишся в минуле» (slide_1..8.jpg, 1080×1350) — Instagram + Facebook (кросспост)
+# Карусель «Ти дивишся в минуле» (slide_1..10.jpg, 1080×1350) — Instagram + Facebook (кросспост)
 
 ## Опис (≤ 500 знаків для Threads)
 Ти дивишся в минуле ✨ Світло летить до нас від секунди до мільйонів років.
 🌙 Місяць — 1,3 секунди
 ☀️ Сонце — 8 хв 20 с
 🪐 Юпітер — ~44 хв (цими днями)
+💫 Сатурн — ~1 год 13 хв (видно цими вечорами!)
+⭐ Сіріус — ~8,6 року: світло вирушило у 2018-му
 ✨ Плеяди — ~440 років: світло вирушило, коли в Острозі друкували Біблію
 🌌 Андромеда — ~2,5 млн років
 📌 Перешли тому, з ким дивишся на зорі
@@ -15,6 +17,8 @@
 - Місяць: 384 400 км / c = 1,28 с (NASA).
 - Сонце: 1 а. о. / c = 499 с = 8 хв 19 с (IAU).
 - Юпітер 17.11.2026: 5,24 а. о. → 43,6 хв (astronomy-engine); діапазон ~4,2–6,2 а. о. → 35–52 хв.
+- Сатурн 17.11.2026: 8,72 а. о. → 72,5 хв; о 20:00 (Київ) — висота 40°, аз. 165°, +0,5m (astronomy-engine).
+- Сіріус: 2,64 пк = 8,6 св. р. (Hipparcos) → ~2018 р.; Сіріус B видно на знімку Hubble (Bond, Barstow, 2005).
 - Плеяди: Gaia DR2, 136 пк ≈ 444 св. р. → ~1582 р.; Острозька Біблія — 1580–1581 (Іван Федоров, Острог).
 - Туманність Оріона: 414 ± 7 пк ≈ 1 350 св. р. (Menten et al. 2007, VLBA) → ~670-ті рр.; Київська Русь — з кін. IX ст.
 - Андромеда: ~765–785 кпк ≈ 2,5 млн св. р.; найдавніші Homo ~2,8 млн р. (Леді-Гераро, Ефіопія).
@@ -24,6 +28,10 @@
 - Місяць: Gregory H. Revera, CC BY-SA 3.0 (Wikimedia Commons, FullMoon2010.jpg)
 - Сонце: NASA/GSFC/SDO, AIA 171 Å (PIA26681), Public Domain; колір підсилено
 - Юпітер: зонд «Юнона», PIA22425 — NASA/JPL-Caltech/SwRI/MSSS, enhanced image by Kevin M. Gill (CC BY)
+- Сатурн 17.11.2026: 8,72 а. о. → 72,5 хв; о 20:00 (Київ) — висота 40°, аз. 165°, +0,5m (astronomy-engine).
+- Сіріус: 2,64 пк = 8,6 св. р. (Hipparcos) → ~2018 р.; Сіріус B видно на знімку Hubble (Bond, Barstow, 2005).
+- Сатурн: Cassini, PIA21047 «Staring at Saturn» — NASA/JPL-Caltech/Space Science Institute, Public Domain
+- Сіріус A і B: Hubble, heic0516a — NASA, ESA, H. Bond (STScI), M. Barstow (University of Leicester), CC BY 4.0
 - Плеяди: NASA, ESA, AURA/Caltech, Palomar Observatory — Public Domain (Wikimedia Commons, Pleiades_large.jpg)
 - Туманність Оріона: NASA, ESA, M. Robberto (STScI/ESA), Hubble Orion Treasury Project — heic0601a, CC BY 4.0
 - Андромеда: Lviatour, CC BY-SA 4.0 (Wikimedia Commons)
