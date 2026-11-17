@@ -60,6 +60,14 @@ def slide(n, img, name, big, body, credit):
     d.text((L, H - 46), credit, font=fc(22, 500), fill=DIM)
     im.save(os.path.join(HERE, f'slide_{n}.jpg'), quality=93); print(n, 'end y', y)
 
+def sun_img():
+    im = fit('sun_aia.jpg', 1080, 560)
+    a = np.asarray(im).astype(np.float32) / 255
+    a = np.clip((a - 0.02) * 1.35, 0, 1) ** 0.85          # яскравіше й контрастніше
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    a = np.stack([np.clip(r * 1.05, 0, 1), g * 0.80, b * 0.45], -1)   # тепліший, ближче до оранжевого
+    return Image.fromarray((a * 255).astype(np.uint8))
+
 # 1 — обкладинка
 im = bg('milkyway.jpg', 0.5, 0.5, 1.7); d = ImageDraw.Draw(im); logo(im)
 y = 830
@@ -74,8 +82,8 @@ im.save(os.path.join(HERE, 'slide_1.jpg'), quality=93); print(1, y)
 
 slide(2, bg('moon.jpg', 0.5, 0.40, 0.92), 'Місяць', '1,3 секунди тому',
       'Найближчий сусід. Навіть його світло трохи запізнюється.', 'Фото: Gregory H. Revera (CC BY-SA 3.0, Wikimedia Commons)')
-slide(3, bg(None, img=fit('sun.jpg', 760, 510)), 'Сонце', '8 хвилин 20 секунд тому',
-      'Якби Сонце зараз згасло, ми ще 8 хвилин бачили б його світло.', 'Знімок: NASA/SDO/HMI (via IAU, CC BY 4.0)')
+slide(3, bg(None, img=sun_img()), 'Сонце', '8 хвилин 20 секунд тому',
+      'Якби Сонце зараз згасло, ми ще 8 хвилин бачили б його світло.', 'Знімок в ультрафіолеті: NASA/GSFC/SDO (AIA 171 Å)')
 slide(4, bg('jupiter.jpg', 0.5, 0.40, 1.0), 'Юпітер', '~44 хвилини тому',
       'Саме стільки летить світло цими днями. Залежно від того, де Юпітер на орбіті, — від 35 до 52 хвилин.', 'Знімок: NASA, ESA, A. Simon (GSFC), M. H. Wong (UC Berkeley), OPAL (CC BY 4.0)')
 slide(5, bg('pleiades.jpg', 0.5, 0.42, 1.0), 'Плеяди', '~440 років тому',
