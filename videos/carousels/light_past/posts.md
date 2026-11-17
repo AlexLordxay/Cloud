@@ -23,7 +23,7 @@
 - Чумацький Шлях: ESO/S. Brunier, CC BY 4.0 (eso0932a)
 - Місяць: Gregory H. Revera, CC BY-SA 3.0 (Wikimedia Commons, FullMoon2010.jpg)
 - Сонце: NASA/GSFC/SDO, AIA 171 Å (PIA26681), Public Domain; колір підсилено
-- Юпітер: NASA, ESA, A. Simon (GSFC), M. H. Wong (UC Berkeley), OPAL — heic2017a, CC BY 4.0
+- Юпітер: NASA, ESA, Jupiter ERS Team; image processing by Judy Schmidt (esawebb.org jupiter-auroras1), CC BY 4.0, повний підпис обов'язковий
 - Плеяди: NASA, ESA, AURA/Caltech, Palomar Observatory — Public Domain (Wikimedia Commons, Pleiades_large.jpg)
 - Туманність Оріона: NASA, ESA, M. Robberto (STScI/ESA), Hubble Orion Treasury Project — heic0601a, CC BY 4.0
 - Андромеда: Lviatour, CC BY-SA 4.0 (Wikimedia Commons)
