@@ -69,9 +69,9 @@ def sun_img():
     return Image.fromarray((a * 255).astype(np.uint8))
 
 def jup_img():
-    im = fit('jupiter_webb.jpg', 940, 545)
+    im = fit('jupiter_juno.jpg', 1240, 470)
     a = np.asarray(im).astype(np.float32) / 255
-    a = np.clip((a - 0.03) * 1.15, 0, 1)
+    a = np.clip(a * 1.12, 0, 1) ** 0.95
     return Image.fromarray((a * 255).astype(np.uint8))
 
 # 1 — обкладинка
@@ -91,7 +91,7 @@ slide(2, bg('moon.jpg', 0.5, 0.40, 0.92), 'Місяць', '1,3 секунди т
 slide(3, bg(None, img=sun_img()), 'Сонце', '8 хвилин 20 секунд тому',
       'Якби Сонце зараз згасло, ми ще 8 хвилин бачили б його світло.', 'Знімок в ультрафіолеті: NASA/GSFC/SDO (AIA 171 Å)')
 slide(4, bg(None, img=jup_img()), 'Юпітер', '~44 хвилини тому',
-      'Стільки летить його світло цими днями. Залежно від положення на орбіті — від 35 до 52 хвилин.', '«Вебб», ІЧ: NASA, ESA, Jupiter ERS Team; image processing by Judy Schmidt (CC BY 4.0)')
+      'Стільки летить його світло цими днями. Залежно від положення на орбіті — від 35 до 52 хвилин.', '«Юнона»: NASA/JPL-Caltech/SwRI/MSSS; обробка Kevin M. Gill (CC BY)')
 slide(5, bg('pleiades.jpg', 0.5, 0.42, 1.0), 'Плеяди', '~440 років тому',
       'Це світло вирушило приблизно тоді, коли в Острозі друкували Острозьку Біблію (1581).', 'Знімок: NASA, ESA, AURA/Caltech, Palomar Observatory')
 slide(6, bg('orion.jpg', 0.55, 0.40, 1.0), 'Туманність Оріона', '~1 350 років тому',
