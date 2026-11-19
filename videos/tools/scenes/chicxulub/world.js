@@ -824,7 +824,7 @@
     if (s.setup) await s.setup(window.X);
   };
   window.renderShot = (name, t) => {
-    window.SHOTS[name].frame(window.X, t);
+    window.X.curShot = name; window.SHOTS[name].frame(window.X, t);
     stars.position.copy(camera.position);
     asteroid.updateMatrixWorld(); AU.M3.value.setFromMatrix4(asteroid.matrixWorld);
     renderer.render(scene, camera);

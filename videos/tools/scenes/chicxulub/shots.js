@@ -7,7 +7,11 @@
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const CHX = [24.95, -71.9];                         // the impact site on the map of 66 million years ago (maps.py)
 
+  // 16:9 only (the vertical film is framed as it was): the globe shots come in tighter (a narrower field of view), so the
+  // planet fills the wide frame the way it filled the tall one
+  const WIDE_FOV = { hook: 0.72, kpg_earth: 0.72, approach: 0.8, darkness: 0.72, finale: 0.72 };
   function cam(X, pos, look, fov = 30, up = V(0, 1, 0), near = 0.01) {
+    if (X.W > X.H && WIDE_FOV[X.curShot]) fov *= WIDE_FOV[X.curShot];
     const c = X.camera; c.fov = fov; c.near = near; c.far = 3000; c.updateProjectionMatrix();
     c.position.copy(pos); c.up.copy(up); c.lookAt(look);
   }
