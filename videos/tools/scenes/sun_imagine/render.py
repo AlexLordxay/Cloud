@@ -85,7 +85,7 @@ def layer_sky(img, c, gain=1.0, stars=1.0, band=0.12):
     sky(img, c, GAL, gain, stars=stars, band=band)
 
 def layer_earth(img, c, t, flowers_on=True, expo=0.5, sun_k=18.0, night_k=0.0, cloud_k=0.0, fields=1.0, disc_k=5.5,
-                light_k=1.0, air_k=1.0, light_dir=None):
+                light_k=1.0, air_k=1.0, light_dir=None, near=0.3):
     earthk.earth(img, c, S if light_dir is None else light_dir, sun_k=sun_k * light_k, disc_k=disc_k * light_k, disc_rad=DISC, cloud_k=cloud_k, night_k=night_k,
                  fields=fields, home=HOME, expo=expo, air_k=air_k)
     o, f, r, u, k = c
@@ -96,7 +96,7 @@ def layer_earth(img, c, t, flowers_on=True, expo=0.5, sun_k=18.0, night_k=0.0, c
         cl = (ol, loc(f), loc(r), loc(u), k)
         e = expo * light_k
         flowers.field(img, cl, loc(S), t, light=3.4 * e / 0.5, amb=0.55 * e / 0.5 + 0.02, face_az=FACE,
-                      haze=(0.62 * e / 0.5, 0.64 * e / 0.5, 0.66 * e / 0.5), haze_d=1400.0)
+                      haze=(0.62 * e / 0.5, 0.64 * e / 0.5, 0.66 * e / 0.5), haze_d=1400.0, near=near)
 
 def layer_sun(img, c, t, gain=2.4, cor=0.3, rim=1.2, iso=0.0, tint=(1.0, 0.97, 0.92), loops=0.0, prom=0.0, front=0.12):
     o, f, r, u, k = c
@@ -482,6 +482,11 @@ def shot_S6(t):
     layer_sky(img, c, gain=0.8)
     k = (t - 25.2) / 6.4
     up = ramp(t, 28.4, 30.0)
+    if t > 31.0:
+        gl = ramp(t, 31.0, 32.3)
+        yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+        d_ = np.sqrt((xx - W / 2) ** 2 + (yy - H * 0.95) ** 2)
+        img += ((np.exp(-d_ / 520.0) * 3.0 + 0.6) * gl)[..., None] * np.array([1.0, 0.86, 0.62], np.float32)
     layer_sun(img, c, t, gain=keys(t, [(25.2, 1.9), (27.0, 2.2), (29.0, 2.6)]), cor=lerp(0.10, 0.22, up), rim=1.4,
               tint=(1.0, 0.94, 0.84), loops=0.14 * ramp(t, 27.6, 29.0), prom=0.085 * ramp(t, 27.6, 29.0))
     return post(img, thr=1.2, bk=0.6)
@@ -529,12 +534,17 @@ def streaks(img, c, t):
             RL.glow_lines(img, [(g[0], g[1]) for g in group], col * am * streak_k(t), core=0.9, glow=0.6)
 
 def streak_k(t):
-    return ramp(t, 32.2, 33.0) * (1 - ramp(t, 36.8, 38.0))
+    return ramp(t, 31.9, 32.6) * (1 - ramp(t, 36.8, 38.0))
 
 def shot_S7(t):
     c = s7_cam(t)
     img = np.zeros((H, W, 3), np.float32)
     layer_sky(img, c, gain=0.8)
+    if t < 33.2:
+        gl = 1 - ramp(t, 32.0, 33.2)
+        yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
+        d_ = np.sqrt((xx - W / 2) ** 2 + (yy - H * 0.95) ** 2)
+        img += ((np.exp(-d_ / 520.0) * 3.0 + 0.6) * gl)[..., None] * np.array([1.0, 0.86, 0.62], np.float32)
     layer_earth(img, c, t, flowers_on=False, expo=0.45, cloud_k=0.85, night_k=0.0, disc_k=0.0)
     if streak_k(t) > 0: streaks(img, c, t)
     return post(img, thr=1.2, bk=0.5)
@@ -542,7 +552,7 @@ def shot_S7(t):
 # ---------------------------------------------------------------- S8: down to the field (Earth frame)
 def s8_cam(t):
     # from S7's end down towards home; low down, pitch up to S1's opening view (the Sun ahead, yellow)
-    o7 = s7_pos(38.9)
+    o7 = s7_pos(38.3)
     alt = logkeys(t, [(38.3, np.linalg.norm(o7) - earthk.RE), (39.3, 2500.0), (40.0, 160.0), (40.6, 12.0), (41.1, 0.6),
                       (41.6, 0.012), (42.1, 0.0026), (43.0, 0.0022)])
     dir_ = slerp_dir(nrm(o7), UP, sm((t - 38.3) / 2.0))
@@ -552,15 +562,15 @@ def s8_cam(t):
     look_end = dirn(5.5, SUN_AZ - 3.0)
     fwd = slerp_dir(lerpv(look_down, -nrm(o7), 1 - sm((t - 38.3) / 1.4)), look_end, sm((t - 40.3) / 1.5))
     upv = nrm(lerpv(UPW, UP, sm((t - 38.3) / 2.2)))
-    fov = keys(t, [(38.3, 44.0), (40.4, 50.0), (41.8, 34.0)])
+    fov = keys(t, [(38.3, keys(38.3, [(32.0, 50.0), (38.9, 44.0)])), (40.4, 50.0), (41.8, 34.0)])
     return cam_dir(o, fwd, upv, fov)
 
 def shot_S8(t):
     c = s8_cam(t)
     img = np.zeros((H, W, 3), np.float32)
     layer_sky(img, c, gain=0.8)
-    layer_earth(img, c, t, expo=keys(t, [(38.3, 0.45), (40.0, 0.5)]), cloud_k=0.85 * (1 - ramp(t, 39.0, 40.0)))
-    return post(img, thr=1.4, bk=0.45, sat=1.18)
+    layer_earth(img, c, t, expo=keys(t, [(38.3, 0.45), (40.0, 0.5)]), cloud_k=0.85 * (1 - ramp(t, 39.0, 40.0)), near=0.9)
+    return post(img, thr=lerp(1.2, 1.4, ramp(t, 38.3, 40.0)), bk=lerp(0.5, 0.45, ramp(t, 38.3, 40.0)), sat=lerp(1.0, 1.18, ramp(t, 38.4, 40.0)))
 
 # ---------------------------------------------------------------- S9 / S10: the Sun goes out (and comes back)
 SUN_PX = (300.0, 540.0, 92.0)                          # where the (compressed) Sun sits on the screen, radius px
@@ -614,20 +624,29 @@ def shot_S9(t):
         # the climb from the field into the side-on view (as in S8: the field, the flowers, the Sun's disc)
         kk = sm((t - 42.6) / 0.9)
         c8 = s8_cam(42.6)
-        lo0 = math.log(np.linalg.norm(c8[0])); lo1 = math.log(np.linalg.norm(c_end[0]))
-        o = slerp_dir(nrm(c8[0]), nrm(c_end[0]), kk) * math.exp(lerp(lo0, lo1, kk ** 0.5))
+        a0 = np.linalg.norm(c8[0]) - earthk.RE; a1 = np.linalg.norm(c_end[0]) - earthk.RE
+        ka = (t - 42.6) / 0.9
+        alt = math.exp(lerp(math.log(a0), math.log(a1), min(1.0, ka) ** 1.6 * (3 - 2 * min(1.0, ka)) / (1 + 0.0 * ka)))
+        xl = (math.log(alt) - math.log(a0)) / (math.log(a1) - math.log(a0))
+        wdir = max(0.0, (xl - 0.55) / 0.45) ** 2                 # move across the globe only once high (above ~16 km)
+        o = slerp_dir(nrm(c8[0]), nrm(c_end[0]), wdir) * (earthk.RE + alt)
         f = slerp_dir(c8[1], c_end[1], kk)
         upv = nrm(lerpv(c8[3], c_end[3], kk))
         c = cam_dir(o, f, upv, lerp(34.0, 46.0, kk))
         img = np.zeros((H, W, 3), np.float32)
         layer_sky(img, c, gain=0.8)
-        layer_earth(img, c, t, expo=lerp(0.5, 0.55, kk), cloud_k=0.85 * kk, disc_k=5.5 * (1 - ramp(t, 43.2, 43.5)),
-                    light_dir=nrm(lerpv(S, s9_light(c_end), ramp(t, 43.1, 43.5))))
-        if t > 43.15:
-            a = ramp(t, 43.15, 43.5)
-            cs = s9_sun_cam(c_end)
-            sun = np.zeros((H, W, 3), np.float32); layer_sun(sun, cs, t, gain=2.6, cor=0.22)
-            img = img * (1 - a * (np.max(sun, axis=2, keepdims=True) > 0.05)) + sun * a
+        hand = ramp(t, 42.95, 43.05)                         # above the air (~20 km): the Sun is drawn by its own renderer
+        layer_earth(img, c, t, expo=lerp(0.5, 0.55, kk), cloud_k=0.85 * kk, disc_k=5.5 * (1 - hand),
+                    light_dir=nrm(lerpv(S, s9_light(c_end), ramp(t, 43.1, 43.5))), near=0.9)
+        if hand > 0:
+            # it slides from its true direction to its place in the compressed side-on view, growing
+            x, y, z = project(c, c[0] + S * 1e6)
+            w = ease((t - 43.0) / 0.5)
+            k0 = c[4]; r0 = k0 * math.tan(DISC)
+            cs = sun_cam_at(c, lerp(float(x[0]), SUN_PX[0], w), lerp(float(y[0]), SUN_PX[1], w), lerp(r0, SUN_PX[2], w))
+            sun = np.zeros((H, W, 3), np.float32); layer_sun(sun, cs, t, gain=2.6, cor=0.22 * w)
+            m = (np.max(sun, axis=2, keepdims=True) > 0.05) * hand
+            img = img * (1 - m) + sun * hand
         return post(img, thr=1.15, bk=0.55, sat=lerp(1.18, 1.0, kk))
     o, f, r, u, k_ = c_end
     c = (o * (1 - 0.03 * sm((t - 43.5) / 6.5)), f, r, u, k_)
@@ -675,6 +694,13 @@ def s9_render(c, t, sun_on=True, dark_front=None, light_front=None, sun_scale=1.
             ring = np.exp(-((dd - R_) / 7.0) ** 2) * a + np.exp(-((dd - R_) / 40.0) ** 2) * a * 0.3
             img += ring[..., None] * np.array([1.0, 0.86, 0.6], np.float32)
     return post(img, thr=1.15, bk=0.55)
+
+def sun_cam_at(c, px, py, rad):
+    """a camera for the Sun's renderer with c's orientation, so the Sun's centre lands on (px, py) with radius rad px"""
+    o, f, r, u, k = c
+    d = nrm(f + r * (px - W / 2) / k - u * (py - H / 2) / k)
+    D = 1.0 / math.sin(math.atan(rad / k))
+    return (-d * D, f, r, u, k)
 
 def s9_sun_cam(c, scale=1.0, approach=0.0):
     """the Sun's own camera: same orientation, placed so the Sun's centre falls on its screen spot with its radius;
@@ -732,7 +758,7 @@ def labels(t):
 
 # ---------------------------------------------------------------- the timeline
 SHOTS = [(0.0, 7.75, shot_S1), (7.45, 10.8, shot_S2), (10.2, 15.0, shot_S3), (14.6, 20.2, shot_S4), (19.6, 25.4, shot_S5),
-         (24.8, 32.6, shot_S6), (32.0, 38.9, shot_S7), (38.3, 42.6, shot_S8), (42.6, 50.2, shot_S9),
+         (24.8, 32.6, shot_S6), (32.0, 38.35, shot_S7), (38.3, 42.6, shot_S8), (42.6, 50.2, shot_S9),
          (49.6, 58.5, shot_S10)]
 
 def frame(t):

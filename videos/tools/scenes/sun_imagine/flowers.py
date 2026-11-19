@@ -146,7 +146,7 @@ def head_shade(lu, lv, r, front, idx, t):
 
 @nb.njit(parallel=True, fastmath=True)
 def k_flowers(out, acc, A, prim, order, scr, ox, oy, oz, fx, fy, fz, rx, ry, rz, ux, uy, uz, k, sx, sy, sz, light, amb,
-              haze_r, haze_g, haze_b, haze_d, t, nbands):
+              haze_r, haze_g, haze_b, haze_d, t, nbands, fade_near, fade_far):
     """paints the primitives NEAR-to-far (order) into acc / A (front-to-back 'under' compositing: a pixel already
     covered is skipped before any work); scr[p] = (x0, x1, y0, y1) screen boxes"""
     Hh, Ww = out.shape[0], out.shape[1]
@@ -163,6 +163,10 @@ def k_flowers(out, acc, A, prim, order, scr, ox, oy, oz, fx, fy, fz, rx, ry, rz,
             cxp = prim[p, 1]; cyp = prim[p, 2]; czp = prim[p, 3]
             dist = math.sqrt((cxp - ox) ** 2 + (cyp - oy) ** 2 + (czp - oz) ** 2)
             hz = 1.0 - math.exp(-dist / haze_d)
+            dxy = math.sqrt((cxp - ox) ** 2 + (cyp - oy) ** 2)
+            dfade = min(1.0, max(0.0, (fade_far - dxy) / (fade_far - fade_near)))
+            dfade = dfade * dfade * (3 - 2 * dfade)
+            if dfade <= 0.0: continue
             # supersampling: 2x2 for the near, big ones; 1 for the rest
             ss = 2 if ((scr[p, 1] - scr[p, 0]) > 24 and typ == 0) else 1
             for jj in range(j0, j1 + 1):
@@ -222,7 +226,7 @@ def k_flowers(out, acc, A, prim, order, scr, ox, oy, oz, fx, fy, fz, rx, ry, rz,
                                 lit = fl * light * (0.55 if back else 1.0) + amb
                                 ar += 0.055 * vein * lit; ag += 0.11 * vein * lit; ab += 0.022 * vein * lit; aa += 1.0
                     if aa <= 0: continue
-                    cov = aa / (ss * ss)
+                    cov = aa / (ss * ss) * dfade
                     cr = ar / aa; cg = ag / aa; cb = ab / aa
                     cr = cr * (1 - hz) + haze_r * hz; cg = cg * (1 - hz) + haze_g * hz; cb = cb * (1 - hz) + haze_b * hz
                     w_ = (1.0 - A[jj, ii]) * cov
@@ -253,20 +257,21 @@ def screen_boxes(prim, scr, ox, oy, oz, fx, fy, fz, rx, ry, rz, ux, uy, uz, k, W
         scr[p, 0] = x0; scr[p, 1] = x1; scr[p, 2] = y0; scr[p, 3] = y1
 
 _P = {}
-def field(img, c_local, sun_local, t, light=2.2, amb=0.35, haze=(0.6, 0.62, 0.66), haze_d=900.0, maxd=260.0, wind=1.0, face_az=95.0, lmax=70.0):
+def field(img, c_local, sun_local, t, light=2.2, amb=0.35, haze=(0.6, 0.62, 0.66), haze_d=900.0, maxd=440.0, wind=1.0, face_az=95.0, lmax=70.0, near=0.3):
     """c_local: (o, f, r, u, k) in the field's metres; sun_local: unit vector to the Sun"""
     if 'P' not in _P: _P['P'] = plants()
     o, f, r, u, k = c_local
     prim = build_prims(_P['P'], t, o[0], o[1], o[2], maxd, wind, math.radians(face_az), lmax)
     scr = np.empty((prim.shape[0], 4))
     screen_boxes(prim, scr, o[0], o[1], o[2], f[0], f[1], f[2], r[0], r[1], r[2], u[0], u[1], u[2], k, img.shape[1], img.shape[0])
-    vis = np.nonzero(scr[:, 1] >= scr[:, 0])[0]
+    dc = np.sqrt((prim[:, 1] - o[0]) ** 2 + (prim[:, 2] - o[1]) ** 2 + (prim[:, 3] - o[2]) ** 2)
+    vis = np.nonzero((scr[:, 1] >= scr[:, 0]) & (dc > near))[0]
     # near to far by the true distance from the camera (each plant's parts keep their order: head, stem, leaves)
     d = (prim[vis, 1] - o[0]) ** 2 + (prim[vis, 2] - o[1]) ** 2 + (prim[vis, 3] - o[2]) ** 2
     order = vis[np.argsort(d, kind='stable')].astype(np.int64)
     s = np.asarray(sun_local, float)
     acc = np.zeros_like(img); A = np.zeros(img.shape[:2], np.float32)
     k_flowers(img, acc, A, prim, order, scr, o[0], o[1], o[2], f[0], f[1], f[2], r[0], r[1], r[2], u[0], u[1], u[2], k,
-              s[0], s[1], s[2], light, amb, haze[0], haze[1], haze[2], haze_d, t, 48)
+              s[0], s[1], s[2], light, amb, haze[0], haze[1], haze[2], haze_d, t, 48, maxd * 0.62, maxd)
     img[:] = acc + img * (1.0 - A)[..., None]
     return len(order)
