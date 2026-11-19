@@ -7,7 +7,7 @@ sys.path.insert(0, SUN); sys.path.insert(0, HERE)
 import common as cm
 cm.W, cm.H = 1920, 1080
 import earthk
-from overlay import draw_clock, draw_stamp
+from overlay import draw_clock, draw_stamp, draw_label
 W, H = cm.W, cm.H
 OUT = os.path.join(HERE, 'test'); os.makedirs(OUT, exist_ok=True)
 GAL = cm.rot_axis([0.3, 1.0, 0.2], 2.2)
@@ -28,14 +28,19 @@ def night_earth(lat=48.5, lon=31.0, alt=1900.0, back=0.0):
     cm.sky(img, c, GAL, 0.6, stars=1.0, band=0.25)
     sun = cm.ll(12.0, lon + 108.0)                              # dawn line near the Caspian: lights on the left, sunrise on the right
     earthk.earth(img, c, sun, sun_k=18.0, disc_k=0.0, cloud_k=0.7, night_k=1.8, fields=0.0, home=(lat, lon), expo=0.9)
+    night_earth.c = c
     return img
 
 def hook():
     img = night_earth()
-    def lay(im):
-        draw_clock(im, 23.0 + 59 / 60 + 54 / 3600, 3.0e5, W - 170, 120, 70)
-        draw_stamp(im, 'УКРАЇНА', 760, 610, 58, 1.0)
-    finish(img, 'p1_hook', lay)
+    X, Y, _ = cm.project(night_earth.c, cm.ll(50.45, 30.52) * earthk.RE)       # Kyiv
+    kx, ky = float(X[0]), float(Y[0]); print('Kyiv at', kx, ky)
+    for st in ('glass', 'pin'):
+        def lay(im, st=st):
+            draw_clock(im, 23.0 + 59 / 60 + 54 / 3600, 3.0e5, W - 170, 120, 70)
+            if st == 'glass': draw_label(im, 'УКРАЇНА', kx + 60, ky - 110, 34, 1.0, sub='сьогодні', style='glass')
+            else: draw_label(im, 'УКРАЇНА', kx + 110, ky - 120, 34, 1.0, sub='Київ', style='pin', anchor=(kx, ky))
+        finish(img.copy(), 'p1_hook_' + st, lay)
 
 
 # ---------------------------------------------------------------- Theia: the impact moment
@@ -111,7 +116,7 @@ def theia(name='p2_theia', k_imp=1.0):
         if 1 <= X < W - 1 and 1 <= Y < H - 1:
             b = (1.4 - u) * rng.uniform(0.6, 1.4) * k_imp
             img[Y - 1:Y + 1, X - 1:X + 1] += np.array([2.2, 0.8, 0.22]) * b
-    finish(img, name, lambda im: (draw_clock(im, 0.21, 4.5e9, W - 170, 120, 70), draw_stamp(im, "ТЕЙЯ", 1480, 330, 58, 1.0)), expo=0.9)
+    finish(img, name, lambda im: (draw_clock(im, 0.21, 4.5e9, W - 170, 120, 70), draw_label(im, "ТЕЙЯ", 1330, 250, 34, 1.0, sub="планета розміром з Марс", style="pin", anchor=(1150, 330))), expo=0.9)
 
 if __name__ == '__main__':
     for n in (sys.argv[1:] or ['hook']): globals()[n]()
