@@ -10,7 +10,7 @@ from maps import paint, field, fbm
 ZIP = os.path.join(TOOLS, 'work', 'chicxulub', 'dl', 'dem6.zip'); OUT = os.path.join(TOOLS, 'work', 'earth_history', 'paleo')
 W, H = 4096, 2048
 AGES = [540, 520, 500, 480, 470, 450, 430, 410, 390, 370, 350, 330, 300, 280, 260, 250, 240, 230, 220, 200, 180, 160,
-        140, 120, 100, 80, 66, 50, 40, 30, 20, 10, 0]
+        140, 120, 100, 80, 65, 50, 40, 30, 20, 10, 0]
 
 def dem(age):
     with zipfile.ZipFile(ZIP) as z:

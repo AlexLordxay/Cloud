@@ -375,20 +375,34 @@ def theia_anchors(t):
     out = {}
     c = theia_cam(t); x, y, z = cm.project(c, theia_pos(t)); out['theia'] = (x[0], y[0])
     if t > 15: x, y, z = cm.project(c, moon_pos(sm((t - 30.5) / 6.0))); out['moon'] = (x[0], y[0])
-    if t > 37: _, c2, A = cutaway(t) if False else (None, None, None)
+    if t > 37:
+        k = sm((t - 37.0) / 12.0)
+        c2 = orbit_cam(lerp(24.0, 18.0, k), lerp(-35.0, -15.0, k), RE * lerp(3.4, 3.0, k), 36.0)
+        o = c2[0]; bz = np.array([0, 0, 1.0]); v = nrm(o - (o @ bz) * bz); s_ = nrm(np.cross(bz, v)); n1 = nrm(v + s_)
+        e1 = nrm(np.cross(bz, n1))
+        cands = [(sg * e1 * math.cos(math.radians(30)) + bz * math.sin(math.radians(30))) * 0.62 * RE for sg in (1, -1)]
+        A = min(cands, key=lambda P: np.linalg.norm(P - o))
+        x, y, z = cm.project(c2, A); out['blob'] = (x[0], y[0])
     return out
 ANCH['theia'] = theia_anchors
 
 
 # ================================================================ the globe acts
 def globe_shot(t, tex, cam, sun=None, expo=0.8, cloud_k=0.5, cloud_shift=0, night_k=0.0, air_k=1.0, home=(0.0, 0.0), bg=0.6):
-    lat, lon, dist, fov = cam
-    c = orbit_cam(lat, lon, dist * RE, fov)
+    c = globe_cam(cam)
+    expo *= 0.88
     img = space(c, bg, 0.3)
     globe(img, c, tex, side_sun(c) if sun is None else sun, expo=expo, cloud_k=cloud_k, cloud_shift=cloud_shift,
           night_k=night_k, air_k=air_k, home=home)
     return img, c
 
+LASTCAM = {}
+def globe_cam(cam):
+    lat, lon, dist, fov = cam
+    if dist > 2.3: dist *= 1.2                    # the whole globe in the frame, a little air around it
+    c = orbit_cam(lat, lon, dist * RE, fov)
+    LASTCAM['c'] = c
+    return c
 def ckeys(t, ks):            # camera keys: (t, (lat, lon, dist, fov))
     return tuple(float(x) for x in keys(t, [(a, np.array(b, float)) for a, b in ks]))
 
@@ -470,8 +484,7 @@ def iced(tex, front, seed=0.0):
 _ICE = {}
 
 def magma_globe(t, cam, k_emis=1.0):
-    lat, lon, dist, fov = cam
-    c = orbit_cam(lat, lon, dist * RE, fov)
+    c = globe_cam(cam)
     img = space(c, 0.6, 0.3)
     alb, emi = magma_maps(0.0)
     body(img, c, rays(c), (0, 0, 0), RE, alb, emi, L=side_sun(c), spin=t * 0.05, ambient=0.004, atm=(1.4, 0.45, 0.12), emi_k=k_emis)
@@ -518,13 +531,13 @@ def snowball(t):
     cam = ckeys(t, [(-0.5, (16, 330, 3.3, 36)), (21.9, (8, 380, 3.4, 36))])
     tex = proterozoic()
     front = 75.0 - 75.0 * sm((t - 1.0) / 8.0) + 70.0 * sm((t - 15.5) / 6.0)
-    img, c = globe_shot(t, iced(tex, front), cam, expo=0.62, cloud_k=0.35, cloud_shift=900)
+    img, c = globe_shot(t, iced(tex, front), cam, expo=0.55, cloud_k=0.35, cloud_shift=900)
     if 12.5 < t < 20.5:              # volcanoes through the ice, the CO2 builds up
         rng = np.random.default_rng(4)
         for i in range(14):
             la, lo = rng.uniform(-35, 35), rng.uniform(0, 360)
             x, y, z = cm.project(c, ll(la, lo) * RE)
-            if ll(la, lo) @ nrm(c[0]) > 0.2:
+            if ll(la, lo) @ nrm(c[0]) > 0.45:
                 f = sm((t - 12.5 - i * 0.25) / 1.0) * (1 - sm((t - 19.0) / 1.5)) * (0.6 + 0.4 * math.sin(t * 3 + i))
                 glow(img, x[0], y[0], [(2.5, 9 * f), (10, 1.2 * f)], (1.0, 0.45, 0.15))
     return finish(img)
@@ -568,7 +581,7 @@ def permian(t):
         for i in range(60):
             la = SIB[0] + rng.normal(0, 6); lo = SIB[1] + rng.normal(0, 11)
             P = ll(la, lo)
-            if P @ nrm(c[0]) < 0.15: continue
+            if P @ nrm(c[0]) < 0.4: continue
             x, y, z = cm.project(c, P * RE)
             f = sm((t - 4.0 - rng.uniform(0, 6)) / 1.5) * (0.7 + 0.3 * math.sin(t * 2.3 + i)) * (1 - 0.5 * sm((t - 20) / 5))
             glow(img, x[0], y[0], [(2.0, 7 * f), (9, 0.9 * f)], (1.0, 0.4, 0.12))
@@ -577,17 +590,17 @@ def permian(t):
 @act
 def dinos(t):
     cam = ckeys(t, [(-0.5, (30, 40, 3.1, 36)), (12, (20, -10, 2.8, 36)), (29.7, (15, -40, 3.0, 36))])
-    img, c = paleo_globe(t, lerp(240, 66, sm((t - 1.0) / 26.0)), cam, cloud_shift=1060)
+    img, c = paleo_globe(t, lerp(240, 65, sm((t - 1.0) / 26.0)), cam, cloud_shift=1060)
     return finish(img)
 
 @act
 def mammals(t):
-    cam = ckeys(t, [(-0.5, (15, -40, 3.0, 36)), (8, (20, 60, 2.7, 36)), (20, (25, 80, 2.4, 38)), (30.5, (30, 40, 3.3, 36)), (40.0, (35, 35, 3.0, 36))])
-    ma = lerp(66, 0, sm(t / 22.0))
+    cam = ckeys(t, [(-0.5, (15, -40, 3.0, 36)), (8, (20, 60, 2.7, 36)), (17, (25, 80, 2.4, 38)), (23.5, (8, 28, 2.9, 36)), (30.5, (30, 40, 3.3, 36)), (40.0, (35, 35, 3.0, 36))])
+    ma = lerp(65, 0, sm(t / 22.0))
     tex = paleo_at(ma) if t < 22.5 else today()
     if 22.5 <= t < 25.0: tex = mix_tex(paleo(0), today(), sm((t - 22.5) / 2.5))
     lat, lon, dist, fov = cam
-    c = orbit_cam(lat, lon, dist * RE, fov)
+    c = globe_cam(cam)
     img = space(c, 0.6, 0.3)
     night = sm((t - 30.5) / 4.0)
     sun = nrm(side_sun(c) * (1 - night) + ll(10.0, lon + 120.0) * night)
@@ -598,7 +611,7 @@ def mammals(t):
 def future(t):
     cam = ckeys(t, [(-0.5, (35, 35, 3.0, 36)), (12, (20, -10, 3.1, 36)), (30, (10, -40, 3.4, 36)), (44.2, (5, -60, 6.5, 34))])
     lat, lon, dist, fov = cam
-    c = orbit_cam(lat, lon, dist * RE, fov)
+    c = globe_cam(cam)
     img = space(c, 0.6, 0.3)
     bright = sm((t - 11.5) / 6.0) * (1 - sm((t - 21.0) / 5.0))
     globe(img, c, today(), side_sun(c), expo=0.82 * (1 + 0.6 * bright), cloud_k=0.55, air_k=1 + 0.5 * bright, home=(lat, lon))

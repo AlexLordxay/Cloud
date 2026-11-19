@@ -30,7 +30,10 @@ def keys(t, ks):
 # ---------------------------------------------------------------- maps
 @functools.lru_cache(maxsize=12)
 def paleo(age):
-    return np.ascontiguousarray(np.asarray(Image.open(os.path.join(PALEO, f'ep_{age}.png')).convert('RGB'), np.uint8))
+    a = np.asarray(Image.open(os.path.join(PALEO, f'ep_{age}.png')).convert('RGB')).astype(np.float32)
+    shelf = (a[..., 2] > 95) & (a[..., 1] > 80) & (a[..., 0] < 70)          # the bright shallow seas: calmer, deeper blue
+    a[shelf] = a[shelf] * np.array([0.75, 0.72, 0.85])
+    return np.ascontiguousarray(np.clip(a, 0, 255).astype(np.uint8))
 
 @functools.lru_cache(maxsize=1)
 def today():
