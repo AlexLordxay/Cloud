@@ -9,7 +9,7 @@
 
   // 16:9 only (the vertical film is framed as it was): the globe shots come in tighter (a narrower field of view), so the
   // planet fills the wide frame the way it filled the tall one
-  const WIDE_FOV = { hook: 0.72, kpg_earth: 0.72, approach: 0.8, darkness: 0.72, finale: 0.72 };
+  const WIDE_FOV = { hook: 0.8, kpg_earth: 0.82, approach: 0.8, darkness: 0.82, finale: 0.82 };
   function cam(X, pos, look, fov = 30, up = V(0, 1, 0), near = 0.01) {
     if (X.W > X.H && WIDE_FOV[X.curShot]) fov *= WIDE_FOV[X.curShot];
     const c = X.camera; c.fov = fov; c.near = near; c.far = 3000; c.updateProjectionMatrix();
@@ -82,7 +82,10 @@
       setup(X) { this.S = site(X); },
       frame(X, t) {
         const S = this.S, T = t - this.T0, k = smooth(t / this.dur);
-        cam(X, X.dirLL(14, -80).multiplyScalar(lerp(31, 25, k)), X.dirLL(22, -70).multiplyScalar(lerp(1.5, 3.2, k)), 30);
+        const hp = X.dirLL(14, -80).multiplyScalar(lerp(31, 25, k)), hl = X.dirLL(22, -70).multiplyScalar(lerp(1.5, 3.2, k));
+        // 16:9: the planet sits left of the middle in the tall frame's width; slide the view so it and the blast centre
+        if (X.W > X.H) hl.addScaledVector(V(0, 1, 0).cross(hp.clone().sub(hl)).normalize(), 3.0 * hp.length() / 28);
+        cam(X, hp, hl, 30);
         X.U.sun.value.copy(S.up.clone().multiplyScalar(-0.05).addScaledVector(horiz(S, 265), 1).normalize());
         X.U.cloudLon.value = 0.02;
         if (T < 0) return;
