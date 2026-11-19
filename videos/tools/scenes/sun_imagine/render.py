@@ -423,16 +423,25 @@ def shot_S4(t):
 
 def scales(img, c, t, al):
     o, f, r, u, k = c
-    a = ramp(t, 15.5, 16.3) * (1 - ramp(t, 19.3, 19.9))
+    a = ramp(t, 15.5, 16.3) * (1 - ramp(t, 19.1, 19.45))
     if a <= 0: return
     gold = np.array([1.0, 0.78, 0.42])
     def W3(x, y): return r * x + u * y
     def P(X):
-        x, y, z = project(c, X); return float(x[0]), float(y[0])
+        x, y, z = project(c, X)
+        if z[0] < 0.5: raise ValueError('behind')
+        return float(x[0]), float(y[0])
     import render_lines as RL
     px_, py_ = SC_PIV
     ca, sa = math.cos(al), math.sin(al)
     L = (px_ - SC_ARM * ca, py_ - SC_ARM * sa); Rr = (px_ + SC_ARM * ca, py_ + SC_ARM * sa)
+    try:
+        _scale_lines(img, c, t, a, L, Rr, W3, P, RL, gold, px_, py_)
+    except ValueError:
+        return
+    _scale_planets(img, c, t, a, Rr, W3, RL)
+
+def _scale_lines(img, c, t, a, L, Rr, W3, P, RL, gold, px_, py_):
     segs = [([P(W3(*L)), P(W3(*Rr))], 3.4),
             ([P(W3(px_, py_ + 0.12)), P(W3(px_, -2.55))], 3.0),
             ([P(W3(px_ - 0.55, -2.55)), P(W3(px_ + 0.55, -2.55))], 3.4),
@@ -443,6 +452,9 @@ def scales(img, c, t, al):
             segs.append(([P(W3(ex, ey)), P(W3(ex + w_ * s_, dy_ + 0.02))], 1.4))
         segs.append(([P(W3(ex - w_ - 0.05, dy_ + 0.06)), P(W3(ex - w_ * 0.6, dy_ - 0.06)), P(W3(ex + w_ * 0.6, dy_ - 0.06)), P(W3(ex + w_ + 0.05, dy_ + 0.06))], 2.6))
     RL.glow_lines(img, segs, gold * 1.3 * a)
+
+def _scale_planets(img, c, t, a, Rr, W3, RL):
+    o, f, r, u, k = c
     # all the planets in the right pan, to scale, heaped
     ex, ey = Rr; dy_ = ey - SC_DROP - 0.05
     heap = [('jupiter', -0.16, 0.0), ('saturn', 0.16, 0.0), ('uranus', 0.34, 0.0), ('neptune', -0.37, 0.0),
@@ -736,7 +748,7 @@ def labels(t):
         out.append((x + 34, y, 'Земля', ramp(t, 10.5, 10.9) * (1 - ramp(t, 11.6, 12.0)), 'lm'))
     if 15.5 < t < 20.0:
         c = sun_cam(t); o, f, r, u, k = c
-        al = sc_tilt(t); a = ramp(t, 15.9, 16.6) * (1 - ramp(t, 19.2, 19.7))
+        al = sc_tilt(t); a = ramp(t, 15.9, 16.6) * (1 - ramp(t, 19.0, 19.35))
         px_, py_ = SC_PIV; ca, sa = math.cos(al), math.sin(al)
         Rr = (px_ + SC_ARM * ca, py_ + SC_ARM * sa)
         x, y, z = project(c, r * Rr[0] + u * (Rr[1] - SC_DROP - 0.42))
