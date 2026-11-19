@@ -266,8 +266,8 @@ Object.assign(EN, {
   "Світло до Землі": "Light to Earth",
   "8 хв 20 с": "8 min 20 s",
   "≈ 5 500 °C": "≈ 5,500 °C",
-  "Зоря в центрі нашої системи. Її поверхня постійно кипить, над нею здіймаються протуберанці — петлі плазми, утримувані магнітним полем, а найпотужніші спалахи за хвилини вивільняють енергію мільярдів водневих бомб. Анімація тут — симуляція, а не запис реальних спостережень. Увімкни «Звук», щоб почути, як «гуде» Сонце.":
-    "The star at the centre of our system. Its surface is always boiling; prominences rise above it — loops of plasma held by the magnetic field — and the strongest flares release the energy of billions of hydrogen bombs in minutes. The animation here is a simulation, not a recording of real observations. Turn on “Sound” to hear the Sun “hum”.",
+  "Зоря в центрі нашої системи. Її поверхня постійно кипить, над нею здіймаються протуберанці — петлі плазми, утримувані магнітним полем, а найпотужніші спалахи за хвилини вивільняють енергію мільярдів водневих бомб. Анімація тут — симуляція, а не запис реальних спостережень. Кольори підсилено, як на знімках NASA через фільтри: насправді Сонце біле, а жовтим чи оранжевим його робить наше повітря. Увімкни «Звук», щоб почути, як «гуде» Сонце.":
+    "The star at the centre of our system. Its surface is always boiling; prominences rise above it — loops of plasma held by the magnetic field — and the strongest flares release the energy of billions of hydrogen bombs in minutes. The animation here is a simulation, not a recording of real observations. The colours are enhanced, like NASA images taken through filters: the Sun is really white — our air makes it look yellow or orange. Turn on “Sound” to hear the Sun “hum”.",
   "Кожна яскрава гранула на поверхні Сонця завбільшки приблизно з Україну, а живе лише 10–20 хвилин.":
     "Each bright granule on the Sun's surface is about the size of Ukraine and lives only 10–20 minutes.",
 
