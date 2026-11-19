@@ -121,7 +121,7 @@ def albedo(lat, lon, fp, day, ua, fields, fx0, fy0, fe0, fe1, fe2, fn0, fn1, fn2
         fxx = X / 0.6 + 0.3 * math.sin(Y * 0.7) - cx; fyy = Y / 1.5 + 0.2 * math.sin(X * 0.9) - cy
         edge = min(min(fxx, 1 - fxx) * 0.6, min(fyy, 1 - fyy) * 1.5)
         n1 = fbm2(X * 3.0, Y * 3.0, 3)
-        rows = 1.0 + 0.12 * math.sin((X * math.cos(hcrop * 3.0) + Y * math.sin(hcrop * 3.0)) * 160.0) * smooth(0.012, 0.003, fp)
+        rows = 1.0
         if hcrop < 0.30:   # sunflowers (yellow canopy)
             cr, cg, cb = 0.36, 0.29, 0.05
         elif hcrop < 0.50: # wheat stubble / ripe wheat
@@ -134,10 +134,14 @@ def albedo(lat, lon, fp, day, ua, fields, fx0, fy0, fe0, fe1, fe2, fn0, fn1, fn2
             cr, cg, cb = 0.12, 0.17, 0.05
         # the home field is all sunflowers (around the origin of the local plane): seen from afar a speckled carpet of
         # yellow petals, dark seed discs and leaves (the plants themselves are drawn near the camera)
-        home = X * X + Y * Y < 1.2
+        home = abs(X) < 0.95 and abs(Y) < 0.75
         if home:
+            # from high up: a yellow sunflower parcel like the others; close: the speckled carpet
             sp_ = fbm2(X * 900.0, Y * 900.0, 2)
-            cr = 0.20 + 0.10 * sp_; cg = 0.15 + 0.07 * sp_; cb = 0.03
+            kc = smooth(0.006, 0.0015, fp)
+            cr = 0.36 * (1 - kc) + (0.20 + 0.10 * sp_) * kc
+            cg = 0.29 * (1 - kc) + (0.15 + 0.07 * sp_) * kc
+            cb = 0.05 * (1 - kc) + 0.03 * kc
         n2 = fbm2(X * 22.0, Y * 22.0, 3)
         tone = (0.78 + 0.3 * n1 + 0.22 * (n2 - 0.5)) * rows
         if home: tone = 1.0
