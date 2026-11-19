@@ -98,10 +98,11 @@ def layer_earth(img, c, t, flowers_on=True, expo=0.5, sun_k=18.0, night_k=0.0, c
         flowers.field(img, cl, loc(S), t, light=3.4 * e / 0.5, amb=0.55 * e / 0.5 + 0.02, face_az=FACE,
                       haze=(0.62 * e / 0.5, 0.64 * e / 0.5, 0.66 * e / 0.5), haze_d=1400.0, near=near)
 
-def layer_sun(img, c, t, gain=2.4, cor=0.3, rim=1.2, iso=0.0, tint=(1.0, 0.97, 0.92), loops=0.0, prom=0.0, front=0.12):
+def layer_sun(img, c, t, gain=2.4, cor=0.3, rim=1.2, iso=0.0, tint=(1.0, 0.97, 0.92), loops=0.0, prom=0.0, front=0.12,
+              ccol=(1.0, 0.88, 0.70)):
     o, f, r, u, k = c
     sunk.k_sun(img, o[0], o[1], o[2], f[0], f[1], f[2], r[0], r[1], r[2], u[0], u[1], u[2], k, ROT, SPOTS, t * 0.6,
-               gain, cor, rim, iso, 1.6, tint[0], tint[1], tint[2])
+               gain, cor, rim, iso, 1.6, tint[0], tint[1], tint[2], ccol[0], ccol[1], ccol[2])
     if loops > 0:
         P, C, Rr = arches.loop_points(arches.arcade(6, 96, length=0.22, bearing=1.2), t, k=loops)
         sunk.splat(img, arches.to_world(P, ROT), C, Rr, c, front)
@@ -499,8 +500,10 @@ def shot_S6(t):
         yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
         d_ = np.sqrt((xx - W / 2) ** 2 + (yy - H * 0.95) ** 2)
         img += ((np.exp(-d_ / 520.0) * 3.0 + 0.6) * gl)[..., None] * np.array([1.0, 0.86, 0.62], np.float32)
-    layer_sun(img, c, t, gain=keys(t, [(25.2, 1.9), (27.0, 2.2), (29.0, 2.6)]), cor=lerp(0.10, 0.22, up), rim=1.4,
-              tint=(1.0, 0.94, 0.84), loops=0.14 * ramp(t, 27.6, 29.0), prom=0.085 * ramp(t, 27.6, 29.0))
+    near = ramp(t, 24.9, 25.8) * (1 - ramp(t, 31.0, 32.0))
+    layer_sun(img, c, t, gain=keys(t, [(25.2, 1.9), (27.0, 2.2), (29.0, 2.6)]), cor=lerp(0.10, 0.22, up) * (1 + 0.7 * near), rim=1.6,
+              tint=(1.0, lerp(0.94, 0.86, near), lerp(0.84, 0.64, near)), loops=0.14 * ramp(t, 27.6, 29.0), prom=0.085 * ramp(t, 27.6, 29.0),
+              ccol=(1.0, lerp(0.88, 0.74, near), lerp(0.70, 0.42, near)))
     return post(img, thr=1.2, bk=0.6)
 
 # ---------------------------------------------------------------- S7: riding the sunlight to the Earth (Earth frame, km)

@@ -139,7 +139,7 @@ def photo(px, py, pz, mu, fp, tm, spots, ns, iso, sp_gain):
 # ---------------------------------------------------------------- the frame kernel
 @nb.njit(parallel=True, fastmath=True)
 def k_sun(out, ox, oy, oz, fx, fy, fz, rx, ry, rz, ux, uy, uz, k, rot, spots, tm, gain, cor_k, rim_k, iso, sp_gain,
-          tint_r, tint_g, tint_b):
+          tint_r, tint_g, tint_b, cc_r, cc_g, cc_b):
     """the Sun (radius 1 at the origin) seen from camera o (axes f, r, u; k px per unit at distance 1).
     rot: body -> world rotation (3x3). Adds into out (H x W x 3)."""
     Hh, Ww = out.shape[0], out.shape[1]
@@ -202,7 +202,7 @@ def k_sun(out, ox, oy, oz, fx, fy, fz, rx, ry, rz, ux, uy, uz, k, rot, spots, tm
                 # fade the corona in front of the disc (it lies in front of a much brighter surface)
                 fr = 1.0 - cover
                 ckv *= cor_k * fr * half
-                r_ += ckv * 1.00; g_ += ckv * 0.88; bl += ckv * 0.70
+                r_ += ckv * cc_r; g_ += ckv * cc_g; bl += ckv * cc_b
                 # the chromosphere: a thin pink-red rim just past the limb, with spicules
                 if b < 1.05 and rim_k > 0.0:
                     sp = vn3(lon * 160.0 + tm * 0.2, lat * 160.0, tm * 0.1)
