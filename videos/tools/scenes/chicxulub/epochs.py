@@ -56,7 +56,14 @@ if __name__ == '__main__':
     bm = os.path.join(WORK, 'nasa', 'bm_topo_bathy_200407.jpg')
     if not os.path.exists(bm):
         os.makedirs(os.path.dirname(bm), exist_ok=True)
-        subprocess.run(['curl', '-sS', '-o', bm, BM], check=True)
+        if subprocess.run(['curl', '-sSf', '-m', '120', '-o', bm, BM]).returncode:
+            # eoimages unreachable: the Blue Marble tiles of the site (level 2, 8 × 4 tiles of 2048, equirectangular)
+            Image.MAX_IMAGE_PIXELS = None
+            src = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../../../planetarium/textures/earth/2')
+            big = Image.new('RGB', (16384, 8192))
+            for x in range(8):
+                for y in range(4): big.paste(Image.open(os.path.join(src, f'{x}_{y}.jpg')).convert('RGB'), (x * 2048, y * 2048))
+            big.resize((5400, 2700), Image.LANCZOS).save(bm, quality=95)
     Image.open(bm).convert('RGB').resize((W, H), Image.LANCZOS).save(os.path.join(OUT, 'ep_now.jpg'), quality=92)
     Image.new('RGB', (64, 32), (128, 128, 128)).save(os.path.join(OUT, 'ep_flat_f.png'))
     zs = {}

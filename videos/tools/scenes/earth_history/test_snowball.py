@@ -37,7 +37,7 @@ def frame(i):
     im = Image.fromarray(cm.to_u8(img)).convert('RGBA')
     h = 20.0 + (13.0 / 60.0) * cm.sm(t / 3.5); ya = (1 - (h / 24.0)) * 4.54e9
     draw_clock(im, h, ya, W - 170, 120, 70)
-    draw_label(im, 'ЗЕМЛЯ-СНІЖКА', 110, 880, 34, cm.ramp(t, 1.0, 1.8), sub='лід до самого екватора', style='glass')
+    draw_label(im, 'ЗЕМЛЯ-СНІЖКА', 1390, 820, 34, cm.ramp(t, 1.0, 1.8), sub='лід до самого екватора', style='pin', anchor=(1180, 700))
     im.convert('RGB').save(os.path.join(OUT, '%04d.png' % i))
 
 if __name__ == '__main__':

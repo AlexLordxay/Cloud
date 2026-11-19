@@ -189,11 +189,20 @@ if __name__ == '__main__':
         sp = sp * np.clip(fbm(P, 9, 3, 79) * 2.5 + 0.2, 0, 1)                 # in fields, not everywhere
         return np.clip(np.maximum(c, sp), 0, 1)
     tif = os.path.join(WORK, 'nasa', 'cloud_combined_8192.tif')
+    Image.MAX_IMAGE_PIXELS = None
     if not os.path.exists(tif):
         os.makedirs(os.path.dirname(tif), exist_ok=True)
-        subprocess.run(['curl', '-sS', '-C', '-', '-o', tif, CLOUDS], check=True)
-    Image.MAX_IMAGE_PIXELS = None
-    nasa = np.asarray(Image.open(tif).convert('L')).astype(np.float32) / 255
+        r = subprocess.run(['curl', '-sSfL', '-m', '120', '-C', '-', '-o', tif, CLOUDS])
+        if r.returncode: tif = None
+    if tif:
+        nasa = np.asarray(Image.open(tif).convert('L')).astype(np.float32) / 255
+    else:
+        # eoimages.gsfc.nasa.gov unreachable: the site's own cloud map (1024 × 512, the same kind of real weather) taken
+        # up to 8192 × 4096 with the fine structure of cloud edges added by noise
+        site = np.asarray(Image.open(os.path.join(TOOLS, '../../planetarium/textures/earth_clouds.png')).convert('L')).astype(np.float32) / 255
+        nasa = np.clip(up(site, W, H, order=3), 0, 1)
+        fine = field(W, H, lambda P, la: fbm(P, 60, 5, 91))
+        nasa = np.clip(nasa * (1 + 0.55 * fine) + 0.12 * fine * (nasa > 0.15) * (nasa < 0.8), 0, 1)
     nasa = np.clip((nasa - 0.04) / 0.9, 0, 1)
     la = np.degrees(sphere(1, H)[1][:, :1]); lo = ((np.arange(W) + 0.5) / W - 0.5)[None, :] * 360
     blob = lambda a, o, ra, ro: np.clip(1.6 - 1.6 * np.hypot((la - a) / ra, (lo - o) / ro), 0, 1) ** 1.5

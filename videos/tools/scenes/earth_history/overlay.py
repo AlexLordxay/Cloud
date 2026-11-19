@@ -77,7 +77,7 @@ def text_w(text, ft, track):
     if track <= 1.5: return d.textlength(text, font=ft)
     return sum(d.textlength(ch, font=ft) for ch in text) + track * (len(text) - 1)
 
-def draw_label(im, text, x, y, size=34, k=1.0, sub=None, style='glass', anchor=None):
+def draw_label(im, text, x, y, size=34, k=1.0, sub=None, style='pin', anchor=None):
     """calm captions. style 'glass': a soft dark frosted panel, a thin gold bar on the left, spaced capitals (+ an optional
     small second line). style 'pin': a small glowing dot at `anchor` (the place), a fine leader line to the text, text with
     a soft shadow and no panel. k: 0..1 appearance (fade + 12 px slide)"""
