@@ -7,7 +7,7 @@
 //   stars
 // The Earth stays fixed (its axis up, y); shots place the camera and the Sun.
 (async () => {
-  const T = THREE, D = Math.PI / 180, W = 720, H = 1280, ER = 6.371;
+  const T = THREE, D = Math.PI / 180, W = window.CX_W || 720, H = window.CX_H || 1280, ER = 6.371;
   const renderer = new T.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
   renderer.getContext().getExtension('OES_standard_derivatives');
   renderer.setSize(W, H); renderer.setPixelRatio(1); document.body.appendChild(renderer.domElement);

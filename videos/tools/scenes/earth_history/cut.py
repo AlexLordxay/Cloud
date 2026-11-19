@@ -96,6 +96,52 @@ CAPS = [
     (act_t('mammals', 19.5), act_t('mammals', 26.0), 'АФРИКА', 'перші люди — 300 тис. років тому', anchor_globe('mammals', 8, 32), (180, -150)),
 ]
 
+# ---------------------------------------------------------------- inserts: real photos/clips (inserts.json)
+INS = json.load(open(os.path.join(HERE, 'inserts.json'))) if os.path.exists(os.path.join(HERE, 'inserts.json')) else []
+ASSETS = os.path.join(WORK, 'assets'); CLIPS = os.path.join(WORK, 'clips_' + os.environ['EH_RES'])
+
+def prep_clips():
+    """each video insert as a JPEG sequence at our size and 30 fps (once)"""
+    for e in INS:
+        if e.get('kind') != 'video': continue
+        d = os.path.join(CLIPS, os.path.splitext(e['file'])[0])
+        if os.path.isdir(d) and os.listdir(d): continue
+        os.makedirs(d, exist_ok=True)
+        sp = e.get('speed', 1.0)
+        run('-ss', str(e.get('from', 0)), '-i', os.path.join(ASSETS, e['file']), '-vf',
+            f'setpts={1 / sp}*PTS,fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}', '-q:v', '3',
+            os.path.join(d, 'f_%05d.jpg'))
+
+_PH = {}
+def insert_img(e, t):
+    u = (t - e['t0']) / max(e['t1'] - e['t0'], 1e-3)
+    if e.get('kind') == 'video':
+        d = os.path.join(CLIPS, os.path.splitext(e['file'])[0]); fs = sorted(os.listdir(d))
+        im = Image.open(os.path.join(d, fs[min(int((t - e['t0']) * FPS), len(fs) - 1)])).convert('RGB')
+        z0, z1 = e.get('zoom', [1.0, 1.04])
+    else:
+        if e['file'] not in _PH:
+            if len(_PH) > 4: _PH.clear()
+            src = Image.open(os.path.join(ASSETS, e['file'])).convert('RGB')
+            sc = max(W * 1.25 / src.width, H * 1.25 / src.height)
+            _PH[e['file']] = src.resize((int(src.width * sc), int(src.height * sc)), Image.LANCZOS)
+        im = _PH[e['file']]
+        z0, z1 = e.get('zoom', [1.0, 1.1])
+    z = lerp(z0, z1, u)
+    px, py = e.get('pan', [0.0, 0.0])
+    w0, h0 = im.size
+    k = min(w0 / W, h0 / H) / z; cw, ch = W * k, H * k                 # the largest 16:9 box, then zoomed in
+    cx = w0 / 2 + px * (u - 0.5) * (w0 - cw); cy = h0 / 2 + py * (u - 0.5) * (h0 - ch)
+    box = (cx - cw / 2, cy - ch / 2, cx + cw / 2, cy + ch / 2)
+    return np.asarray(im.resize((W, H), Image.BICUBIC, box=box), np.float32)
+
+def inserts(img, t):
+    for e in INS:
+        if e['t0'] - 0.05 <= t <= e['t1'] + 0.05 and os.path.exists(os.path.join(ASSETS, e['file'])):
+            a = sm((t - e['t0']) / 0.7) * (1 - sm((t - (e['t1'] - 0.7)) / 0.7))
+            if a > 0: img = img * (1 - a) + insert_img(e, t) * a
+    return img
+
 # ---------------------------------------------------------------- the picture
 def act_frame(name, i):
     d = os.path.join(acts.ACTS_DIR if hasattr(acts, 'ACTS_DIR') else ACTS_DIR, name)
@@ -144,12 +190,19 @@ def endcard(im, t):
 
 def frame(i):
     t = i / FPS
-    img = base(i)
+    img = inserts(base(i), t)
     im = Image.fromarray(np.clip(img, 0, 255).astype(np.uint8)).convert('RGBA')
     if t < END0 - 0.5:
         h = clock_h(t)
         fade = min(1.0, t / 0.8) * (1 - sm((t - (END0 - 1.5)) / 1.0))
         draw_clock(im, h, ago(h), W - 170 * S, 120 * S, 70 * S, alpha=fade)
+    for e in INS:
+        c = e.get('cap')
+        if c and e['t0'] <= t <= e['t1']:
+            k = sm((t - e['t0'] - 0.6) / 0.6) * (1 - sm((t - e['t1'] + 1.0) / 0.6))
+            ax, ay = c['at'][0] * W, c['at'][1] * H
+            draw_label(im, c['text'], ax + c.get('off', [150, -120])[0] * S, ay + c.get('off', [150, -120])[1] * S, int(34 * S), k,
+                       sub=c.get('sub'), style='pin', anchor=(ax, ay))
     for t0, t1, txt, sub, af, off in CAPS:
         if t0 - 0.1 <= t <= t1 + 0.6:
             p = af(t)
@@ -197,6 +250,7 @@ def sound(dst):
 
 if __name__ == '__main__':
     draft = 'draft' in sys.argv[1:]
+    prep_clips()
     picture()
     snd = os.path.join(WORK, 'cut_audio.wav'); sound(snd)
     name = 'earth_history_draft.mp4' if W < 1920 else 'earth_history.mp4'

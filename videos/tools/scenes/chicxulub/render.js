@@ -9,9 +9,12 @@ const fs = require('fs'), path = require('path'), http = require('http');
 const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
 const TOOLS = path.resolve(__dirname, '../..'), WORK = path.join(TOOLS, 'work', 'chicxulub');
 const [name, mode = 'stills', list = '0'] = process.argv.slice(2);
-const W = 720, H = 1280, FPS = 30;
+const W = +process.env.CX_W || 720, H = +process.env.CX_H || 1280, FPS = 30;
+const WIDE = W > H;              // 16:9: stills and frames go to shot16_<name> (vertical film: shot_<name>)
+const PFX = WIDE ? 'shot16_' : 'shot_';
 
 const page = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;background:#000">
+<script>window.CX_W=${W};window.CX_H=${H};</script>
 <script src="/three.min.js"></script><script src="/scene/world.js"></script><script src="/scene/shots.js"></script>
 </body></html>`;
 
@@ -48,11 +51,11 @@ const page = `<!doctype html><html><head><meta charset="utf-8"></head><body styl
     };
     fs.mkdirSync(WORK, { recursive: true });
     if (mode === 'stills') {
-      for (const t of list.split(',').map(Number)) await save(t, path.join(WORK, `shot_${name}_${t}.jpg`));
+      for (const t of list.split(',').map(Number)) await save(t, path.join(WORK, `${PFX}${name}_${t}.jpg`));
     } else {
-      const dir = path.join(WORK, 'shot_' + name); fs.mkdirSync(dir, { recursive: true });
+      const dir = path.join(WORK, PFX + name); fs.mkdirSync(dir, { recursive: true });
       const n = Math.round(dur * FPS);
-      for (let i = 0; i < n; i++) { await save(i / FPS, path.join(dir, `f_${String(i).padStart(5, '0')}.jpg`)); if (i % 30 === 0) console.log(name, 'frame', i, '/', n); }
+      for (let i = 0; i < n; i++) { const fn = path.join(dir, `f_${String(i).padStart(5, '0')}.jpg`); if (fs.existsSync(fn)) continue; await save(i / FPS, fn); if (i % 30 === 0) console.log(name, 'frame', i, '/', n); }
     }
   }
   await br.close(); srv.close();
