@@ -17,10 +17,13 @@ work = os.path.join(TOOLS, 'work', name)
 os.makedirs(work, exist_ok=True)
 
 chains, labels = [], []
+n_parts = len(nar['parts'])
+# the recording feeds every phrase: split it explicitly (an implicit split can drop the later phrases)
+chains.append('[0:a]asplit=' + str(n_parts) + ''.join(f'[in{i}]' for i in range(n_parts)) if n_parts > 1 else '[0:a]anull[in0]')
 for i, (a, b, at) in enumerate(nar['parts']):
     tempo = nar.get('tempo', 1.0)
     d = (b - a) / tempo
-    chains.append(f'[0:a]atrim={a}:{b},asetpts=PTS-STARTPTS,atempo={tempo},afade=t=in:d=0.02,afade=t=out:st={d - 0.04:.3f}:d=0.04,'
+    chains.append(f'[in{i}]atrim={a}:{b},asetpts=PTS-STARTPTS,atempo={tempo},afade=t=in:d=0.02,afade=t=out:st={d - 0.04:.3f}:d=0.04,'
                   f'adelay={int(at * 1000)}:all=1[p{i}]')
     labels.append(f'[p{i}]')
 graph = ';'.join(chains) + f';{"".join(labels)}amix=inputs={len(labels)}:normalize=0,' \

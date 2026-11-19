@@ -698,7 +698,7 @@ def s9_render(c, t, sun_on=True, dark_front=None, light_front=None, sun_scale=1.
         layer_sun(img, cs, t, gain=2.6, cor=0.22)
     # the Sun lighting up again: a flash around it
     if light_front is not None and t >= light_front[0]:
-        fl = math.exp(-(t - light_front[0]) / 0.35) * 6.0
+        fl = math.exp(-max(0.0, t - light_front[0] - 0.1) / 0.35) * 6.0 * sm((t - light_front[0]) / 0.1)
         img += (fl * np.exp(-dd / 260.0) + fl * 0.25 * np.exp(-dd / 900.0))[..., None] * np.array([1.0, 0.95, 0.85], np.float32)
     # the front of the last light: a thin glowing shell
     for fr, sign in ((dark_front, 1), (light_front, -1)):

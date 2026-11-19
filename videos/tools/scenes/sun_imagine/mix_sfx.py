@@ -47,7 +47,7 @@ def main():
         ins += ['-i', os.path.join(SFX, c[0])]
         parts.append(chain(i, *c))
     n = len(CUES)
-    graph = ';'.join(parts) + ';' + ''.join(f'[s{i}]' for i in range(n)) + f'amix=inputs={n}:normalize=0,apad,atrim=0:{DUR + 1}[out]'
+    graph = ';'.join(parts) + ';' + ''.join(f'[s{i}]' for i in range(n)) + f'amix=inputs={n}:normalize=0,apad=whole_dur={DUR + 1}[out]'
     sfx = os.path.join(WORK, 'sfx.wav')
     subprocess.run([FF, '-y', '-loglevel', 'error', *ins, '-filter_complex', graph, '-map', '[out]', sfx], check=True)
     # the final mix (as make.sh, plus the effects): music ducked by voice and by the effects, effects ducked by the voice

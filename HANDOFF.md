@@ -2032,3 +2032,12 @@
 - Збірка: `python3 scenes/sun_imagine/textures.py` (раз, work/sun_imagine/*.npy) → `NUMBA_NUM_THREADS=2 python3
   scenes/sun_imagine/render.py 2` (~1 год, 1752 кадри) → `./make.sh sun_imagine` (frames.sh пропускає готові) →
   `python3 scenes/sun_imagine/mix_sfx.py`. Потрібні pip: numba, scipy, imageio-ffmpeg.
+- **19.11 ~10:10 — «А ТИ УЯВЛЯЄШ СОНЦЕ ТАК?» ГОТОВО:** `videos/sun_imagine.mp4` (58,4 с, 1080×1920, −14,2 LUFS, пік −1,1 dBFS),
+  обкладинка Reels `videos/sun_imagine_cover.jpg` («СОНЦЕ НЕ ЖОВТЕ», `scenes/sun_imagine/cover/make_cover.py`), описи
+  `scenes/sun_imagine/posts.md` (IG/FB/Threads ≤500, TikTok, YouTube Shorts + джерела). Покадрова перевірка стрибків (різниця
+  сусідніх кадрів): розривів нема, великі різниці — лише швидкий рух (пірнання до плями, спуск, підйом) і задуманий спалах 50,3 с.
+  **Уроки:** (1) у scene.json `narration.parts` третє число — АБСОЛЮТНИЙ момент у відео, не зсув (помилився — фрази
+  накладались; виявлено перевіркою RMS голосу); (2) `voice.py` тепер явно ділить запис (`asplit`); (3) у mix_sfx.py
+  `apad,atrim` у цій версії ffmpeg висне → `apad=whole_dur`; (4) після mix_sfx гучність вийшла −17,7 → двопрохідний loudnorm
+  (команда — у цьому розділі вище не потрібна, повторити як у сесії: measured_* + alimiter 0.84).
+  Чекає відгуку автора; публікація — за планом А (IG+FB 19:00–20:30, TikTok ~20:00–21:00, YouTube Shorts).
