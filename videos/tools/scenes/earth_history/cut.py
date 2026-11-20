@@ -226,7 +226,7 @@ def picture(i0=0, i1=None):
 # ---------------------------------------------------------------- the sound
 def run(*a): subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', *a], check=True)
 
-BED = 1 / 3          # music and effects under the voice: the author asked for them 3× quieter (20.11)
+BED = 1 / 9          # music and effects under the voice: the author asked twice for 3× quieter (20.11) -> 1/9
 
 def sound(dst):
     parts = [v for a in ACT_LIST for v in a['voice']]
