@@ -166,6 +166,7 @@ def base(i):
     layers = []
     for j, a in enumerate(ACT_LIST):
         s0, s1 = a['start'] - XF / 2, a['end'] + XF / 2
+        if j == len(ACT_LIST) - 1: s1 = DUR + 1.0          # the last act runs on under the end card
         if s0 <= t < s1:
             w = 1.0
             if j > 0 and t < a['start'] + XF / 2: w = sm((t - s0) / XF)
