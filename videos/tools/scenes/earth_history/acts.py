@@ -434,25 +434,27 @@ def ocean_world():
     return noise_tex('ocean_world', mk)
 
 def archean(tint=0.0):
-    """Archean Earth: small grey cratons, wide shallow seas with microbial mats along the shores"""
+    """Archean Earth: small grey cratons, wide shallow seas with microbial mats along the shores (soft transitions)"""
     def mk():
         P = sphere_grid(2048, 1024)
-        n = fbm3(P * 3.2 + 7.0, 6); n2 = fbm3(P * 20.0 + 9.0, 4)
-        land = n > 0.64; shelf = (n > 0.585) & ~land
+        n = fbm3(P * 3.2 + 7.0, 7); n2 = fbm3(P * 20.0 + 9.0, 4); n3 = fbm3(P * 60.0 + 4.0, 3)
+        n = n + 0.03 * (n3 - 0.5)
+        k_land = np.clip((n - 0.630) / 0.02, 0, 1)[..., None]; k_shelf = np.clip((n - 0.575) / 0.05, 0, 1)[..., None]
         sea = np.array([16, 36, 62]) * (0.85 + 0.3 * n2[..., None])
-        mats = np.array([44, 86, 84]) * (0.8 + 0.4 * n2[..., None])
-        rock = np.array([118, 100, 86]) * (0.7 + 0.6 * n2[..., None])
-        col = np.where(land[..., None], rock, np.where(shelf[..., None], mats, sea))
+        mats = np.array([34, 74, 82]) * (0.75 + 0.5 * n2[..., None])
+        rock = np.array([112, 96, 84]) * (0.65 + 0.7 * n2[..., None]) * (0.85 + 0.3 * n3[..., None])
+        col = sea * (1 - k_shelf) + mats * k_shelf
+        col = col * (1 - k_land) + rock * k_land
         return np.clip(col, 0, 255).astype(np.uint8)
-    base = noise_tex('archean', mk)
+    base = noise_tex('archean2', mk)
     if tint <= 0: return base
-    def mk2():                     # the rusting seas: iron oxide red along the shelves
+    def mk2():                     # the rusting seas: iron oxide brown-red over the shelves, soft
         P = sphere_grid(2048, 1024)
-        n = fbm3(P * 3.2 + 7.0, 6)
-        shelf = ((n > 0.52) & (n <= 0.64)).astype(np.float32)[..., None]
+        n = fbm3(P * 3.2 + 7.0, 7)
+        shelf = (np.clip((n - 0.53) / 0.06, 0, 1) * np.clip((0.64 - n) / 0.02, 0, 1))[..., None]
         b = base.astype(np.float32)
-        return np.clip(b * (1 - 0.75 * shelf) + np.array([150, 62, 30]) * 0.75 * shelf, 0, 255).astype(np.uint8)
-    rust = noise_tex('archean_rust', mk2)
+        return np.clip(b * (1 - 0.55 * shelf) + np.array([118, 58, 34]) * 0.55 * shelf, 0, 255).astype(np.uint8)
+    rust = noise_tex('archean2_rust', mk2)
     return mix_tex(base, rust, tint)
 
 def proterozoic():
@@ -552,32 +554,32 @@ def paleo_globe(t, ma, cam, cloud_k=0.5, cloud_shift=0, expo=0.82, air_k=1.0):
 @act
 def ediacara(t):
     tex = mix_tex(iced(proterozoic(), 70.0), paleo(540), sm((t + 0.5) / 5.0))
-    cam = ckeys(t, [(-0.5, (8, 20, 3.4, 36)), (12.0, (-20, 40, 3.0, 36))])
+    cam = ckeys(t, [(-0.5, (8, 20, 3.4, 36)), (12.0, (-28, -40, 3.1, 36))])
     img, c = globe_shot(t, tex, cam, expo=0.82, cloud_k=0.45, cloud_shift=950)
     return finish(img)
 
 @act
 def cambrian(t):
-    cam = ckeys(t, [(-0.5, (-20, 40, 3.0, 36)), (22.8, (-30, 90, 2.4, 38))])
+    cam = ckeys(t, [(-0.5, (-28, -40, 3.1, 36)), (22.8, (-45, -170, 2.6, 38))])
     img, c = paleo_globe(t, lerp(540, 500, sm(t / 22.3)), cam, cloud_shift=980)
     return finish(img)
 
 @act
 def land(t):
-    cam = ckeys(t, [(-0.5, (-30, 90, 2.4, 38)), (16.6, (-15, 130, 2.0, 40))])
+    cam = ckeys(t, [(-0.5, (-45, -170, 2.6, 38)), (16.6, (-50, -245, 2.2, 40))])
     img, c = paleo_globe(t, lerp(480, 380, sm(t / 16.1)), cam, cloud_shift=1000)
     return finish(img)
 
 @act
 def coal(t):
-    cam = ckeys(t, [(-0.5, (-15, 130, 2.0, 40)), (24.6, (-5, 170, 2.6, 36))])
+    cam = ckeys(t, [(-0.5, (-50, -245, 2.2, 40)), (12.0, (-30, -320, 2.4, 38)), (24.6, (-10, -360, 2.6, 36))])
     img, c = paleo_globe(t, lerp(370, 300, sm(t / 24.1)), cam, cloud_shift=1020)
     return finish(img)
 
 SIB = (60.0, 60.0)          # the Siberian Traps on the 250 Ma map (approximate)
 @act
 def permian(t):
-    cam = ckeys(t, [(-0.5, (-5, 170, 2.6, 36)), (4.0, (35, 70, 3.0, 36)), (14.0, (45, 62, 2.6, 38)), (26.0, (30, 40, 3.1, 36))])
+    cam = ckeys(t, [(-0.5, (-10, 0, 2.6, 36)), (4.0, (35, 70, 3.0, 36)), (14.0, (45, 62, 2.6, 38)), (26.0, (30, 40, 3.1, 36))])
     smoke = sm((t - 6.0) / 8.0)
     img, c = paleo_globe(t, lerp(290, 250, sm(t / 10.0)), cam, cloud_shift=1040, expo=lerp(0.82, 0.62, smoke), air_k=1 + 0.8 * smoke)
     if t > 4.0:                       # the traps: fissures glowing over a huge area of Siberia
