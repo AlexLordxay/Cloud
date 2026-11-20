@@ -12,6 +12,7 @@
 | redalgae_3.jpg | Audouinella hermannii — iNaturalist #338570150 | no rights reserved | CC0 | https://www.inaturalist.org/observations/338570150 |
 | vidice_1.mp4 | IceBridge Antarctica 2016 (sea ice) | GSFC / Operation IceBridge | Public domain (NASA) | https://images.nasa.gov/details/GSFC_20161208_IceBridge_m12449_IceBridge |
 | volcano_1.jpg | Aleutian volcanic eruption taken by Expedition 13 crewmember | JSC | Public domain (NASA) | https://images.nasa.gov/details/iss013e24184 |
+| ediacara_2.jpg | Ediacaran ecosystem diorama NMNH | Ryan Schwark | CC0 1.0 | https://commons.wikimedia.org/w/index.php?curid=145895957 |
 | anomalocaris_1.jpg | Burgess fossil Marrella viewed by MicroEye | subarcticmike | BY 2.0 | https://www.flickr.com/photos/31856336@N03/45599985961 |
 | horseshoe_2.jpg | Limulus polyphemus — iNaturalist #13557151 | no rights reserved | CC0 | https://www.inaturalist.org/observations/13557151 |
 | trilobite_1.jpg | Trilobite fossil | Joanna Bourne | BY 2.0 | https://www.flickr.com/photos/66992990@N00/116512454 |
@@ -51,6 +52,7 @@
 — Audouinella hermannii — iNaturalist #338570150 — no rights reserved, CC0, https://www.inaturalist.org/observations/338570150
 — IceBridge Antarctica 2016 (sea ice) — GSFC / Operation IceBridge, Public domain (NASA), https://images.nasa.gov/details/GSFC_20161208_IceBridge_m12449_IceBridge
 — Aleutian volcanic eruption taken by Expedition 13 crewmember — JSC, Public domain (NASA), https://images.nasa.gov/details/iss013e24184
+— Ediacaran ecosystem diorama NMNH — Ryan Schwark, CC0 1.0, https://commons.wikimedia.org/w/index.php?curid=145895957
 — Burgess fossil Marrella viewed by MicroEye — subarcticmike, BY 2.0, https://www.flickr.com/photos/31856336@N03/45599985961
 — Limulus polyphemus — iNaturalist #13557151 — no rights reserved, CC0, https://www.inaturalist.org/observations/13557151
 — Trilobite fossil — Joanna Bourne, BY 2.0, https://www.flickr.com/photos/66992990@N00/116512454

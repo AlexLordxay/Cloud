@@ -111,6 +111,10 @@ def draw_label(im, text, x, y, size=34, k=1.0, sub=None, style='pin', anchor=Non
         sh = Image.new('RGBA', im.size, (0, 0, 0, 0)); ds = ImageDraw.Draw(sh)
         _spaced(ds, x0 + 2, y0 + int(size * 0.12) + 2, text, ft, (0, 0, 0, int(200 * a)), track)
         if sub: _spaced(ds, x0 + 2, y0 + int(size * 1.32) + 2, sub, fs, (0, 0, 0, int(200 * a)), size * 0.05)
+        # a wide soft dark halo first (keeps the text readable on light, busy photos), then the tight shadow
+        halo = sh.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(size * 0.45))
+        halo.putalpha(halo.getchannel('A').point(lambda v: min(255, int(v * 0.9))))
+        lay.alpha_composite(halo)
         sh = sh.filter(ImageFilter.GaussianBlur(3)); lay.alpha_composite(sh)
         _spaced(d, x0, y0 + int(size * 0.12), text, ft, (255, 255, 255, int(245 * a)), track)
         if sub: _spaced(d, x0, y0 + int(size * 1.32), sub, fs, (220, 226, 238, int(210 * a)), size * 0.05)
