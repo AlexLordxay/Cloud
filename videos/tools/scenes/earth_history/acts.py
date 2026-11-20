@@ -399,7 +399,7 @@ def globe_shot(t, tex, cam, sun=None, expo=0.8, cloud_k=0.5, cloud_shift=0, nigh
 LASTCAM = {}
 def globe_cam(cam):
     lat, lon, dist, fov = cam
-    if dist > 2.3: dist *= 1.2                    # the whole globe in the frame, a little air around it
+    dist *= 1 + 0.2 * sm((dist - 2.2) / 0.2)       # the whole globe in the frame, a little air around it (smooth)
     c = orbit_cam(lat, lon, dist * RE, fov)
     LASTCAM['c'] = c
     return c
@@ -615,7 +615,7 @@ def mammals(t):
 
 @act
 def future(t):
-    cam = ckeys(t, [(-0.5, (35, 35, 3.0, 36)), (12, (20, -10, 3.1, 36)), (30, (10, -40, 3.4, 36)), (44.2, (5, -60, 6.5, 34))])
+    cam = ckeys(t, [(-0.5, (35, 35, 3.0, 36)), (12, (20, -10, 3.1, 36)), (30, (10, -40, 3.4, 36)), (44.2, (5, -60, 6.5, 34)), (52.0, (3, -72, 8.0, 34))])
     lat, lon, dist, fov = cam
     c = globe_cam(cam)
     img = space(c, 0.6, 0.3)
@@ -625,7 +625,10 @@ def future(t):
 
 # ================================================================ helpers for the run
 def act_range(name):
-    a = TL[name]; return a['start'] - XF / 2, a['end'] + XF / 2
+    a = TL[name]
+    end = a['end'] + XF / 2
+    if name == 'future': end = json.load(open(os.path.join(HERE, 'timeline.json')))['duration'] + 0.1   # under the end card too
+    return a['start'] - XF / 2, end
 
 def render(name, i0=None, i1=None):
     t0, t1 = act_range(name)
