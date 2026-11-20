@@ -1258,5 +1258,53 @@
   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/deed.en/",
   "source_url": "https://commons.wikimedia.org/w/index.php?curid=145895957",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/24/Ediacaran_ecosystem_diorama_NMNH.jpg"
+ },
+ {
+  "shot": "vidstorm",
+  "file": "vidstorm_1.mp4",
+  "kind": "video",
+  "query": "NASA video library",
+  "title": "Expedition 69 Space Station Flies Over Hurricane Idalia (Live)",
+  "author": "JSC",
+  "license": "Public domain (NASA)",
+  "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+  "source_url": "https://images.nasa.gov/details/Expedition_69_Space_Station_Flies_Over_Hurricane_Idalia_Live",
+  "url": "https://images-assets.nasa.gov/video/Expedition_69_Space_Station_Flies_Over_Hurricane_Idalia_Live/Expedition_69_Space_Station_Flies_Over_Hurricane_Idalia_Live~large.mp4"
+ },
+ {
+  "shot": "vidice",
+  "file": "vidice_1.mp4",
+  "kind": "video",
+  "query": "NASA video library",
+  "title": "IceBridge Antarctica 2016 (sea ice)",
+  "author": "GSFC / Operation IceBridge",
+  "license": "Public domain (NASA)",
+  "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+  "source_url": "https://images.nasa.gov/details/GSFC_20161208_IceBridge_m12449_IceBridge",
+  "url": "https://images-assets.nasa.gov/video/GSFC_20161208_IceBridge_m12449_IceBridge/GSFC_20161208_IceBridge_m12449_IceBridge~large.mp4"
+ },
+ {
+  "shot": "vidice",
+  "file": "vidice_2.mp4",
+  "kind": "video",
+  "query": "NASA video library",
+  "title": "IceBridge Antarctica 2016 (ice shelf)",
+  "author": "GSFC / Operation IceBridge",
+  "license": "Public domain (NASA)",
+  "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+  "source_url": "https://images.nasa.gov/details/GSFC_20161208_IceBridge_m12449_IceBridge",
+  "url": "https://images-assets.nasa.gov/video/GSFC_20161208_IceBridge_m12449_IceBridge/GSFC_20161208_IceBridge_m12449_IceBridge~large.mp4"
+ },
+ {
+  "shot": "vidice",
+  "file": "vidice_3.mp4",
+  "kind": "video",
+  "query": "NASA video library",
+  "title": "NASA's View of Pine Island Glacier's Latest Iceberg",
+  "author": "GSFC / Operation IceBridge",
+  "license": "Public domain (NASA)",
+  "license_url": "https://www.nasa.gov/nasa-brand-center/images-and-media/",
+  "source_url": "https://images.nasa.gov/details/GSFC_20181108_PIG_m13110_Iceberg",
+  "url": "https://images-assets.nasa.gov/video/GSFC_20181108_PIG_m13110_Iceberg/GSFC_20181108_PIG_m13110_Iceberg~large.mp4"
  }
 ]
