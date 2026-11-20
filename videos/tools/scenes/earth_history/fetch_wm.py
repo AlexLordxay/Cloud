@@ -12,12 +12,13 @@ def thumb(url, w=1920):
     return f"{p[0]}/wikipedia/commons/thumb/{p[1]}/{w}px-{name}"
 def save(shot, url, meta):
     k = len([m for m in man if m['shot'] == shot]); f = f'{shot}_{k + 1}.jpg'
-    for u in (thumb(url, 1920), thumb(url, 1280), url):
+    for u in (thumb(url, 1280), thumb(url, 960)):
+        time.sleep(20)
         try:
             data = urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=120).read()
             if len(data) > 30000 and data[:5] != b'<!DOC': break
         except Exception as e:
-            data = None; time.sleep(3)
+            data = None; time.sleep(30)
     if not data: print('fail', shot, url[-60:]); return False
     open(os.path.join(F.OUT, f), 'wb').write(data)
     man.append(dict(shot=shot, file=f, kind='photo', **meta)); have.add(meta['source_url'])
