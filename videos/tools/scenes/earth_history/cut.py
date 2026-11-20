@@ -227,10 +227,17 @@ def picture(i0=0, i1=None):
 # ---------------------------------------------------------------- the sound
 def run(*a): subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', *a], check=True)
 
-BED = 1 / 9          # music and effects under the voice: the author asked twice for 3× quieter (20.11) -> 1/9
+BED = 1 / 18         # music and effects under the voice: the author asked 3× quieter, 3× again, then quieter still (20.11)
 
 def sound(dst):
     parts = [v for a in ACT_LIST for v in a['voice']]
+    # each paragraph's tail runs 0.3 s on into the pause (soft word endings like «комети» were clipped at the gap's start)
+    starts = {}
+    for f_, a_, b_, at_ in parts: starts.setdefault(f_, []).append(a_)
+    def tail(f_, b_):
+        nxt = [s for s in starts[f_] if s > b_]
+        return min(b_ + 0.3, (min(nxt) - 0.05) if nxt else b_ + 0.3)
+    parts = [(f_, a_, tail(f_, b_), at_) for f_, a_, b_, at_ in parts]
     ins = sum([['-i', os.path.join(HERE, f)] for f in ('voice_p1.mp3', 'voice_p2.mp3', 'voice_p3.mp3')], [])
     idx = {'voice_p1.mp3': 0, 'voice_p2.mp3': 1, 'voice_p3.mp3': 2}
     ch = [f'[{idx[f]}:a]atrim={a}:{b},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo,afade=t=in:d=0.02,'
@@ -239,9 +246,9 @@ def sound(dst):
     ast = next(x for x in ACT_LIST if x['id'] == 'asteroid')['start']
     dv = os.path.join(WORK, 'dino16', 'voice.wav'); ds = os.path.join(WORK, 'dino16', 'sfx.wav')
     k = 3
-    for f in (dv, ds):
+    for f, g in ((dv, 1.0), (ds, 2 * BED)):          # the dinosaur film's effects sit in the bed too
         if os.path.exists(f):
-            ins += ['-i', f]; ch.append(f'[{k}:a]aresample=48000,aformat=channel_layouts=stereo,adelay={int(ast * 1000)}:all=1[p{n}]'); n += 1; k += 1
+            ins += ['-i', f]; ch.append(f'[{k}:a]aresample=48000,aformat=channel_layouts=stereo,volume={g:.3f},adelay={int(ast * 1000)}:all=1[p{n}]'); n += 1; k += 1
     voice = os.path.join(WORK, 'cut_voice.wav')
     run(*ins, '-filter_complex', ';'.join(ch) + ';' + ''.join(f'[p{i}]' for i in range(n)) +
         f'amix=inputs={n}:normalize=0,highpass=f=70,apad,atrim=0:{DUR:.2f}[v]', '-map', '[v]', '-ar', '48000', voice)
@@ -251,8 +258,13 @@ def sound(dst):
         f'[1:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={BED:.3f}[mu0];'
         '[mu0][key]sidechaincompress=threshold=0.03:ratio=4:attack=60:release=700[mu];'
         f'[2:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={0.9 * BED:.3f}[fx];'
-        f'[vo][mu][fx]amix=inputs=3:normalize=0,atrim=0:{DUR:.2f},afade=t=out:st={DUR - 1.2:.2f}:d=1.2,'
-        'loudnorm=I=-14:TP=-1.5:LRA=11[a]', '-map', '[a]', '-ar', '48000', dst)
+        f'[vo][mu][fx]amix=inputs=3:normalize=0,atrim=0:{DUR:.2f},afade=t=out:st={DUR - 1.2:.2f}:d=1.2[a]',
+        '-map', '[a]', '-ar', '48000', '-c:a', 'pcm_f32le', dst + '.raw.wav')
+    # one fixed gain to −14 LUFS (no dynamic normalization: it lifted the music in every pause), then a peak limiter
+    out = subprocess.run(['ffmpeg', '-hide_banner', '-i', dst + '.raw.wav', '-af', 'ebur128', '-f', 'null', '-'], capture_output=True, text=True).stderr
+    I = float([l for l in out.splitlines() if l.strip().startswith('I:')][-1].split()[1])
+    run('-i', dst + '.raw.wav', '-af', f'volume={-14.0 - I:.2f}dB,alimiter=limit=0.84:level=false', '-ar', '48000', dst)
+    os.remove(dst + '.raw.wav')
 
 if __name__ == '__main__':
     draft = 'draft' in sys.argv[1:]
