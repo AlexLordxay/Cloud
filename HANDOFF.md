@@ -2149,3 +2149,7 @@
 - **20.11 ~13:50 — фінал «Історії Землі» в Higgsfield** (за проханням автора, для завантаження на телефон): копія 1080p crf 23
   (`earth_history_send.mp4`, 295 МБ; 692-МБ версію Cloudflare не приймає — 413), media_id 02a2210e-1a09-4fca-a4fc-fb2bae77422c,
   https://d2ol7oe51mr4n9.cloudfront.net/user_3Jbtm0oRi4igxemirlI9ZLYJFv9/02a2210e-1a09-4fca-a4fc-fb2bae77422c.mp4
+- **20.11 ~14:20 — якісніша копія для YouTube у Higgsfield:** `earth_history_yt.mp4` (2 проходи, 6,2 Мбіт/с, 465 МБ, SSIM 0,990 до
+  майстра), media_id 7f292604-5576-45b0-987d-9ae85a52e541,
+  https://d2ol7oe51mr4n9.cloudfront.net/user_3Jbtm0oRi4igxemirlI9ZLYJFv9/7f292604-5576-45b0-987d-9ae85a52e541.mp4
+  (ліміт завантаження Higgsfield/Cloudflare — між 465 і 692 МБ).
