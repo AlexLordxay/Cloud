@@ -16,6 +16,8 @@ TLJ = json.load(open(os.path.join(HERE, 'timeline.json')))
 ACT_LIST = TLJ['acts']; DUR = TLJ['duration']; END0 = TLJ['end_card'][0]
 XF = acts.XF
 OUT = os.path.join(WORK, 'cut_' + os.environ['EH_RES']); DINO = os.path.join(WORK, 'dino16', 'frames')
+if not (os.path.isdir(DINO) and os.listdir(DINO)):       # not rendered yet: the vertical film in a 16:9 frame (draft only)
+    DINO = os.path.join(WORK, 'dino_draft_' + os.environ['EH_RES'])
 S = SCALE
 
 # ---------------------------------------------------------------- the clock: hours of Earth's day at cut time t
