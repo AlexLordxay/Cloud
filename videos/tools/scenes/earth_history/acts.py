@@ -261,7 +261,7 @@ def theia_world(t):
     L = nrm([-0.85, 0.35, 0.25])
     alb, emi = magma_maps(0.0)
     tau = t - IMPACT
-    heat = (math.exp(-max(tau, 0) / 6.0) * 1.6 + 1.0) if tau > 0 else 1.0
+    heat = 1.0 + 1.6 * sm(tau / 0.6) * math.exp(-max(tau, 0) / 6.0)          # the glow builds over 0.6 s, no jump
     spin = t * (0.05 if t < 24 else 0.05 + 0.5 * sm((t - 24) / 3) - 0.45 * sm((t - 30) / 4))   # «доба — 6 годин»
     mE, tE = body(img, c, D, (0, 0, 0), E_R, alb, emi, L=L, spin=spin, ambient=0.004, atm=(1.4, 0.45, 0.12), emi_k=heat)
     if tau < 2.2:                                    # Theia (it sinks into the Earth and is gone)
@@ -270,13 +270,13 @@ def theia_world(t):
         body(img, c, D, TP, T_R * (1 - 0.35 * sm(tau / 2.2)), rk, None, L=L, spin=0.3 + t * 0.02, ambient=0.006, depth=tE)
     if tau > -0.3:
         x, y, z = cm.project(c, CONTACT_DIR * E_R)
-        f = math.exp(-max(tau, 0) / 1.4) * sm((tau + 0.3) / 0.3)
+        f = math.exp(-max(tau, 0) / 1.4) * sm((tau + 0.5) / 0.7)
         if z[0] > 0: glow(img, x[0], y[0], [(26, 10 * f), (110, 1.2 * f), (420, 0.08 * f)], (1.0, 0.62, 0.3))
     if tau > 0 and t < 21.5:                          # the plume -> the ring -> the Moon
         gather = sm((t - 15.4) / 4.0)
         X = plume_pts(tau, gather)
         hot = math.exp(-tau / 8.0)
-        col = np.array([2.0, 0.75, 0.25]) * (0.35 + 0.65 * hot) * (1 - 0.9 * gather) * 0.9
+        col = np.array([2.0, 0.75, 0.25]) * (0.35 + 0.65 * hot) * (1 - 0.9 * gather) * 0.9 * sm(tau / 0.5) * (1 - sm((t - 19.0) / 2.4))
         x, y, z = cm.project(c, X)
         # hide the points behind the Earth
         vis = np.ones(len(X), bool)
