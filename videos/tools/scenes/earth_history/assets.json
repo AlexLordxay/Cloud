@@ -1246,5 +1246,17 @@
   "license_url": "",
   "source_url": "https://images.nasa.gov/details/GSFC_20140404_SDO_m11517_Flare",
   "url": "http://images-assets.nasa.gov/video/GSFC_20140404_SDO_m11517_Flare/GSFC_20140404_SDO_m11517_Flare~medium.mp4"
+ },
+ {
+  "shot": "ediacara",
+  "file": "ediacara_2.jpg",
+  "kind": "photo",
+  "query": "Charnia",
+  "title": "Ediacaran ecosystem diorama NMNH",
+  "author": "Ryan Schwark",
+  "license": "CC0 1.0",
+  "license_url": "https://creativecommons.org/publicdomain/zero/1.0/deed.en/",
+  "source_url": "https://commons.wikimedia.org/w/index.php?curid=145895957",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/24/Ediacaran_ecosystem_diorama_NMNH.jpg"
  }
 ]
