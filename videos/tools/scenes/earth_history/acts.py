@@ -409,6 +409,10 @@ def ckeys(t, ks):            # camera keys: (t, (lat, lon, dist, fov))
 def mix_tex(a, b, k):
     if k <= 0: return a
     if k >= 1: return b
+    if a.shape != b.shape:            # bring the smaller map up to the larger one's size
+        big, small = (a, b) if a.shape[0] > b.shape[0] else (b, a)
+        up = np.asarray(Image.fromarray(small).resize((big.shape[1], big.shape[0]), Image.BILINEAR))
+        a, b = (a, up) if a is big else (up, b)
     return np.ascontiguousarray((a * (1 - k) + b * k).astype(np.uint8))
 
 def noise_tex(name, fn):
