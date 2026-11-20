@@ -94,7 +94,6 @@ CAPS = [
     (act_t('permian', 5.0), act_t('permian', 13.0), 'СИБІР', 'вулкани заливають лавою', anchor_globe('permian', 60, 60), (170, -130)),
     (act_t('permian', 0.6), act_t('permian', 4.6), 'ПАНГЕЯ', 'усі материки разом', anchor_globe('permian', 5, 25), (180, 120)),
     (act_t('dinos', 12.0), act_t('dinos', 18.5), 'АТЛАНТИКА', 'народжується океан', anchor_globe('dinos', 18, -32), (170, -130)),
-    (act_t('mammals', 8.0), act_t('mammals', 13.5), 'ГІМАЛАЇ', 'Індія врізається в Азію', anchor_globe('mammals', 29, 84), (160, -140)),
     (act_t('mammals', 19.5), act_t('mammals', 26.0), 'АФРИКА', 'перші люди — 300 тис. років тому', anchor_globe('mammals', 8, 32), (180, -150)),
 ]
 
@@ -206,7 +205,9 @@ def frame(i):
             ax, ay = c['at'][0] * W, c['at'][1] * H
             draw_label(im, c['text'], ax + c.get('off', [150, -120])[0] * S, ay + c.get('off', [150, -120])[1] * S, int(34 * S), k,
                        sub=c.get('sub'), style='pin', anchor=(ax, ay))
+    ins_a = max([sm((t - e['t0']) / 0.7) * (1 - sm((t - (e['t1'] - 0.7)) / 0.7)) for e in INS if e['t0'] - 0.1 <= t <= e['t1'] + 0.1] or [0.0])
     for t0, t1, txt, sub, af, off in CAPS:
+        if ins_a > 0.02: continue                     # a photo is on: the globe's pins wait
         if t0 - 0.1 <= t <= t1 + 0.6:
             p = af(t)
             if p is None: continue
