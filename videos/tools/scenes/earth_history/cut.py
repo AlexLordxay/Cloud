@@ -226,6 +226,8 @@ def picture(i0=0, i1=None):
 # ---------------------------------------------------------------- the sound
 def run(*a): subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', *a], check=True)
 
+BED = 1 / 3          # music and effects under the voice: the author asked for them 3× quieter (20.11)
+
 def sound(dst):
     parts = [v for a in ACT_LIST for v in a['voice']]
     ins = sum([['-i', os.path.join(HERE, f)] for f in ('voice_p1.mp3', 'voice_p2.mp3', 'voice_p3.mp3')], [])
@@ -245,14 +247,20 @@ def sound(dst):
     music = os.path.join(WORK, 'music.wav'); sfx = os.path.join(WORK, 'sfx.wav')
     run('-i', voice, '-i', music, '-i', sfx, '-filter_complex',
         '[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit[vo][key];'
-        '[1:a]aformat=sample_rates=48000:channel_layouts=stereo[mu0];'
+        f'[1:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={BED:.3f}[mu0];'
         '[mu0][key]sidechaincompress=threshold=0.03:ratio=4:attack=60:release=700[mu];'
-        '[2:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=0.9[fx];'
+        f'[2:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={0.9 * BED:.3f}[fx];'
         f'[vo][mu][fx]amix=inputs=3:normalize=0,atrim=0:{DUR:.2f},afade=t=out:st={DUR - 1.2:.2f}:d=1.2,'
         'loudnorm=I=-14:TP=-1.5:LRA=11[a]', '-map', '[a]', '-ar', '48000', dst)
 
 if __name__ == '__main__':
     draft = 'draft' in sys.argv[1:]
+    if 'sound' in sys.argv[1:]:            # only the sound again, muxed onto the existing video
+        snd = os.path.join(WORK, 'cut_audio.wav'); sound(snd)
+        name = 'earth_history_draft.mp4' if W < 1920 else 'earth_history.mp4'
+        dst = os.path.abspath(os.path.join(TOOLS, '..', name)); tmp = dst + '.tmp.mp4'
+        run('-i', dst, '-i', snd, '-map', '0:v', '-map', '1:a', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', tmp)
+        os.replace(tmp, dst); print(dst); sys.exit()
     prep_clips()
     picture()
     snd = os.path.join(WORK, 'cut_audio.wav'); sound(snd)
