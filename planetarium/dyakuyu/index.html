@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Дякую! — Небозвід</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#04060c">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@1,700&family=Unbounded:wght@600&family=Commissioner:wght@400;500;600&display=swap">
+<style>
+/* Прихована сторінка-подяка для донатерів (посилання лише в банці monobank; не в меню й не в sitemap). */
+
+/* The "About" page: one calm column in the site's dark look. */
+:root {
+  --void: #04060c; --panel: rgba(10, 14, 26, 0.74); --line: rgba(160, 182, 230, 0.16);
+  --fg: #e9edf6; --muted: #8f9ab4; --sun: #f3b964; --ice: #9cc2ff;
+  --font-display: "Unbounded", "Commissioner", system-ui, sans-serif;
+  --font-body: "Commissioner", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--void); color: var(--fg); font: 16px/1.65 var(--font-body); -webkit-font-smoothing: antialiased;
+  background-image: radial-gradient(1px 1px at 12% 18%, #fff8 50%, transparent 51%), radial-gradient(1px 1px at 78% 9%, #fff6 50%, transparent 51%),
+    radial-gradient(1px 1px at 44% 31%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 91% 42%, #fff7 50%, transparent 51%),
+    radial-gradient(1px 1px at 23% 63%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 67% 77%, #fff6 50%, transparent 51%),
+    radial-gradient(1px 1px at 8% 88%, #fff5 50%, transparent 51%), radial-gradient(1px 1px at 55% 95%, #fff4 50%, transparent 51%);
+  background-attachment: fixed;
+}
+main { max-width: 680px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 28px) 20px 64px; }
+.back { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-decoration: none; font-size: 14px; }
+.back:hover { color: var(--fg); }
+.top { display: flex; justify-content: space-between; gap: 12px; }
+.logo {
+  font: italic 700 64px/1 "Cormorant", Georgia, serif; margin: 28px 0 4px; display: inline-block; padding: 0.08em 0.06em 0.12em 0;
+  background: linear-gradient(100deg, #f7c66b 0%, #f39a8b 52%, #9cc2ff 100%); -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+}
+.lead { font-size: 19px; color: #c9d0e0; margin: 8px 0 8px; }
+h2 { font: 600 15px/1.3 var(--font-display); letter-spacing: 0.04em; color: var(--sun); margin: 44px 0 10px; }
+p { margin: 0 0 12px; color: #c9d0e0; }
+ul { margin: 0 0 12px; padding-left: 20px; color: #c9d0e0; }
+li { margin: 4px 0; }
+a { color: var(--ice); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
+@media (min-width: 640px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.wp { margin: 0; }
+.wp img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); background: #000; }
+.wp figcaption { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 14px; color: #c9d0e0; }
+.dl { display: inline-block; align-self: flex-start; padding: 6px 12px; border-radius: 999px; background: rgba(156,194,255,.12); border: 1px solid var(--line); color: var(--ice); text-decoration: none; font-size: 13px; }
+.dl:hover { background: rgba(156,194,255,.22); }
+.hint { background: rgba(10,14,26,.74); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; margin-top: 20px; font-size: 14px; color: var(--muted); }
+.hint b { color: var(--fg); font-weight: 500; }
+main { max-width: 960px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top"><a class="back" href="/">← До Небозводу</a></div>
+  <div class="logo">Дякую!</div>
+  <p class="lead">Ваш внесок наближає власний телескоп «Небозводу» 🔭 А це — невеликий подарунок: космічні шпалери для телефона з нашого 3D-планетарію.</p>
+  <div class="hint"><b>Як зберегти на iPhone:</b> натисніть «Завантажити» → торкніться й утримуйте картинку → «Зберегти в Фото». Потім: Фото → поділитися → «Використати як шпалери».<br><b>На Android:</b> «Завантажити» → відкрийте файл → «Встановити як шпалери».</div>
+  <div class="grid">
+  <figure class="wp"><a href="wp/01-saturn.jpg" download="nebozvid-01-saturn.jpg"><img src="wp/01-saturn_s.jpg" width="430" height="932" loading="lazy" alt="Шпалера «Сатурн»"></a><figcaption>Сатурн<a class="dl" href="wp/01-saturn.jpg" download="nebozvid-01-saturn.jpg">Завантажити</a></figcaption></figure>
+  <figure class="wp"><a href="wp/02-saturn-pole.jpg" download="nebozvid-02-saturn-pole.jpg"><img src="wp/02-saturn-pole_s.jpg" width="430" height="932" loading="lazy" alt="Шпалера «Шестикутник Сатурна»"></a><figcaption>Шестикутник Сатурна<a class="dl" href="wp/02-saturn-pole.jpg" download="nebozvid-02-saturn-pole.jpg">Завантажити</a></figcaption></figure>
+  <figure class="wp"><a href="wp/03-jupiter.jpg" download="nebozvid-03-jupiter.jpg"><img src="wp/03-jupiter_s.jpg" width="430" height="932" loading="lazy" alt="Шпалера «Юпітер»"></a><figcaption>Юпітер<a class="dl" href="wp/03-jupiter.jpg" download="nebozvid-03-jupiter.jpg">Завантажити</a></figcaption></figure>
+  <figure class="wp"><a href="wp/04-earth.jpg" download="nebozvid-04-earth.jpg"><img src="wp/04-earth_s.jpg" width="430" height="932" loading="lazy" alt="Шпалера «Нічна Земля»"></a><figcaption>Нічна Земля<a class="dl" href="wp/04-earth.jpg" download="nebozvid-04-earth.jpg">Завантажити</a></figcaption></figure>
+  <figure class="wp"><a href="wp/05-mars.jpg" download="nebozvid-05-mars.jpg"><img src="wp/05-mars_s.jpg" width="430" height="932" loading="lazy" alt="Шпалера «Марс»"></a><figcaption>Марс<a class="dl" href="wp/05-mars.jpg" download="nebozvid-05-mars.jpg">Завантажити</a></figcaption></figure>
+  <figure class="wp"><a href="wp/06-moon.jpg" download="nebozvid-06-moon.jpg"><img src="wp/06-moon_s.jpg" width="430" height="932" loading="lazy" alt="Шпалера «Місяць»"></a><figcaption>Місяць<a class="dl" href="wp/06-moon.jpg" download="nebozvid-06-moon.jpg">Завантажити</a></figcaption></figure>
+  <figure class="wp"><a href="wp/07-neptune.jpg" download="nebozvid-07-neptune.jpg"><img src="wp/07-neptune_s.jpg" width="430" height="932" loading="lazy" alt="Шпалера «Нептун»"></a><figcaption>Нептун<a class="dl" href="wp/07-neptune.jpg" download="nebozvid-07-neptune.jpg">Завантажити</a></figcaption></figure>
+  </div>
+  <p class="small" style="margin-top:32px">Шпалери зроблено на <a href="/">nebozvid.com.ua</a> із відкритих карт поверхонь (NASA, ESA та ін., див. <a href="/about/">«Про проєкт»</a>). Для особистого використання. Перший кадр із нашого телескопа теж буде тут ✦</p>
+</main>
+</body>
+</html>
