@@ -2238,5 +2238,5 @@
   (Сатурн, шестикутник Сатурна, Юпітер, нічна Земля, Марс, Місяць, Нептун) зі сцени `videos/tools/scenes/wallpapers`
   (`FAST=1 node rec.js wallpapers stills 0.5,…,6.5`) → `python3 planetarium/tools/wallpapers.py` (підпис «Небозвід», мініатюри).
   noindex, не в меню й не в sitemap; посилання — лише в «подяці донатерам» банки. Захід Сонця на Марсі вийшов темним — прибрано.
-  Огляд: `videos/wallpapers_preview.jpg`. **На main не викладено** — чекаємо «так» автора; після — у банку посилання
+  Огляд: `videos/wallpapers_preview.jpg`. **ВИКЛАДЕНО на main 21.11 (коміт 8cf2ff1, лише dyakuyu/ + tools/wallpapers.py — решту гілки на main не несли).** У банку посилання
   https://nebozvid.com.ua/dyakuyu/ і текст «Дякую! 💙 Тримайте космічні шпалери для телефона від Небозводу 🔭✦».
