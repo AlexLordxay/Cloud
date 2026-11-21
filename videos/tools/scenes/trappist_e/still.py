@@ -391,6 +391,8 @@ def main():
     v = 1 - 0.25 * (((xx / RW - 0.5) * 1.6) ** 2 + ((yy / RH - 0.55) * 1.2) ** 2)
     img = img * v[..., None]
     out = (tonemap(img) * 255).astype(np.uint8)
+    if os.environ.get('CLEAN'):   # clean 1080x1920 background for a cover (no titles): CLEAN=1 python3 still.py out.png
+        Image.fromarray(out).resize((1080, 1920), Image.LANCZOS).save(OUT); print('saved clean', OUT); sys.exit(0)
     pic = Image.fromarray(out).resize((W, H), Image.LANCZOS)
     # grain
     g = np.random.default_rng(1).normal(0, 2.0, (H, W, 1))
