@@ -72,9 +72,42 @@ def persp(y0):
     k = np.clip((yy - y0) / (PH - y0), 1e-3, 1)
     return 1 / (k + 0.035), k
 
-# ---------------- Mercury: black sky, white Sun 2.6×, a backlit cratered ridge drifting past ----------------
-def mercury(t):
-    ph = t / T
+# ---------------- Mercury: black sky, white Sun 2.6×, a still cratered plain (no air, no water — nothing moves) ----------------
+def _mercury_ground():
+    """Static regolith with craters and rocks, lit from behind by the low Sun (we look towards it): dark ground,
+    bright rims and stone tops, shadows falling towards the camera."""
+    y0 = HZ - 30
+    depth, k = persp(y0)
+    gu = (xx - W / 2) / W * depth * 0.18
+    gv = depth * 0.05
+    tex = 0.5 * samp(TEX_B, gu * 6, gv * 6) + 0.3 * samp(TEX_B, gu * 2, gv * 2) + 0.2 * samp(TEX_A, gu, gv)
+    shade = (0.06 + 0.2 * tex) * (0.55 + 0.6 * k)
+    h1 = samp(TEX_B, gu * 9, gv * 9); h2 = samp(TEX_B, gu * 9, gv * 9 - 0.004)
+    shade += np.clip((h1 - h2) * 30, 0, 1) ** 2 * 0.10 * (1 - 0.6 * k)                   # grainy sunlit edges
+    r = np.random.default_rng(5)
+    def put_ellipse(cx, cy, rx, ry):
+        return ((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2
+    def sstep(x): x = np.clip(x, 0, 1); return x * x * (3 - 2 * x)
+    # rocks: small lumps with a bright top edge and a short shadow towards us
+    for _ in range(120):
+        kc = r.uniform(0.06, 0.95)
+        cy = y0 + kc * (PH - y0); cx = r.uniform(0, W)
+        rx = r.uniform(2.5, 11.0) * (0.35 + 1.6 * kc); ry = rx * r.uniform(0.45, 0.7)
+        e = put_ellipse(cx, cy, rx, ry); q = np.sqrt(e)
+        body = sstep((1 - q) / 0.3)
+        top = np.exp(-((q - 0.85) / 0.18) ** 2) * sstep((cy - yy) / ry + 0.2)
+        sh = sstep(1 - np.sqrt(put_ellipse(cx, cy + ry * 1.3, rx * 1.05, ry * 1.6))) * sstep((yy - cy) / ry)
+        shade = shade * (1 - 0.5 * sh) * (1 - 0.45 * body) + top * body.clip(0.3, 1) * 0.22
+    # a few low crater rims on the plain, seen edge-on against the light: thin bright arcs over dark ground
+    for _ in range(9):
+        kc = r.uniform(0.12, 0.75); cy = y0 + kc * (PH - y0); cx = r.uniform(80, W - 80)
+        rx = r.uniform(60, 220) * (0.4 + kc); ry = rx * (0.08 + 0.3 * kc)
+        q = np.sqrt(put_ellipse(cx, cy, rx, ry))
+        far = sstep(0.5 - (yy - cy) / (ry * 1.4))
+        shade = shade * (1 - 0.35 * sstep((1 - q) / 0.3)) + np.exp(-((q - 1) / 0.05) ** 2) * far * 0.11
+    return shade
+
+def _mercury_static():
     img = np.zeros((PH, W, 3), np.float32) + col((3, 3, 6))
     img += STARS_M * 0.5
     cx, cy, r = 760.0, HZ - 40.0, RE * 2.58
@@ -82,24 +115,66 @@ def mercury(t):
     img = glow(img, cx, cy, 60, (255, 250, 240), 0.18)
     img = sun_disc(img, cx, cy, r, (255, 253, 247), limb=0.25)
     img = np.where(((xx - cx) ** 2 + (yy - cy) ** 2 < r * r)[..., None], img * 1.25, img)
-    # ridge: 1-D periodic profile, drifting one tile per loop
-    u = xx[0] / W * 0.55 + ph
+    u = xx[0] / W * 0.55
+    far = HZ - 30 - 40 * (samp(TEX_A, xx[0] / W * 0.9, 0.63) - 0.5) * 2                 # distant hills
+    img = np.where((yy >= far[None, :])[..., None], col((16, 15, 15)) + np.exp(-np.clip(yy - far[None, :], 0, None) / 2.5)[..., None] * col((230, 220, 200)) * 0.35, img)
     ridge = HZ - 10 - 70 * (samp(TEX_A, u, 0.31) - 0.5) * 2 - 22 * (samp(TEX_B, u * 3, 0.77) - 0.5)
-    far = HZ - 30 - 40 * (samp(TEX_A, xx[0] / W * 0.9 + ph * 0.4, 0.63) - 0.5) * 2   # distant hills, slower (parallax)
-    hills = yy >= far[None, :]
-    img = np.where(hills[..., None], col((20, 19, 19)) + np.exp(-np.clip(yy - far[None, :], 0, None) / 2.5)[..., None] * col((230, 220, 200)) * 0.35, img)
     ground = yy >= ridge[None, :]
-    depth, k = persp(HZ - 30)
-    gu = (xx - W / 2) / W * depth * 0.18 + ph * 0.55 * 1.0
-    gv = depth * 0.05
-    tex = 0.6 * samp(TEX_B, gu * 2, gv * 2) + 0.4 * samp(TEX_A, gu, gv)
-    base = (0.04 + 0.22 * tex ** 1.5) * (0.6 + 0.6 * k)                      # mostly in shadow: we look into the Sun
-    rim = np.exp(-np.clip(yy - ridge[None, :], 0, None) / 4.0) * 1.0     # sunlit edge of the ridge
-    h1 = samp(TEX_B, gu * 5, gv * 5); h2 = samp(TEX_B, gu * 5, gv * 5 - 0.006)
-    lit = np.clip((h1 - h2) * 45, 0, 1) ** 2.5 * (0.25 + 0.75 * (1 - k)) ** 2            # crater rims catching the low Sun
-    gcol = base[..., None] * col((150, 145, 140)) + rim[..., None] * col((255, 245, 225)) * 0.55 + lit[..., None] * col((235, 228, 215)) * 0.3
-    img = np.where(ground[..., None], gcol, img)
-    return img
+    shade = _mercury_ground()
+    rim = np.exp(-np.clip(yy - ridge[None, :], 0, None) / 4.0)                            # sunlit edge of the ridge
+    gcol = shade[..., None] * col((165, 158, 150)) + rim[..., None] * col((255, 245, 225)) * 0.55
+    return np.where(ground[..., None], gcol, img)
+
+MERC = None
+def mercury(t):
+    """Nothing moves on Mercury (no air, no water): the panel is one still picture."""
+    global MERC
+    if MERC is None: MERC = _mercury_static()
+    return MERC
+
+
+WAVES = None
+def _waves():
+    r = np.random.default_rng(21); ws = []
+    for i in range(26):
+        lam = 0.012 * (1.55 ** (i % 13)) * r.uniform(0.85, 1.15)          # wavelength in ground units (Z ~ depth)
+        ang = r.normal(0, 0.45)                                           # direction mostly towards the viewer
+        kx, kz = math.sin(ang) * 2 * math.pi / lam, math.cos(ang) * 2 * math.pi / lam
+        amp = 0.010 * lam ** 0.85 / 0.012 ** 0.85 * 0.012                 # gentle: steepness falls with size
+        n = int(r.integers(1, 4)) * (1 if r.random() < 0.5 else -1)       # whole cycles per loop
+        ws.append((kx, kz, amp, 2 * math.pi * n / T, r.uniform(0, 2 * math.pi)))
+    return ws
+
+SEA_Y0 = HZ
+_dep, _kk = None, None
+def sea_layer(t, sx, sr):
+    global WAVES, _dep, _kk
+    if WAVES is None: WAVES = _waves()
+    if _dep is None: _dep, _kk = persp(SEA_Y0)
+    depth, kk = _dep, _kk
+    X = (xx - W / 2) / W * depth * 1.2; Z = depth
+    fz = depth ** 2 / (PH - SEA_Y0) * 1.0; fx = depth / W * 1.2          # ground size of one pixel
+    sz = np.zeros_like(xx); sx_ = np.zeros_like(xx)
+    for kx, kz, a, w, p in WAVES:
+        att = np.exp(-((kz * fz) ** 2 + (kx * fx) ** 2) * 0.6)            # fade waves smaller than a pixel
+        c = np.cos(kx * X + kz * Z - w * t + p) * a * att
+        sz += c * kz; sx_ += c * kx
+    # reflected sky: tilt of the facet changes which part of the sky we see
+    refl_k = np.clip(1 - (0.10 + 0.9 * kk) * 0.55 - sz * 0.9, 0, 1)
+    skyc = grad(SKY_E, refl_k)
+    fres = 0.18 + 0.82 * np.exp(-kk * 3.5)                                 # grazing angles mirror the sky
+    deep = col((14, 20, 34))
+    sea = deep * (1 - fres[..., None]) + skyc * fres[..., None]
+    sea = sea * (0.85 + 1.6 * sz[..., None]).clip(0.4, 1.6)
+    # Sun's path: glints where the slope towards the viewer matches what's needed to bounce the low Sun into the eye
+    need = 0.02 + kk * 0.20
+    width = sr * 0.6 + kk * 260
+    lateral = np.exp(-((xx - sx) / width) ** 2)
+    g = np.exp(-((sz - need) / (0.016 + 0.045 * kk)) ** 2) * np.exp(-((sx_ - (xx - sx) / W * 0.12) / 0.05) ** 2)
+    glint = (g ** 1.6) * lateral * (1.9 - 0.9 * kk)
+    sea = sea + glint[..., None] * col((255, 222, 170)) * 1.8
+    sea = sea + (np.exp(-((xx - sx) / (sr * 1.0 + kk * 140)) ** 2) * np.exp(-kk * 4) * 0.45)[..., None] * col((255, 190, 120))
+    return sea
 
 # ---------------- Earth: sunset over the sea, the Sun ×1, a glitter path ----------------
 SKY_E = [(0.0, (34, 42, 86)), (0.45, (120, 80, 110)), (0.8, (235, 125, 70)), (1.0, (255, 180, 105))]
@@ -114,18 +189,10 @@ def earth(t):
     d = np.sqrt((xx - cx) ** 2 + ((yy - cy) / 0.92) ** 2)                  # a little flattened by refraction
     a = np.clip(r + 0.8 - d, 0, 1) * flat
     img = img * (1 - a[..., None]) + col((255, 222, 160))[None, None] * 1.3 * a[..., None]
-    # sea
-    depth, kk = persp(HZ)
-    u = (xx - W / 2) / W * depth * 0.35
-    v = depth * 0.06 - ph
-    wv = 0.6 * samp(TEX_B, u * 2, v * 6) + 0.4 * samp(TEX_A, u * 0.7, v * 2)
-    sea = grad([(0, (210, 120, 80)), (0.08, (120, 70, 70)), (0.5, (40, 32, 48)), (1, (14, 14, 26))], kk)
-    sea = sea * (0.7 + 0.6 * wv[..., None])
-    width = r * 0.7 + kk * 220
-    path = np.exp(-((xx - cx) / width) ** 2)
-    gl = samp(TEX_B, u * 14, v * 40 + 0.37) * samp(TEX_B, u * 9 + 0.5, v * 25 - ph)
-    glint = np.clip((gl - 0.36) * 9, 0, 1) * path * (1 - 0.3 * kk)
-    sea = sea + glint[..., None] * col((255, 210, 150)) * 1.4 + (path * 0.18 * (1 - kk))[..., None] * col((255, 170, 100))
+    # sea: a sum of directional sine swells (looping: every wave makes a whole number of cycles in T), filtered by the
+    # pixel footprint so the far ones fade into a smooth mirror instead of aliasing; the water reflects the sky (more
+    # at grazing angles), and the Sun's path is many small glints where a facet tilts just right.
+    sea = sea_layer(t, cx, r)
     img = np.where((yy > HZ)[..., None], sea, img)
     return img
 
