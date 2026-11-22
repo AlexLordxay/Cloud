@@ -27,7 +27,7 @@
 09:09 Що буде далі
 
 Яка епоха вразила тебе найбільше? Напиши в коментарях 👇 Підпишись, щоб не проґавити наступне.
-Що було до Землі — у нашому відео про Великий вибух.
+Що було до Землі — у нашому відео про Великий вибух: https://youtu.be/UYevWxW-KCU
 Справжнє небо в 3D — https://nebozvid.com.ua
 
 📚 Джерела фактів: циркони Джек-Гіллз — Wilde et al. 2001 (Nature), Valley et al. 2014 (Nature Geoscience); строматоліти Пілбари ~3,48 млрд років; Gibson et al. 2018 (Geology) — Bangiomorpha 1,047 млрд років; Mitchell & Kirscher 2023 (Nature Geoscience) — доба 19,5 год; Rooney et al. 2015 (PNAS) — кріогенійські зледеніння; Stanley 2016 (PNAS) — пермське вимирання; Hublin et al. 2017 (Nature) — Джебель-Ірхуд; Yuan et al. 2023 (Nature) — гіпотеза про рештки Тейї в мантії; Farnsworth et al. 2023 (Nature Geoscience) — майбутній суперконтинент. Палеокарти: PALEOMAP PaleoDEM, C. R. Scotese & N. Wright (2018), CC BY 4.0.
