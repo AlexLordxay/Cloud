@@ -35,6 +35,7 @@ function aeqd(lat0, lon0, x, y) {
 }
 // GLSL: shared lighting and the patch-footprint test (x, y in km east/north of the patch centre)
 const GL_COMMON = \`
+#include <logdepthbuf_pars_fragment>
 uniform vec3 sun; uniform float expo, atmo, uaK; uniform sampler2D ov;
 vec3 overlay(vec3 col, vec3 u) {
   float lat = asin(clamp(u.y, -1.0, 1.0)), lon = atan(-u.z, u.x);
@@ -86,9 +87,10 @@ async function setup() {
   const scene = new THREE.Scene();
   // the globe
   const globeMat = new THREE.ShaderMaterial({ uniforms: Object.assign({ map: { value: gmap } }, common),
-    vertexShader: 'varying vec3 vN; varying vec3 vW; void main() { vN = normalize(position); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    vertexShader: 'varying vec3 vN; varying vec3 vW; \\n#include <common>\\n#include <logdepthbuf_pars_vertex>\\nvoid main() { vN = normalize(position); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;\\n#include <logdepthbuf_vertex>\\n }',
     fragmentShader: GL_COMMON + \`uniform sampler2D map; varying vec3 vN; varying vec3 vW;
       void main() {
+        #include <logdepthbuf_fragment>
         vec3 n = normalize(vN);
         vec2 q = fp(n, ${metaH.lat.toFixed(3)}, ${metaH.lon.toFixed(3)});
         if (abs(q.x) < ${(metaH.half - 1).toFixed(3)} && abs(q.y) < ${(metaH.half - 1).toFixed(3)}) discard;
@@ -117,9 +119,10 @@ async function setup() {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(new THREE.BufferAttribute(idx, 1));
     const holeTest = hole ? \`if (useHole > 0.5) { vec2 q = fp(normalize(vW), \${hole.lat}, \${hole.lon}); if (abs(q.x) < \${hole.half} && abs(q.y) < \${hole.half}) discard; }\` : '';
     const m = new THREE.ShaderMaterial({ uniforms: Object.assign({ cm: { value: cMap }, nm: { value: nMap }, sm: { value: sMap }, useHole: { value: 1 } }, common),
-      vertexShader: 'varying vec2 vUv; varying vec3 vW; void main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+      vertexShader: 'varying vec2 vUv; varying vec3 vW; \\n#include <common>\\n#include <logdepthbuf_pars_vertex>\\nvoid main() { vUv = uv; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;\\n#include <logdepthbuf_vertex>\\n }',
       fragmentShader: GL_COMMON + \`uniform sampler2D cm, nm, sm; uniform float useHole; varying vec2 vUv; varying vec3 vW;
         void main() {
+          #include <logdepthbuf_fragment>
           \${holeTest}
           vec3 c = pow(texture2D(cm, vUv).rgb, vec3(2.2));
           vec3 n = normalize(texture2D(nm, vUv).rgb * 2.0 - 1.0);
@@ -139,9 +142,11 @@ async function setup() {
   // haze shell
   const hazeMat = new THREE.ShaderMaterial({ side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     uniforms: { sun: { value: SUN }, hz: { value: 1 }, sunK: { value: 1 } },
-    vertexShader: 'varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: \`uniform vec3 sun; uniform float hz, sunK; varying vec3 vW;
+    vertexShader: 'varying vec3 vW; \\n#include <common>\\n#include <logdepthbuf_pars_vertex>\\nvoid main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;\\n#include <logdepthbuf_vertex>\\n }',
+    fragmentShader: \`#include <logdepthbuf_pars_fragment>
+uniform vec3 sun; uniform float hz, sunK; varying vec3 vW;
       void main() {
+        #include <logdepthbuf_fragment>
         vec3 c0 = cameraPosition, d = normalize(vW - c0);
         float tca = -dot(c0, d);                                   // closest approach along the ray
         float rc = length(c0), Hs = 10.0;
@@ -169,9 +174,10 @@ async function setup() {
   const haze = new THREE.Mesh(new THREE.SphereGeometry(R + 260, 256, 128), hazeMat); scene.add(haze);
   // the Moon at true size (R 1737.4 km), lit by the same Sun
   const moonMat = new THREE.ShaderMaterial({ transparent: true, uniforms: Object.assign({ map: { value: moonMap }, op: { value: 0 } }, common),
-    vertexShader: 'varying vec3 vN; varying vec3 vW; void main() { vN = normalize(position); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    vertexShader: 'varying vec3 vN; varying vec3 vW; \\n#include <common>\\n#include <logdepthbuf_pars_vertex>\\nvoid main() { vN = normalize(position); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w;\\n#include <logdepthbuf_vertex>\\n }',
     fragmentShader: GL_COMMON + \`uniform sampler2D map; uniform float op; varying vec3 vN; varying vec3 vW;
       void main() {
+        #include <logdepthbuf_fragment>
         vec3 n = normalize(vN); float lat = asin(n.y), lon = atan(-n.z, n.x);
         vec3 c = pow(texture2D(map, vec2(fract(0.5 + (lon - radians(205.0)) / 6.2831853), 0.5 + lat / 3.14159265)).rgb, vec3(2.2)) * 0.9;   // its near side toward us
         gl_FragColor = vec4(pow(shadeIt(c, n, vW, smoothstep(-0.02, 0.05, dot(n, sun))), vec3(1.0 / 2.2)), op);
