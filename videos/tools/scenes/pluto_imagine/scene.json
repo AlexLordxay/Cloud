@@ -1,0 +1,13 @@
+{
+  "title": "А ти уявляєш Плутон так?",
+  "duration": 50.6,
+  "fps": 30,
+  "width": 720,
+  "height": 1280,
+  "audio": {"music": "cinematic"},
+  "narration": {
+    "file": "voice.mp3",
+    "level": 1.0,
+    "parts": [[0, 47.57, 0.3]]
+  }
+}
