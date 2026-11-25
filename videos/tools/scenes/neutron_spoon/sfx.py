@@ -3,7 +3,7 @@
 # picture of videos/neutron_spoon.mp4 (the video stream is copied). Run after ./make.sh neutron_spoon:
 #   python3 scenes/neutron_spoon/sfx.py
 #   * the pulsar: a click each time a beam sweeps past (two per turn), as radio pulsars sound when their signal is
-#     played as audio; at 0.45 turns a second a slow heartbeat, speeding up, faded out before they fuse into a buzz;
+#     played as audio; at 0.45 turns a second a slow heartbeat, spun up to 716 they fuse into a tone (~1.4 kHz), kept quiet;
 #   * a low hum from the star's surroundings; soft whooshes at the three flash cuts; a heavy thud when the spoon lands.
 import json, math, os, subprocess
 import numpy as np
@@ -45,13 +45,15 @@ for i in idx:
     seg = tone * np.exp(-k / (L / SR / 4))
     j = min(N, i + L); click[i:j] += seg[:j - i]
 click = bp(click, 300, 4000)
-# only the ticks speeding up; once they would fuse into a buzz (~25 s) they fade out (author: «звучить, ніби пилосос»)
-lvl = np.interp(t, [0, 2, 22.0, 24.0, 24.9, DUR], [0.10, 0.10, 0.10, 0.16, 0.0, 0.0])
-click *= lvl / (np.abs(click).max() + 1e-9) * 3.0 * 0.2      # 80 % quieter (author, 25.11)
+# the ticks at 20 % of the first cut; the buzz they fuse into (from ~25 s) at 10 % (author: «пилосос», but keep a sound)
+lvl = np.interp(t, [0, 2, 22.0, 24.5, 26.5, 27.6, 29.5, 31, DUR], [0.10, 0.10, 0.10, 0.20, 0.24, 0.20, 0.08, 0.05, 0.0])
+lvl *= np.interp(t, [0, 24.3, 25.3, DUR], [0.2, 0.2, 0.1, 0.1])
+click *= lvl / (np.abs(click).max() + 1e-9) * 3.0
 out[:, 0] += click; out[:, 1] += click
 # --- a low hum: filtered noise, swelling near the star ---
 hum = bp(rng.standard_normal(N), 40, 160) * 0.5
-hum *= np.interp(t, [0, 1, 8, 8.3, 14.6, 14.7, 22.1, 24.0, 25.5, DUR], [0.02, 0.05, 0.06, 0.03, 0.03, 0.015, 0.03, 0.03, 0.0, 0.0])
+hum *= np.interp(t, [0, 1, 8, 8.3, 14.6, 14.7, 22.1, 26, 27, DUR], [0.02, 0.05, 0.06, 0.03, 0.03, 0.015, 0.03, 0.08, 0.05, 0.0])
+hum *= np.interp(t, [0, 24.3, 25.3, DUR], [1.0, 1.0, 0.1, 0.1])
 out[:, 0] += hum; out[:, 1] += np.roll(hum, 300)
 # --- whooshes into the flash cuts ---
 for c in (8.3, 14.7, 22.1):
