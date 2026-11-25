@@ -70,13 +70,28 @@ def shot_globe(t):
     return ('space', dict(cam=cam, fw=fw, rt=rt, up=up, fov=36, sun=sn, jd=jd, moon=moon, cut=cut,
                           cdir=np.array([math.cos(az + 0.45), math.sin(az + 0.45)]), expo=0.78)), lab
 
+_ZF = None
+def zfly(t):
+    # the ground under the flight path, smoothed: the running max over ±1.2 s, then a Gaussian (σ 0.6 s), so the camera
+    # glides over the ridges instead of bobbing with every one of them (the raw height under it jumps by 200+ m)
+    global _ZF
+    if _ZF is None:
+        from scipy.ndimage import gaussian_filter1d, maximum_filter1d
+        ts = np.arange(13.0, 22.6, 1 / 120)
+        def xy_at(tt):
+            k = (tt - 13.6) / 8.3
+            return lerpv(np.array([-70.0, -82.0]), np.array([22.0, 8.0]), ease(k) * 0.85 + k * 0.15)
+        raw = np.array([max(0.0, zat(*np.clip(xy_at(tt), -99, 99))) for tt in ts])
+        _ZF = (ts, gaussian_filter1d(maximum_filter1d(raw, size=int(2.4 * 120)), 0.6 * 120, mode='nearest'))
+    return float(np.interp(t, *_ZF))
+
 def shot_fly(t):
     # 13.6–21.9: down from 40 km to ~1.5 km over the ridged plains, heading north-east toward the chaos patch
     k = (t - 13.6) / 8.3
     p0, p1 = np.array([-70.0, -82.0]), np.array([22.0, 8.0])
     xy = lerpv(p0, p1, ease(k) * 0.85 + k * 0.15)
     alt = lerp(40.0, 2.6, ease(min(1, k * 1.25)))
-    cam = np.array([xy[0], xy[1], alt + max(0.0, zat(*np.clip(xy, -99, 99)))])
+    cam = np.array([xy[0], xy[1], alt + zfly(t)])
     ahead = lerpv(xy, xy + (p1 - p0) * 0.4, 1)
     tgt = np.array([ahead[0], ahead[1], lerp(-30.0, 0.2, ease(min(1, k * 1.2)))])
     fw, rt, up = look(cam, tgt)
