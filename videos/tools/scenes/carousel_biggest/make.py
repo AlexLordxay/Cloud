@@ -70,23 +70,23 @@ def main():
     ld = lambda f: Image.open(os.path.join(DL, f))
     slides = []
     # 1 — the hook
-    img = shade(cover_crop(ld('PIA00407.jpg'), W, H, 0.5, 0.45, 1.12), 520, 1050).convert('RGBA')
+    img = shade(cover_crop(Image.open(os.path.join(TOOLS, 'work', 'carousel_biggest', 'olympus.jpg')), W, H, 0.5, 0.5, 1.0), 560, 1050).convert('RGBA')
     text(img, (70, 820), 'Тут є гора\nу 2,5 раза вища\nза Еверест', f_hook, (255, 255, 255), spacing=14)
     text(img, (70, 1160), 'Найбільше в Сонячній системі', f_body, SUN)
     w_ = ImageDraw.Draw(img).textlength('Найбільше в Сонячній системі', font=f_body)
     text(img, (70 + w_ + 18, 1158), '→', C.ImageFont.truetype(C.F_STAR, 44), SUN)
-    text(img, (70, H - 46), 'Марс. Фото: NASA/JPL (Viking)', f_small, (150, 158, 175), shadow=False)
+    text(img, (70, H - 46), 'Гора Олімп, Марс: 3D за картою висот NASA (MOLA), висоти ×4', f_small, (150, 158, 175), shadow=False)
     logo(img, 60); slides.append(img)
     # 2 — Olympus Mons
-    slides.append(frame(ld('PIA00300.jpg'), 'Найвища гора · Марс', '22 км', 'Гора Олімп', 'У 2,5 раза вища за Еверест.\nЗавширшки ~600 км — майже\nз пів України.', 'Фото: NASA/JPL (Viking)', 2, 0.5, 0.25, 1.0))
+    slides.append(frame(Image.open(os.path.join(TOOLS, 'work', 'carousel_biggest', 'olympus.jpg')), 'Найвища гора · Марс', '22 км', 'Гора Олімп', 'У 2,5 раза вища за Еверест.\nЗавширшки ~600 км — майже\nз пів України.', 'Кальдера на вершині — 80 км. 3D за картою висот NASA (MOLA), висоти ×4', 2, 0.5, 0.2, 1.35))
     # 3 — the Great Red Spot
-    slides.append(frame(ld('PIA21775.jpg'), 'Найбільший шторм · Юпітер', '> Землі', 'Велика червона пляма', 'Вихор, ширший за всю Землю.\nВирує щонайменше 150 років.', 'Фото: NASA/JPL-Caltech/SwRI/MSSS (Juno), обробка K. Gill', 3, 0.5, 0.25, 1.0))
+    slides.append(frame(ld('PIA21772.jpg'), 'Найбільший шторм · Юпітер', '> Землі', 'Велика червона пляма', 'Вихор, ширший за всю Землю.\nВирує щонайменше 150 років.', 'Фото: NASA/JPL-Caltech/SwRI/MSSS (Juno)', 3, 0.5, 0.3, 1.0))
     # 4 — Valles Marineris
-    slides.append(frame(ld('PIA04304.jpg'), 'Найбільший каньйон · Марс', '4 000 км', 'Долина Марінер', 'Утричі довша за Україну\nзі сходу на захід.\nГлибина — до 7 км.', 'Фото: NASA/JPL (Viking)', 4, 0.5, 0.2, 1.2))
+    slides.append(frame(ld('PIA00425.jpg'), 'Найбільший каньйон · Марс', '4 000 км', 'Долина Марінер', 'Утричі довша за Україну\nзі сходу на захід.\nГлибина — до 7 км.', 'Каньйон Офір, частина Долини Марінер. Фото: NASA/JPL (Viking)', 4, 0.45, 0.2, 1.0))
     # 5 — Verona Rupes
     slides.append(frame(ld('PIA18185.jpg'), 'Найвища скеля · Міранда, супутник Урана', '~20 км', 'Урвище Верона', 'Якби зістрибнути з краю,\nпадав би ~12 хвилин.', 'Фото: NASA/JPL (Voyager 2)', 5, 0.5, 0.2, 1.0))
     # 6 — Ganymede
-    slides.append(frame(ld('PIA24681.jpg'), 'Найбільший супутник · Юпітер', '5 268 км', 'Ганімед', 'Більший за планету Меркурій\n(4 879 км).', 'Фото: NASA/JPL-Caltech/SwRI/MSSS (Juno)', 6, 0.5, 0.15, 1.0))
+    slides.append(frame(ld('PIA25012.jpg'), 'Найбільший супутник · Юпітер', '5 268 км', 'Ганімед', 'Більший за планету Меркурій\n(4 879 км).', 'Поверхня Ганімеда зблизька. Фото: NASA/JPL-Caltech/SwRI/MSSS (Juno)', 6, 0.5, 0.2, 1.0))
     # 7 — the Sun with the Earth to scale
     bg = Image.new('RGB', (W, H), (4, 5, 10)); s, glow = sun_render(1700)
     g = Image.new('RGB', s.size, (255, 170, 60)); bg.paste(g, (-1020, -620), glow); bg.paste(s, (-1020, -620), Image.fromarray((np.asarray(s).max(-1) > 0).astype(np.uint8) * 255))
