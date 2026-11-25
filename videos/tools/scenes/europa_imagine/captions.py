@@ -7,7 +7,7 @@ DURATION = 48.5
 HOOK_SIZE = 64
 HOOK_Y = 1560
 CAPTIONS = [
-    (-1.0, 4.35, 'hook', 'Під цим льодом води більше,\nніж у всіх океанах Землі'),
+    (-1.0, 4.35, 'hook', 'Під цим льодом\nводи більше, ніж\nу всіх океанах Землі'),
     (4.67, 6.85, 'cap', 'А ти уявляєш Європу так?'),
     (7.19, 13.7, 'cap', 'Супутник Юпітера, трохи менший\nза наш Місяць — 3 120 км'),
     (14.07, 17.8, 'cap', 'Уся поверхня — суцільний лід,\nпорізаний тріщинами'),
@@ -80,6 +80,7 @@ def DRAW(img, t, H_):
     a = _fade(t, 22.2, 27.3)
     if a > 0 and L.get('ice') and L.get('ocean'):
         ix, iy, _ = (v * _s for v in L['ice']); ox, oy, _ = (v * _s for v in L['ocean'])
+        oy = min(oy, 1150)                                   # keep the label clear of the caption below
         side = -1 if ix > W / 2 else 1
         tx = ix + side * 150
         _line(img, [(ix, iy), (tx - side * 10, iy)], a); _text(img, (tx, iy), 'лід', f_mid, (255, 255, 255), anchor='lm' if side > 0 else 'rm', alpha=a)
