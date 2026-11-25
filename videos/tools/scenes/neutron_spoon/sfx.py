@@ -46,7 +46,7 @@ for i in idx:
     j = min(N, i + L); click[i:j] += seg[:j - i]
 click = bp(click, 300, 4000)
 lvl = np.interp(t, [0, 2, 22.0, 24.5, 26.5, 27.6, 29.5, 31, DUR], [0.10, 0.10, 0.10, 0.20, 0.24, 0.20, 0.08, 0.05, 0.0])
-click *= lvl / (np.abs(click).max() + 1e-9) * 3.0
+click *= lvl / (np.abs(click).max() + 1e-9) * 3.0 * 0.2      # 80 % quieter (author, 25.11)
 out[:, 0] += click; out[:, 1] += click
 # --- a low hum: filtered noise, swelling near the star ---
 hum = bp(rng.standard_normal(N), 40, 160) * 0.5
