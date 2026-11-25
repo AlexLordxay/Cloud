@@ -9,6 +9,8 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__)); TOOLS = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import render as RD
+import ground as GR
+import probe as PR
 WK = os.path.join(TOOLS, 'work', 'europa_imagine'); OUT = os.path.join(WK, 'w3d'); os.makedirs(OUT, exist_ok=True)
 W, H, FPS, DUR = 720, 1280, 30, 48.5
 ld = lambda f: np.ascontiguousarray(np.asarray(Image.open(f).convert('RGB')).astype(np.float32) / 255)
@@ -43,18 +45,19 @@ def sph(d, az, el): return np.array([d * math.cos(el) * math.cos(az), d * math.c
 # the terrain shots share one Sun and one Jupiter (Europa is locked: Jupiter hangs still in its sky)
 SUN_T = nrm([-0.9, -0.2, 0.40]); JD_T = nrm([0.35, 0.85, 0.42])
 JAX_T = nrm(np.cross(np.cross(JD_T, [0, 0.3, 1]), JD_T)) * -1
+SUN_G = nrm([-0.9, -0.2, 0.26])     # standing on the ice: a lower Sun, longer shadows
 
 # ---------------- the shots: (start, end, function t -> (kind, params)) ----------------
 def shot_globe(t):
     # 0–7.6: the cut-open globe, closing at 4.6–5.9; 7.0–14.0: pulled back, the Moon beside it at true scale
     az = -2.2 + 0.05 * t; el = lerp(0.42, 0.18, sm((t - 4.6) / 3.0))
     dist = lerp(7800, 9300, sm(t / 7.0))
-    dist = lerp(dist, 19500, ease((t - 7.2) / 2.2))
+    dist = lerp(dist, 22500, ease((t - 7.2) / 2.2))
     cam = sph(dist, az, el)
     tgt = lerpv([0, 0, 0], [2350, 0, 0] if False else [0, 0, 0], 0)
     fw, rt, up = look(cam, [0, 0, 0])
-    # the Moon: to the right of Europa as seen from the camera, 4100 km between the centres
-    mp = rt * 4100.0
+    # the Moon: to the right of Europa as seen from the camera, 3800 km between the centres (both fit the frame)
+    mp = rt * 3800.0
     tgt = mp * 0.5 * ease((t - 7.2) / 2.2)
     fw, rt, up = look(cam, tgt)
     cut = 1.0 - sm((t - 4.6) / 1.3)
@@ -77,7 +80,7 @@ def shot_fly(t):
     ahead = lerpv(xy, xy + (p1 - p0) * 0.4, 1)
     tgt = np.array([ahead[0], ahead[1], lerp(-30.0, 0.2, ease(min(1, k * 1.2)))])
     fw, rt, up = look(cam, tgt)
-    return ('terrain', dict(cam=cam, fw=fw, rt=rt, up=up, fov=lerp(48, 58, k), slab=False, expo=1.0)), {}
+    return ('ground', dict(cam=cam, fw=fw, rt=rt, up=up, fov=lerp(48, 58, k), expo=1.0, sun=SUN_T)), {}
 
 def shot_slab(t):
     # 21.4–27.5: the block cut out of the ice: the shell and the ocean below it
@@ -94,14 +97,15 @@ def corner(cam, z):
     return [100.0 * np.sign(cam[0]), 100.0 * np.sign(cam[1]), z]
 
 def shot_ground(t):
-    # 27.1–33.8: standing below a double ridge; the view lifts from the ice to Jupiter
+    # 27.1–33.8: standing on the ice (eye 12 m up) below a double ridge; the view lifts from the ice to Jupiter
     k = (t - 27.1) / 6.7
     base = np.array([6.02, 15.12]) + np.array([0.20, 0.10]) * k
-    cam = np.array([base[0], base[1], 0.05 + zat(*base)])
-    tgt = cam + np.array([0.55, 1.0, lerp(0.02, 0.30, ease(k))])
+    cam = np.array([base[0], base[1], GND_EYE + float(GR.base(Z, base[0], base[1], PK, 100.0))])
+    tgt = cam + np.array([0.55, 1.0, lerp(0.05, 0.30, ease(k))])
     fw, rt, up = look(cam, tgt)
     lab = {'jup': proj(cam, fw, rt, up, 60, cam + JD_T * 1e6, 1e6 * math.tan(JANG))}
-    return ('terrain', dict(cam=cam, fw=fw, rt=rt, up=up, fov=60, slab=False, expo=1.0)), lab
+    return ('ground', dict(cam=cam, fw=fw, rt=rt, up=up, fov=60, expo=1.0)), lab
+GND_EYE = 0.012
 
 def shot_clipper(t):
     # 33.4–40.8: «Europa Clipper» (modelled to scale: 30.5 m across the arrays) gliding over Europa, Jupiter behind
@@ -114,8 +118,7 @@ def shot_clipper(t):
     fw, rt, up = look(cam, sc + np.array([-0.002, 0.004, -0.012]), upv=(0, 0, 1))
     sn = nrm([0.7, -0.3, 0.35])
     jd = nrm(fw - 0.05 * rt + 0.50 * up)
-    return ('space', dict(cam=cam, fw=fw, rt=rt, up=up, fov=58, sun=sn, jd=jd, moon=np.zeros(4), cut=0.0,
-                          cdir=np.array([1.0, 0.0]), expo=0.95, clip=sc)), {'sc': proj(cam, fw, rt, up, 50, sc, 0.015)}
+    return ('probe', dict(cam=cam, fw=fw, rt=rt, up=up, fov=58, sun=sn, jd=jd, expo=0.95, sc=sc)), {'sc': proj(cam, fw, rt, up, 50, sc, 0.015)}
 
 def shot_end(t):
     k = (t - 40.6) / 7.9
@@ -137,7 +140,13 @@ def proj(cam, fw, rt, up, fov, p, r):
 
 def render_shot(kind, P, ss):
     out = np.zeros((H, W, 3), np.float32)
-    if kind == 'terrain':
+    if kind == 'ground':
+        GR.ground(Z, A, PK, 100.0, SK, JT, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), P.get('sun', SUN_G), JD_T, JANG, JAX_T, 0.0,
+                  P['expo'], out, ss, HMAX)
+    elif kind == 'probe':
+        PR.clipper(GT, SK, JT, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), P['sun'], P['jd'], JANG,
+                   nrm([0, 0, 1.0]), 0.0, P['expo'], out, ss, P['sc'], PR.BOX, PR.CYL, PR.DISH)
+    elif kind == 'terrain':
         RD.terrain(Z, A, PK, 100.0, SK, JT, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), SUN_T, JD_T, JANG, JAX_T, 0.0,
                    P['slab'], 25.0, 150.0, P['expo'], out, ss, HMAX)
     else:

@@ -68,7 +68,7 @@ def DRAW(img, t, H_):
     # Europa and the Moon side by side: their names and sizes
     a = _fade(t, 7.7, 13.7)
     if a > 0 and L.get('eu') and L.get('mo'):
-        for key, name, col in (('eu', 'Європа · 3 122 км', (255, 255, 255)), ('mo', 'Місяць · 3 475 км', (200, 210, 230))):
+        for key, name, col in (('eu', 'Європа · 3 120 км', (255, 255, 255)), ('mo', 'Місяць · 3 475 км', (200, 210, 230))):
             x, y, r = (v * _s for v in L[key])
             _text(img, (x, y + r + 56), name, f_sm, col, alpha=a)
     # the cold
