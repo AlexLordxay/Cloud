@@ -56,8 +56,11 @@
 1. **Плутон** (`videos/pluto_imagine.mp4`, готовий; описи `scenes/pluto_imagine/posts.md`) — публікація в четвер 26.11.
    **ПЕРЕД ПУБЛІКАЦІЄЮ додати кнопку «Підписатися»**: у `scenes/pluto_imagine/captions.py` `SUBSCRIBE_AT` (посередині, напр. на горах)
    і `NEXT_TEASE = 'Не проґав наступну планету'`, потім лише compose + кодування (~10 хв, без 3D-рендеру). Робочі файли
-   `videos/tools/work/pluto_imagine/` (кадри w3d) у контейнері можуть зникнути після перезапуску — перевірити; якщо зникли,
-   потрібен повний рендер (~години) — спершу сказати автору.
+   **Кадри 3D без титрів збережено в git:** `scenes/pluto_imagine/raw_w3d.mp4` (1518 кадрів 720×1280, 30 fps, crf 15, 4:4:4)
+   + `scenes/pluto_imagine/labels.json`. Відновити: `mkdir -p videos/tools/work/pluto_imagine/w3d && ffmpeg -i
+   videos/tools/scenes/pluto_imagine/raw_w3d.mp4 -q:v 2 -start_number 0 videos/tools/work/pluto_imagine/w3d/f_%05d.jpg`,
+   скопіювати labels.json у work/pluto_imagine/, `ln -sfn w3d work/pluto_imagine/frames`; аудіо — make.sh/audio.js
+   (scene.json), голос `scenes/pluto_imagine/voice.mp3`. Далі compose + кодування як у `make.sh pluto_imagine` (без 3D-рендеру).
 2. **Facebook «Динозаври»** — через 3–4 дні після «Історії Землі» (~27–28.11), рядок «Уся історія Землі за 10 хвилин — у відео на нашій сторінці 🌍».
 3. **Відео до 24.12 — найбільша суперповня року (Святвечір)**: чому Місяць то ближче, то далі; наскільки більший; ілюзія біля горизонту.
 4. **Формула хіта** (див. «ФОРМУЛА ХІТА» нижче): масова тема + гачок у 1-й секунді + 1,5–2 хв щільно; у довгих — найсильніші кадри
