@@ -98,7 +98,7 @@
 - Wikimedia API віддає 429, eoimages.gsfc.nasa.gov і solarsystemscope.com заблоковані; tiles.maps.eox.at і images-assets.nasa.gov — працюють.
 
 ### Черга (чекає «так» автора)
-1. **Плутон** (`videos/pluto_imagine.mp4`, готовий; описи `scenes/pluto_imagine/posts.md`) — публікація в четвер 26.11.
+1. **Плутон** (`videos/pluto_imagine.mp4`, готовий; описи `scenes/pluto_imagine/posts.md`) — **26.11 додано кнопку «Підписатися»** (24 с + кінцева картка) і обкладинку `videos/pluto_imagine_cover.jpg`.
    **ПЕРЕД ПУБЛІКАЦІЄЮ додати кнопку «Підписатися»**: у `scenes/pluto_imagine/captions.py` `SUBSCRIBE_AT` (посередині, напр. на горах)
    і `NEXT_TEASE = 'Не проґав наступну планету'`, потім лише compose + кодування (~10 хв, без 3D-рендеру). Робочі файли
    **Кадри 3D без титрів збережено в git:** `scenes/pluto_imagine/raw_w3d.mp4` (1518 кадрів 720×1280, 30 fps, crf 15, 4:4:4)
