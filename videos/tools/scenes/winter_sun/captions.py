@@ -96,7 +96,7 @@ def DRAW(img, t, H_):
     al = _fade(t, 20.0, 26.0)
     if al > 0 and L.get('centre'):
         x, y = L['centre']
-        _text(img, (x, y + 52), 'Київ', f_mid, (255, 255, 255), alpha=al)
+        _text(img, (x, y - 62), 'Київ', f_mid, (255, 255, 255), alpha=al)
     # the beam: the footprint, ×3.2
     al = _fade(t, 26.6, 33.4)
     if al > 0 and L.get('alt') is not None and L.get('foot'):
@@ -106,17 +106,10 @@ def DRAW(img, t, H_):
             _text(img, (540, 510), f'площа ×{area:.1f}'.replace('.', ','), f_mid, (255, 255, 255), alpha=al * min(1.0, (area - 1.0) / 1.2))
         if t > 30.0:
             _text(img, (540, 570), 'на кожен метр — утричі менше тепла', f_sm, (215, 222, 236), alpha=al * _fade(t, 30.0, 33.4))
-    # the day: hours run on both suns
-    for key, col in (('win', ICE_C), ('sum', SUN_C)):
-        al = _fade(t, 33.9, 38.1)
-        if al > 0 and L.get(key):
-            x, y, hrs, a = L[key]
-            if -40 < x < 1120 and -40 < y < 1960:
-                full = {'win': 8.0, 'sum': 16.5}[key]
-                txt = (f'{int(hrs)} год' if hrs < full - 0.12 else ('8 год' if key == 'win' else '16,5 год'))
-                _text(img, (_clampx(x, 120), y - 58), txt, f_mid, col, alpha=al * min(1.0, a))
-    # Australia
-    al = _fade(t, 38.8, 42.4)
-    if al > 0 and L.get('aus'):
-        x, y = L['aus']
-        _text(img, (_clampx(x, 180), y + 70), 'Австралія — літо', f_mid, SUN_C, alpha=al)
+    # the day: two counters up top, running at the same clock speed (the winter one stops at 8 h)
+    al = _fade(t, 33.9, 38.1)
+    if al > 0 and L.get('win') and L.get('sum'):
+        for (key, name, full, y0, col) in (('win', '21 грудня', 8.0, 400, ICE_C), ('sum', '21 червня', 16.5, 480, SUN_C)):
+            hrs = L[key][2]
+            txt = f'{int(hrs)} год' if hrs < full - 0.12 else ('8 год' if key == 'win' else '16,5 год')
+            _text(img, (540, y0), f'{name}:  {txt}', f_num, col, alpha=al)
