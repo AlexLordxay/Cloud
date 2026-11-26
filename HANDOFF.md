@@ -97,6 +97,15 @@
   тоді склеювати напряму (ffmpeg concat з тишею 1,5 с перед фінальним питанням). Фонові ffmpeg запускати з `-nostdin`.
 - Wikimedia API віддає 429, eoimages.gsfc.nasa.gov і solarsystemscope.com заблоковані; tiles.maps.eox.at і images-assets.nasa.gov — працюють.
 
+### 26.11 (вечір) — готово й чекає публікації
+- **Плутон** опубліковано 26.11 ~20:05 (обкладинка «ЗНАЙОМСЯ: ПЛУТОН» `videos/pluto_cover_d.jpg`; старт повільніший за нейтронну зорю,
+  пропуски 13,3 % — «нижчий»). Перевірити статистику 27.11.
+- **«Термометр Сонячної системи»** (ідея автора за прикладом @astranexz, 4,7 тис. збережень): Reels `videos/planet_temps.mp4`
+  (23,5 с, без голосу, планети й Сонце обертаються) + карусель `videos/planet_temps_post/slide_1…6.jpg`; описи
+  `scenes/planet_temps/posts.md` (467 зн.). Сцена `scenes/planet_temps/` (sprites.py — глобуси з текстур, render.py — дошка й камера).
+  План: карусель в обід, Reels увечері.
+- **Європа** (`videos/europa_imagine.mp4`) і **«Чому взимку холодно»** (`videos/winter_sun.mp4`, на 1.12) — готові.
+
 ### Черга (чекає «так» автора)
 1. **Плутон** (`videos/pluto_imagine.mp4`, готовий; описи `scenes/pluto_imagine/posts.md`) — **26.11 додано кнопку «Підписатися»** (24 с + кінцева картка) і обкладинку `videos/pluto_imagine_cover.jpg`.
    **ПЕРЕД ПУБЛІКАЦІЄЮ додати кнопку «Підписатися»**: у `scenes/pluto_imagine/captions.py` `SUBSCRIBE_AT` (посередині, напр. на горах)
