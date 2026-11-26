@@ -139,10 +139,19 @@ SPOTS = np.array([list(ll(a, b)) + [ru, rp, sd] for a, b, ru, rp, sd in
                   [(14.0, 20.0, 0.012, 0.03, 1.0), (-9.0, -35.0, 0.009, 0.022, 3.0), (18.0, 120.0, 0.006, 0.014, 6.0)]])
 ROT_S = np.eye(3)
 
-def orbit_picture(c, t, L, theta, emag, smag, orbit_a=1.0, ghost=0.0, axis_a=0.0, sun_gain=2.2, cloud_k=0.9,
-                  snow=1.0, sky_gain=1.0, earth_expo=0.55, lab=None, axis_full=True):
+# the look (author, 26.11: «the Earth is too bright — less white, darker, richer»)
+# only the globe (the Earth from space) — Kyiv keeps its look
+EARTH_EXPO = float(os.environ.get('WS_EXPO', 0.33)); CLOUD_K = float(os.environ.get('WS_CLOUD', 0.65))
+SAT = float(os.environ.get('WS_SAT', 1.28)); CURVE = float(os.environ.get('WS_CURVE', 1.15))
+AIR_K = float(os.environ.get('WS_AIR', 0.75))
+KYIV_SNOW_DIM = 0.32
+
+def orbit_picture(c, t, L, theta, emag, smag, orbit_a=1.0, ghost=0.0, axis_a=0.0, sun_gain=2.2, cloud_k=None,
+                  snow=1.0, sky_gain=1.0, earth_expo=None, lab=None, axis_full=True):
     """c: camera in the ecliptic frame (million km). Returns the HDR image; lab gets screen positions."""
     img = np.zeros((H, W, 3), np.float32)
+    if cloud_k is None: cloud_k = CLOUD_K
+    if earth_expo is None: earth_expo = EARTH_EXPO
     o, f, r, u, k = c
     sky(img, (o, f, r, u, k), GAL, sky_gain, stars=1.0, band=0.10)
     P = epos(L)
@@ -173,7 +182,7 @@ def orbit_picture(c, t, L, theta, emag, smag, orbit_a=1.0, ghost=0.0, axis_a=0.0
     oe = M @ ((o - P) / emag * 1e6)               # km, as if the Earth were its real size
     ce = (oe, M @ f, M @ r, M @ u, k)
     sdir = M @ nrm(-P)
-    E.earth(img, ce, sdir, sun_k=18.0, disc_k=0.0, cloud_k=cloud_k, night_k=1.2, snow=snow, expo=earth_expo)
+    E.earth(img, ce, sdir, sun_k=18.0, disc_k=0.0, cloud_k=cloud_k, night_k=1.2, snow=snow, expo=earth_expo, air_k=AIR_K)
     x, y, z = proj1(c, P)
     rp = k * R_EARTH * emag / z
     if lab is not None:
@@ -222,10 +231,15 @@ def draw_axis(img, c, P, R, a, lab=None, ext=1.55, full=True):
         lab['angle'] = [float(mid[0]), float(mid[1])]
 
 # ---------------------------------------------------------------- post
-def post(img, expo=1.0, thr=1.1, bk=0.5, vig=0.22):
+def post(img, expo=1.0, thr=1.1, bk=0.5, vig=0.22, grade=False):
     img = np.nan_to_num(img, nan=0.0, posinf=20.0, neginf=0.0)
     img = bloom(img, thr, bk, 1.0)
-    return tonemap(vignette(img, vig), expo)
+    y = tonemap(vignette(img, vig), expo)
+    if grade:
+        # the globe: richer, darker in the mid-tones
+        l = y.mean(axis=2, keepdims=True)
+        y = np.clip(l + (y - l) * SAT, 0, 1) ** CURVE
+    return y
 
 # ---------------------------------------------------------------- ORBIT: the real orbit
 T_ORB0, T_ORB1 = 0.0, tk('dive', 6.9)
@@ -241,7 +255,7 @@ def shot_orbit(t):
     c = orbit_cam(t)
     lab = {}
     img = orbit_picture(c, t, L_WIN, th_win(t), EMAG_FAR, SMAG, orbit_a=ramp(t, 0.2, 1.4), ghost=ramp(t, 3.4, 4.2), lab=lab)
-    return post(img, 1.0), lab
+    return post(img, 1.0, grade=True), lab
 
 # ---------------------------------------------------------------- DIVE: down to the Earth → AXIS: its axis
 T_DIVE0, T_DIVE1 = tk('dive', 6.9) - 0.5, tk('axis', 9.6)
@@ -282,13 +296,13 @@ def shot_dive(t):
     emag = max(1.0, EMAG_FAR * (d / np.linalg.norm(r0)) ** 0.75)
     lab = {}
     img = orbit_picture(c, t, L_WIN, th_win(t), emag, SMAG, orbit_a=1 - ramp(t, T_DIVE0, T_DIVE0 + 1.2), ghost=0.0, lab=lab)
-    return post(img, 1.0), lab
+    return post(img, 1.0, grade=True), lab
 
 def shot_axis(t):
     c = axis_cam(t)
     lab = {}
     img = orbit_picture(c, t, L_WIN, th_win(t), 1.0, SMAG, orbit_a=0.0, ghost=0.0, axis_a=ramp(t, T_AX0 + 1.3, T_AX0 + 2.0), lab=lab)
-    return post(img, 1.0), lab
+    return post(img, 1.0, grade=True), lab
 
 # ---------------------------------------------------------------- YEAR: a year in four seconds
 T_YR0, T_YR1 = tk('year', 14.4) - 0.5, tk('kyiv', 18.6)
@@ -303,10 +317,10 @@ def shot_year(t):
     o = np.array([math.cos(a) * math.cos(el), math.sin(a) * math.cos(el), math.sin(el)]) * d
     c = cam(o, np.array([0, 0, -30.0]), [0, 0, 1.0], 44)
     lab = {}
-    img = orbit_picture(c, t, L, th, YEAR_EMAG, SMAG * 1.2, orbit_a=0.8, ghost=0.0, axis_a=1.0, lab=lab, cloud_k=0.6, axis_full=False)
+    img = orbit_picture(c, t, L, th, YEAR_EMAG, SMAG * 1.2, orbit_a=0.8, ghost=0.0, axis_a=1.0, lab=lab, axis_full=False)
     # where it is in the year
     lab['month'] = 'грудень' if math.cos(L - L_DEC21) > 0.5 else ('червень' if math.cos(L - L_JUN21) > 0.5 else '')
-    return post(img, 1.0), lab
+    return post(img, 1.0, grade=True), lab
 
 # ---------------------------------------------------------------- KYIV: the dome, the noon Sun
 UPK, EASTK, NORTHK = E.local_axes(E.K_LAT, E.K_LON)
@@ -364,7 +378,7 @@ def path_pts(c, path, upto=1.0):
 
 def kyiv_render(c, sun_alt, snow, beam=None, expo=0.5, ground_k=1.0):
     img = np.zeros((H, W, 3), np.float32)
-    expo = expo * (1.0 - 0.32 * snow)                  # under snow: a darker, colder picture (the snow is still bright)
+    expo = expo * (1.0 - KYIV_SNOW_DIM * snow)         # under snow: a darker, colder picture (the snow is still bright)
     s = sdir_k(sun_alt, 180.0)
     E.earth(img, c, s, sun_k=18.0, disc_k=0.0, cloud_k=0.0, snow=snow, expo=expo, beam=beam)
     return img
@@ -480,10 +494,10 @@ def shot_aus(t):
     o = P + v * d
     c = cam(o, P, M.T @ np.array([0, 0, 1.0]) * (1 - e) + np.array([0, 0, 1.0]) * e, 42)
     lab = {}
-    img = orbit_picture(c, t, L, th, 1.0, SMAG, orbit_a=0.0, ghost=0.0, lab=lab, cloud_k=0.9, snow=1.0)
+    img = orbit_picture(c, t, L, th, 1.0, SMAG, orbit_a=0.0, ghost=0.0, lab=lab, snow=1.0)
     xs = proj1(c, P + up_a * R_EARTH * 0.92)
     lab['aus'] = [xs[0], xs[1]]
-    return post(img, 1.0), lab
+    return post(img, 1.0, grade=True), lab
 
 def slerp(a, b, k):
     a = nrm(a); b = nrm(b)
@@ -499,7 +513,7 @@ def shot_end(t):
     L = L_JAN3
     lab = {}
     img = orbit_picture(c, t, L, theta_noon(L, 30.5) + t * 0.15, EMAG_FAR, SMAG, orbit_a=1.0, ghost=1.0, lab=lab)
-    return post(img, 1.0), lab
+    return post(img, 1.0, grade=True), lab
 
 # ---------------------------------------------------------------- the timeline
 SHOTS = [(0.0, T_ORB1, shot_orbit), (T_DIVE0, T_DIVE1, shot_dive), (T_AX0, T_AX1, shot_axis), (T_YR0, T_YR1, shot_year),
