@@ -1,6 +1,6 @@
 # Covers 1080×1920 for «А ти уявляєш Плутон так?» on the low flight over the ice mountains (raw 3D frame at 30 s: the far,
-# tiny Sun, the blue haze over the horizon) — the author's pick (26.11). Three titles to choose from, in the dark sky
-# (inside the 4:5 grid crop, y 285–1635).   python3 videos/tools/scenes/pluto_imagine/cover_land.py -> videos/pluto_cover_{a,b,c}.jpg
+# tiny Sun, the blue haze over the horizon) — the author's pick (26.11). Four titles to choose from, in the dark sky
+# (inside the 4:5 grid crop, y 285–1635).   python3 videos/tools/scenes/pluto_imagine/cover_land.py -> videos/pluto_cover_{a,b,c,d}.jpg
 import os, subprocess, io
 import imageio_ffmpeg
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
@@ -29,4 +29,5 @@ def make(lines, sub, name):
 make([('А ТИ УЯВЛЯЄШ', (255, 255, 255), 104), ('ПЛУТОН ТАК?', ICE, 124)], None, 'pluto_cover_a.jpg')
 make([('СЕРЦЕ ПЛУТОНА', (255, 255, 255), 104), ('ШИРШЕ ЗА УКРАЇНУ', WARM, 104)], None, 'pluto_cover_b.jpg')
 make([('ТУТ ТИ ВАЖИВ БИ', (255, 255, 255), 100), ('МЕНШЕ 4 КГ', ICE, 130)], 'Плутон', 'pluto_cover_c.jpg')
+make([('ЗНАЙОМСЯ:', (255, 255, 255), 100), ('ПЛУТОН', WARM, 170)], 'карликова планета на краю Сонячної системи', 'pluto_cover_d.jpg')
 print('ok')
