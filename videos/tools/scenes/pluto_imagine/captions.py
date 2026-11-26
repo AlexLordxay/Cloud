@@ -25,7 +25,9 @@ RELIEF = 'Рельєф і знімки: NASA New Horizons (USGS) · висоти
 CREDITS = [(12.0, 36.0, RELIEF), (0.2, 11.4, 'Карти: NASA New Horizons, LRO · масштаб справжній')]
 CUTS = []
 FADE_IN = 0
+SUBSCRIBE_AT = 24.0                  # the subscribe button mid-video (over the blue haze, no names up top then)
 END_CARD = 47.9
+NEXT_TEASE = 'Не проґав наступну планету'
 END_TITLE = 'Карликова планета\nз 2006 року'
 
 HERE = os.path.dirname(os.path.abspath(__file__))
