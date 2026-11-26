@@ -23,7 +23,8 @@ def font(f, size, wght=600):
     return ft
 
 # ---------------------------------------------------------------- the scale
-Y0, K = 820, 9.0
+Y0, K = 1320, 9.0
+SUN_Y, SUN_R = 840, 190
 def ty(T): return Y0 + (480 - T) * K
 HT = int(ty(-240) + 330)
 BAR_X = 112
@@ -51,7 +52,7 @@ def sprite_args(name, R):
 
 def make_sprites():
     os.makedirs(SPIN, exist_ok=True)
-    jobs = [(n, R, d, i) for n, T, x, R, lp, d, uk in PL for i in range(NSPIN)]
+    jobs = [(n, R, d, i) for n, T, x, R, lp, d, uk in PL + [('sun', 0, 0, SUN_R, '', 1, '')] for i in range(NSPIN)]
     with Pool(4) as p:
         for k, _ in enumerate(p.imap_unordered(_spr, jobs, chunksize=8)):
             if k % 96 == 0: print('sprites', k, '/', len(jobs), flush=True)
@@ -91,7 +92,12 @@ def board():
     text(img, (W / 2, 300), 'ТЕРМОМЕТР', font('Unbounded.ttf', 104), (255, 255, 255))
     text(img, (W / 2, 420), 'СОНЯЧНОЇ СИСТЕМИ', font('Unbounded.ttf', 62), (255, 200, 110))
     text(img, (W / 2, 515), 'середня температура планет', font('Commissioner.ttf', 40, 500), (215, 222, 236))
-    text(img, (W / 2 + 40, 660), 'А поверхня Сонця — +5 500°: далеко над шкалою', font('Commissioner.ttf', 34, 600), (255, 210, 130))
+    # the Sun: far off the scale (at 9 px per degree its +5 500° would be ~45 000 px up — 24 screens)
+    text(img, (W / 2 + 150, SUN_Y - 40), 'Сонце', font('Unbounded.ttf', 40), (255, 255, 255), anchor='lm')
+    text(img, (W / 2 + 150, SUN_Y + 30), '+5 500°', font('Unbounded.ttf', 58), (255, 220, 120), anchor='lm')
+    text(img, (W / 2 + 150, SUN_Y + 105), 'поверхня; на цій шкалі\nбула б на 24 екрани вище', font('Commissioner.ttf', 28, 500), (255, 210, 160), anchor='lm')
+    for yy in range(int(SUN_Y + SUN_R + 30), int(ty(480) - 40), 16):
+        ImageDraw.Draw(img).line((BAR_X, yy, BAR_X, yy + 8), fill=(255, 150, 60, 200), width=4)
     # the tube
     tube = Image.new('RGBA', (W, HT), (0, 0, 0, 0)); td = ImageDraw.Draw(tube)
     y_top, y_bot = ty(480), ty(-240)
@@ -180,6 +186,8 @@ def frame(i):
     t = i / FPS
     sy = scroll(t)
     img = _B['b'].crop((0, int(sy), W, int(sy) + H)).copy()
+    s = spr('sun', (i // 3) % NSPIN); y = SUN_Y - sy
+    if y + s.height / 2 > 0: img.alpha_composite(s, (int(W / 2 - 60 - s.width / 2), int(y - s.height / 2)))
     for n, T, x, R, lp, d, uk in PL:
         y = ty(T) - sy
         s = spr(n, (i // 2) % NSPIN)
@@ -203,6 +211,7 @@ if __name__ == '__main__':
         b = board()
         for n, T, x, R, lp, d, uk in PL:
             s = spr(n, 0); b.alpha_composite(s, (int(x - s.width / 2), int(ty(T) - s.height / 2)))
+        s = spr('sun', 0); b.alpha_composite(s, (int(W / 2 - 60 - s.width / 2), int(SUN_Y - s.height / 2)))
         b.convert('RGB').save(os.path.join(WORK, 'tall.jpg'), quality=92); print('tall', b.size); sys.exit()
     if len(sys.argv) > 1 and sys.argv[1] == 'still':
         for a in sys.argv[2:]:

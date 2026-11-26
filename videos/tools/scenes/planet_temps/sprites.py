@@ -89,6 +89,7 @@ def globe(name, R, lon0=0.0, tilt=0.0, rim=(0.5, 0.7, 1.0), rim_k=0.6, glow=None
     return im.resize((im.width // s, im.height // s), Image.LANCZOS)
 
 P = {
+    'sun':     dict(name='sun.jpg', R=190, rim=(1.0, 0.8, 0.4), rim_k=0.4, glow=(1.0, 0.55, 0.15), glow_k=1.3, soft=40.0, sat=1.15, gain=1.25, pad=1.45),
     'venus':   dict(name='venus_atmosphere.jpg', R=170, rim=(1.0, 0.8, 0.5), rim_k=0.7, glow=(1.0, 0.45, 0.12), glow_k=0.9, soft=0.25, sat=1.15),
     'mercury': dict(name='mercury.jpg', R=120, lon0=1.0, rim=(0.6, 0.6, 0.6), rim_k=0.2, glow=(1.0, 0.55, 0.2), glow_k=0.45, night=((0.10, 0.22, 0.55), 0.55)),
     'earth':   dict(name='earth_day.jpg', R=150, lon0=-1.2, tilt=0.35, clouds='earth_clouds.png', rim=(0.35, 0.6, 1.0), rim_k=1.1, glow=(0.3, 0.55, 1.0), glow_k=0.55, sat=1.15),
