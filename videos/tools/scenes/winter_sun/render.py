@@ -156,6 +156,11 @@ def orbit_picture(c, t, L, theta, emag, smag, orbit_a=1.0, ghost=0.0, axis_a=0.0
     cs = (o / rs, f, r, u, k)
     sunk.k_sun(img, cs[0][0], cs[0][1], cs[0][2], f[0], f[1], f[2], r[0], r[1], r[2], u[0], u[1], u[2], k, ROT_S, SPOTS,
                t * 0.5, sun_gain, 0.35, 0.0, 0.0, 1.0, 1.0, 0.97, 0.90, 1.0, 0.88, 0.70)
+    # the distances: dashed lines from the Sun to the Earth (3 Jan) and to where it will be on 5 Jul
+    if ghost > 0:
+        for X, col in ((P, (1.0, 0.78, 0.45)), (epos(L_JUL5), (0.6, 0.8, 1.0))):
+            seg = proj_many(c, np.array([X * q for q in np.linspace(0.06, 0.93, 40)]))
+            glow_lines(img, seg, col, w=1.5, gain=0.7 * ghost, halo=0.5, dash=18.0)
     # the ghost Earth on 5 July
     if ghost > 0:
         Pg = epos(L_JUL5)
