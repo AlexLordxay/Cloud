@@ -14,7 +14,7 @@ WORK = os.path.join(TOOLS, 'work', 'planet_temps'); SPIN = os.path.join(WORK, 's
 FONTS = os.path.join(TOOLS, 'fonts')
 W, H, FPS = 1080, 1920, 30
 CFG = json.load(open(os.path.join(HERE, 'scene.json'))); DUR = CFG['duration']
-NSPIN = 96
+NSPIN = 240                 # one turn in 8 s at 30 fps: a new view every frame (no stepping)
 
 def font(f, size, wght=600):
     ft = ImageFont.truetype(os.path.join(FONTS, f), size)
@@ -160,25 +160,24 @@ def board():
 
 _SP = {}
 def spr(n, i):
-    k = (n, i)
-    if k not in _SP: _SP[k] = Image.open(os.path.join(SPIN, f'{n}_{i:02d}.png')).convert('RGBA')
-    return _SP[k]
+    return Image.open(os.path.join(SPIN, f'{n}_{i:02d}.png')).convert('RGBA')
 
 # ---------------------------------------------------------------- the camera
 def ease(x):
     x = min(1.0, max(0.0, x)); return x * x * (3 - 2 * x)
-T_HOLD, T_END = 2.2, 16.6
+T_HOLD, T_END, RAMP = 2.0, 17.2, 2.2
+_S = {}
 def scroll(t):
-    k = (t - T_HOLD) / (T_END - T_HOLD)
-    # a gentle start and stop, steady in between
-    if k <= 0: return 0.0
-    if k >= 1: return float(HT - H)
-    a = 0.08
-    if k < a: u = 0.5 * k * k / a
-    elif k > 1 - a: u = 1 - 0.5 * a - 0.5 * (1 - k) ** 2 / a - (0.5 * a - 0.5 * a)
-    else: u = k - 0.5 * a
-    u = u / (1 - a)
-    return float((HT - H) * min(1.0, max(0.0, u)))
+    """the slide down the board: a steady speed with long, soft (raised-cosine) starts and stops"""
+    if 'v' not in _S:
+        ts = np.arange(0, DUR + 1, 1 / 600)
+        v = np.where((ts > T_HOLD) & (ts < T_END), 1.0, 0.0)
+        up = (ts - T_HOLD) / RAMP; dn = (T_END - ts) / RAMP
+        v = v * np.where(up < 1, 0.5 - 0.5 * np.cos(np.pi * np.clip(up, 0, 1)), 1.0) * np.where(dn < 1, 0.5 - 0.5 * np.cos(np.pi * np.clip(dn, 0, 1)), 1.0)
+        c = np.cumsum(v); c = c / c[-1] * (HT - H)
+        _S['v'] = (ts, c)
+    ts, c = _S['v']
+    return float(np.interp(t, ts, c))
 
 _B = {}
 def frame(i):
@@ -186,15 +185,15 @@ def frame(i):
     t = i / FPS
     sy = scroll(t)
     img = _B['b'].crop((0, int(sy), W, int(sy) + H)).copy()
-    s = spr('sun', (i // 3) % NSPIN); y = SUN_Y - sy
+    s = spr('sun', (i // 2) % NSPIN); y = SUN_Y - sy
     if y + s.height / 2 > 0: img.alpha_composite(s, (int(W / 2 - 60 - s.width / 2), int(y - s.height / 2)))
     for n, T, x, R, lp, d, uk in PL:
         y = ty(T) - sy
-        s = spr(n, (i // 2) % NSPIN)
+        s = spr(n, i % NSPIN)
         if y + s.height / 2 < 0 or y - s.height / 2 > H: continue
         img.alpha_composite(s, (int(x - s.width / 2), int(y - s.height / 2)))
     # dim the board under the closing question, then under the end card
-    k = 1.0 - 0.45 * ease((t - 15.6) / 0.6) - 0.35 * ease((t - 17.8) / 0.6)
+    k = 1.0 - 0.40 * ease((t - 17.0) / 1.0) - 0.40 * ease((t - 19.6) / 1.0)
     if k < 1.0:
         img = Image.fromarray((np.asarray(img, np.float32) * k).astype(np.uint8), 'RGBA')
     return img.convert('RGB')
