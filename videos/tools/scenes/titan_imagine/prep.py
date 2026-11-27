@@ -55,6 +55,10 @@ def coast():
     ht = F + 18 + 150 * (1 - np.exp(-(trib / 0.25) ** 2)) + 12 * (1 - np.exp(-(trib / 0.06) ** 2)) + 120 * np.exp(-(vmain / 0.3) ** 2) * 0
     h = smin(h, hv, 35.0)
     h = smin(h, np.where(vmain > 0.15, ht, 1e4), 25.0)
+    # the river channels themselves: ~80–100 m wide, cut 6 m into the valley floor (main), ~40 m for tributaries
+    chm = np.exp(-(vmain / 0.035) ** 4); cht = np.exp(-(trib / 0.03) ** 4) * (vmain > 0.15)
+    h = np.minimum(h, np.where(chm > 0.05, F - 3.0 * chm + (1 - chm) * 8, 1e4))
+    h = np.minimum(h, np.where(cht > 0.05, F + 18 - 3.0 * cht + (1 - cht) * 8, 1e4))
     # the sea floor
     h = np.where(h < 0, h * 0.8 - 6, h)
     h = gaussian_filter(h, 0.7)
@@ -64,8 +68,10 @@ def coast():
     wl = np.where((vmain < 0.3) & (F > -5), np.maximum(wl, F + 3.0), wl)
     wl = np.where((trib < 0.3) & (vmain > 0.15) & (F > -5), np.maximum(wl, F + 20.0), wl)
     # albedo: brighter highlands (water-ice bedrock with organics), dark river floors and plains
-    a = 0.40 + 0.10 * fbm(1200, 11, 4) + 0.10 * ss(40, 260, h - F) - 0.12 * np.exp(-(vmain / 0.12) ** 2)
-    a = np.clip(a, 0.18, 0.62)
+    # (stronger contrasts than before: the bright ice-rich uplands, dark organic sediment along the valley floors)
+    a = 0.44 + 0.12 * fbm(1200, 11, 4) + 0.12 * ss(30, 220, h - F) - 0.22 * np.exp(-(vmain / 0.10) ** 2) \
+        - 0.12 * np.exp(-(trib / 0.08) ** 2) * (vmain > 0.15) + 0.05 * noise(300, 12)
+    a = np.clip(a, 0.12, 0.70)
     return h.astype(np.float32), a.astype(np.float32), wl.astype(np.float32)
 
 def noise_at(x, y, sx, sy, seed):

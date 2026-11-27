@@ -375,38 +375,94 @@ def hit_cyl(C, q, ox, oy, oz, dx, dy, dz):
     return best, nx, ny, nz
 
 @njit(fastmath=True)
-def trace_df(B, C, ox, oy, oz, dx, dy, dz, rotor):
-    best = 1e18; mat = 0; nx = 0.0; ny = 0.0; nz = 0.0
+def hit_dish(D, ox, oy, oz, dx, dy, dz):
+    # a paraboloid dish z - cz = depth (r / R)^2, r <= R (opening upward); normal toward the ray's side
+    k = D[4] / (D[3] * D[3])
+    lx = ox - D[0]; ly = oy - D[1]; lz = oz - D[2]
+    A = k * (dx * dx + dy * dy); Bq = 2 * k * (lx * dx + ly * dy) - dz; Cq = k * (lx * lx + ly * ly) - lz
+    ts0 = 1e18; ts1 = 1e18
+    if abs(A) < 1e-12:
+        if abs(Bq) > 1e-12: ts0 = -Cq / Bq
+    else:
+        disc = Bq * Bq - 4 * A * Cq
+        if disc >= 0:
+            s = math.sqrt(disc); ts0 = (-Bq - s) / (2 * A); ts1 = (-Bq + s) / (2 * A)
+            if ts0 > ts1: ts0, ts1 = ts1, ts0
+    for tt in (ts0, ts1):
+        if tt > 1e-4 and tt < 1e17:
+            x = lx + dx * tt; y = ly + dy * tt
+            if x * x + y * y <= D[3] * D[3]:
+                nx = -2 * k * x; ny = -2 * k * y; nz = 1.0; nl = math.sqrt(nx * nx + ny * ny + 1.0)
+                nx /= nl; ny /= nl; nz /= nl
+                if nx * dx + ny * dy + nz * dz > 0: nx = -nx; ny = -ny; nz = -nz
+                return tt, nx, ny, nz
+    return 1e18, 0.0, 0.0, 0.0
+
+@njit(fastmath=True)
+def trace_df(B, C, CX, D, ox, oy, oz, dx, dy, dz, rotor):
+    # -> t, material, normal (local), and for rotors the index of the disc hit
+    best = 1e18; mat = 0; nx = 0.0; ny = 0.0; nz = 0.0; qi = -1
     for q in range(B.shape[0]):
         t, a, b, c = hit_box(B, q, ox, oy, oz, dx, dy, dz)
         if t < best: best = t; mat = int(B[q, 6]); nx = a; ny = b; nz = c
     for q in range(C.shape[0]):
         if not rotor and int(C[q, 6]) == 9: continue
         t, a, b, c = hit_cyl(C, q, ox, oy, oz, dx, dy, dz)
-        if t < best: best = t; mat = int(C[q, 6]); nx = a; ny = b; nz = c
-    return best, mat, nx, ny, nz
+        if t < best: best = t; mat = int(C[q, 6]); nx = a; ny = b; nz = c; qi = q
+    # x-axis cylinders: the same test with the axes rotated (x, y, z) -> (y, z, x)
+    for q in range(CX.shape[0]):
+        t, a, b, c = hit_cyl(CX, q, oy, oz, ox, dy, dz, dx)
+        if t < best: best = t; mat = int(CX[q, 6]); nx = c; ny = a; nz = b
+    if D.shape[0] > 0:
+        t, a, b, c = hit_dish(D[0], ox, oy, oz, dx, dy, dz)
+        if t < best: best = t; mat = 5; nx = a; ny = b; nz = c
+    return best, mat, nx, ny, nz, qi
 
 @njit(fastmath=True)
-def df_shade(mat, nx, ny, nz, sx, sy, sz, lx, ly, spin):
-    # (nx, ny, nz) in world space; returns the colour of a Dragonfly surface under Titan's diffuse light
-    sky = 0.55 + 0.45 * nz
-    gnd = 0.18 * max(0.0, -nz)
-    sun = 0.45 * max(0.0, nx * sx + ny * sy + nz * sz)
+def df_shade(mat, nx, ny, nz, sx, sy, sz, lx, ly, lz, dx, dy, dz):
+    # a Dragonfly surface under Titan's diffuse orange light: (nx, ny, nz) world normal, (lx, ly, lz) the local hit point
+    # (for seams and ribs), (dx, dy, dz) the view ray. Matte paint, white and silver thermal blankets with seams, gold
+    # foil, dark carbon arms, the ribbed MMRTG; blankets and metal also reflect the sky.
+    sky = 0.50 + 0.50 * nz
+    gnd = 0.22 * max(0.0, -nz)
+    sun = 0.55 * max(0.0, nx * sx + ny * sy + nz * sz)
     lt = sky + gnd + sun
-    if mat == 1: r, g, b = 0.80, 0.78, 0.74
-    elif mat == 2: r, g, b = 0.45, 0.45, 0.46
-    elif mat == 3: r, g, b = 0.10, 0.10, 0.11
+    # under the body it is darker (ambient occlusion, crudely)
+    if lz < -0.4 and nz < 0.5: lt *= 0.75
+    met = 0.0
+    if mat == 1:
+        r, g, b = 0.82, 0.81, 0.78; met = 0.12
+        # blanket seams and quilting
+        sx_ = abs((lx / 0.52) - math.floor(lx / 0.52 + 0.5)); sz_ = abs((lz / 0.30) - math.floor(lz / 0.30 + 0.5))
+        sy_ = abs((ly / 0.50) - math.floor(ly / 0.50 + 0.5))
+        sm_ = min(sx_, min(sz_ if abs(nz) < 0.5 else 1.0, sy_ if abs(nz) > 0.5 else 1.0))
+        if sm_ < 0.025: r *= 0.62; g *= 0.62; b *= 0.62
+        q_ = vn(lx * 9.0, (ly + lz) * 9.0, 71.0)
+        r *= 0.93 + 0.12 * q_; g *= 0.93 + 0.12 * q_; b *= 0.93 + 0.12 * q_
+    elif mat == 2: r, g, b = 0.42, 0.43, 0.45; met = 0.35
+    elif mat == 3: r, g, b = 0.07, 0.07, 0.08; met = 0.10
     elif mat == 4:
-        rib = 0.5 + 0.5 * math.sin((lx * 40.0) + (ly * 40.0))
-        r, g, b = 0.16 + 0.06 * rib, 0.15 + 0.05 * rib, 0.14 + 0.05 * rib
-    elif mat == 5: r, g, b = 0.88, 0.86, 0.82
-    elif mat == 6: r, g, b = 0.72, 0.52, 0.18       # gold blanket
+        rib = 0.5 + 0.5 * math.cos(math.atan2(lz - 0.05, ly) * 16.0)
+        r, g, b = 0.10 + 0.10 * rib, 0.10 + 0.09 * rib, 0.10 + 0.08 * rib; met = 0.15
+    elif mat == 5: r, g, b = 0.90, 0.89, 0.86
+    elif mat == 6:
+        w_ = vn(lx * 14.0, ly * 14.0, 72.0)
+        r, g, b = 0.80 * (0.8 + 0.4 * w_), 0.58 * (0.8 + 0.4 * w_), 0.20 * (0.8 + 0.4 * w_); met = 0.45
+    elif mat == 7: r, g, b = 0.62, 0.63, 0.66; met = 0.40       # silver blanket / deck
+    elif mat == 8: r, g, b = 0.02, 0.02, 0.03; met = 0.6         # camera glass
     else: r, g, b = 0.12, 0.12, 0.13
-    # the light on Titan is orange
-    return r * lt * 1.0, g * lt * 0.66, b * lt * 0.36
+    cr = r * lt * 1.0; cg = g * lt * 0.66; cb = b * lt * 0.36
+    if met > 0:
+        dn = dx * nx + dy * ny + dz * nz
+        rx = dx - 2 * dn * nx; ry = dy - 2 * dn * ny; rz = dz - 2 * dn * nz
+        er, eg, eb = skycol(rx, ry, max(rz, -0.2), sx, sy, sz)
+        if rz < 0: er *= 0.55; eg *= 0.5; eb *= 0.45          # the ground below reflects darker
+        fr = met + (1 - met) * 0.04 * (1 + dn) ** 5
+        cr = cr * (1 - fr) + er * fr; cg = cg * (1 - fr) + eg * fr; cb = cb * (1 - fr) + eb * fr
+    return cr, cg, cb
 
 @njit(parallel=True, fastmath=True)
-def surface(Z, AL, WL, cell, half, cam, fw, rt, up, fov, sun, expo, out, ss, fogk, tm, B, C, dpos, dR, dvis, spin):
+def surface(Z, AL, WL, cell, half, cam, fw, rt, up, fov, sun, expo, out, ss, fogk, tm, B, C, CX, D, dpos, dR, dvis, spin):
     H, W = out.shape[0], out.shape[1]
     f = (H / 2) / math.tan(fov / 2)
     sx, sy, sz = sun[0], sun[1], sun[2]
@@ -434,17 +490,20 @@ def surface(Z, AL, WL, cell, half, cam, fw, rt, up, fov, sun, expo, out, ss, fog
                         ldx = dx * dR[0, 0] + dy * dR[1, 0] + dz * dR[2, 0]
                         ldy = dx * dR[0, 1] + dy * dR[1, 1] + dz * dR[2, 1]
                         ldz = dx * dR[0, 2] + dy * dR[1, 2] + dz * dR[2, 2]
-                        b0, b1 = ray_sphere(lox, loy, loz, ldx, ldy, ldz, 0.0, 0.0, 0.0, 3.6)
+                        b0, b1 = ray_sphere(lox, loy, loz, ldx, ldy, ldz, -0.2, 0.0, 0.0, 3.4)
                         if b0 < 1e29 and b1 > 0:
-                            t, mat, a, b, c = trace_df(B, C, lox, loy, loz, ldx, ldy, ldz, True)
+                            t, mat, a, b, c, qi = trace_df(B, C, CX, D, lox, loy, loz, ldx, ldy, ldz, True)
                             if t < 1e17:
                                 if mat == 9:
-                                    # a spinning rotor: a faint grey disc with blade streaks, then what is behind it
-                                    hx = lox + ldx * t; hy = loy + ldy * t
-                                    ang = math.atan2(hy, hx)
-                                    rot_a = 0.28 + 0.10 * math.sin(ang * 2 + spin)
-                                    rr_ = 0.10; rg_ = 0.09; rb_ = 0.08
-                                    t2, mat2, a2, b2, c2 = trace_df(B, C, lox, loy, loz, ldx, ldy, ldz, False)
+                                    # a spinning two-bladed rotor: a faint disc, two blurred blade ghosts, a darker tip ring
+                                    hx = lox + ldx * t - C[qi, 0]; hy = loy + ldy * t - C[qi, 1]
+                                    rr0 = math.sqrt(hx * hx + hy * hy) / C[qi, 3]
+                                    ang = math.atan2(hy, hx) - spin * (1.0 if (qi % 2) == 0 else -1.0)
+                                    da = abs(((ang % math.pi) + math.pi) % math.pi - math.pi / 2) - math.pi / 2
+                                    bl = math.exp(-(da / (0.22 + 0.25 * (1 - rr0))) ** 2)
+                                    rot_a = (0.14 + 0.55 * bl) * min(1.0, rr0 / 0.15) + 0.25 * math.exp(-((rr0 - 0.97) / 0.03) ** 2)
+                                    rr_ = 0.05; rg_ = 0.05; rb_ = 0.05
+                                    t2, mat2, a2, b2, c2, q2 = trace_df(B, C, CX, D, lox, loy, loz, ldx, ldy, ldz, False)
                                     if t2 < 1e17:
                                         tdf = t2; mat = mat2; a = a2; b = b2; c = c2
                                     else:
@@ -455,8 +514,8 @@ def surface(Z, AL, WL, cell, half, cam, fw, rt, up, fov, sun, expo, out, ss, fog
                                     dnx = a * dR[0, 0] + b * dR[0, 1] + c * dR[0, 2]
                                     dny = a * dR[1, 0] + b * dR[1, 1] + c * dR[1, 2]
                                     dnz = a * dR[2, 0] + b * dR[2, 1] + c * dR[2, 2]
-                                    hx = lox + ldx * tdf; hy = loy + ldy * tdf
-                                    cr, cg, cb = df_shade(mat, dnx, dny, dnz, sx, sy, sz, hx, hy, spin)
+                                    hx = lox + ldx * tdf; hy = loy + ldy * tdf; hz = loz + ldz * tdf
+                                    cr, cg, cb = df_shade(mat, dnx, dny, dnz, sx, sy, sz, hx, hy, hz, dx, dy, dz)
                     if tdf > 1e17:
                         # the ground / the sea
                         t = 0.5; hit = 0; tmax = 90000.0

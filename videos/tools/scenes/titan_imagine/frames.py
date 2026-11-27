@@ -22,24 +22,48 @@ for nm in ('coast', 'dunes'):
     G[nm] = tuple(np.ascontiguousarray(np.load(os.path.join(WK, f'{nm}_{k}.npy')).astype(np.float64)) for k in 'zaw')
 HALF = 20000.0; CELL = 2 * HALF / 2047
 
-# Dragonfly (NASA/APL), metres, x forward, z up: an octocopter lander ~3.9 m long, four arms with coaxial rotor pairs
-# (1.35 m rotors), the MMRTG at the back, the high-gain dish on top, skids. Materials: see render.df_shade.
+# Dragonfly (NASA/APL), metres, x forward, z up, after the mission's published renders: a lander body ~3 m long wrapped in
+# white thermal blankets (seams), a silver deck, four dark arms out of the top corners with a coaxial pair of two-bladed
+# 1.35 m rotors on each (8 rotors), the finned MMRTG across the back, the high-gain dish on a mast on top, cameras and the
+# lidar in the nose, two skids. Materials: see render.df_shade (1 blanket, 2 grey metal, 3 dark, 4 MMRTG, 5 dish,
+# 6 gold foil, 7 silver deck, 8 glass, 9 rotor blur). Boxes: cx cy cz hx hy hz mat; cylinders: cx cy cz r z0 z1 mat.
+RX_, RY_ = 1.22, 1.62                      # the rotor axes
 DF_B = np.array([
-    (0.0, 0.0, 0.0, 1.55, 0.72, 0.42, 1),            # body
-    (0.0, 0.0, -0.47, 1.45, 0.66, 0.06, 2),           # lower deck
-    (1.58, 0.0, -0.05, 0.05, 0.42, 0.16, 3),          # forward cameras / instrument plate
-    (-1.85, 0.0, 0.05, 0.32, 0.30, 0.30, 4),          # MMRTG
-    (-1.55, 0.0, 0.05, 0.05, 0.36, 0.36, 2),          # its mount
-    *[(sx * 1.35, sy * 1.12, 0.28, 0.07, 0.42, 0.05, 2) for sx in (-1, 1) for sy in (-1, 1)],   # arms
-    *[(sx * 0.95, sy * 0.62, -0.72, 0.03, 0.03, 0.24, 3) for sx in (-1, 1) for sy in (-1, 1)],  # skid struts
-    *[(0.0, sy * 0.62, -0.97, 1.35, 0.035, 0.035, 3) for sy in (-1, 1)],                         # skids
-    (0.55, 0.0, 0.43, 0.45, 0.45, 0.02, 6),           # gold blanket patch
+    (0.0, 0.0, 0.0, 1.45, 0.62, 0.42, 1),             # the body …
+    (0.0, 0.0, 0.0, 1.38, 0.70, 0.36, 1),             # … with bevelled long edges
+    (0.0, 0.0, 0.43, 1.30, 0.56, 0.025, 7),           # silver deck
+    (0.35, 0.30, 0.47, 0.30, 0.18, 0.04, 6),          # gold-foil instrument box on the deck
+    (-0.35, -0.28, 0.47, 0.22, 0.16, 0.05, 2),        # avionics box
+    (0.0, 0.0, -0.44, 1.30, 0.55, 0.03, 3),           # dark underside
+    (1.54, 0.0, -0.12, 0.04, 0.22, 0.10, 3),          # lidar housing
+    (1.57, 0.0, -0.12, 0.02, 0.16, 0.05, 8),          # lidar window
+    *[(sx * RX_, sy * 1.12, 0.36, 0.055, 0.52, 0.045, 3) for sx in (-1, 1) for sy in (-1, 1)],     # the arms
+    *[(sx * RX_, sy * 0.70, 0.36, 0.12, 0.08, 0.06, 2) for sx in (-1, 1) for sy in (-1, 1)],       # arm roots
+    *[(0.0, sy * 0.62, -0.86, 0.05, 0.05, 0.05, 3) for sy in (-1, 1)],                              # skid mid-blocks
+    (0.0, 0.0, -0.80, 0.04, 0.62, 0.025, 3),          # skid cross brace
+    (-1.75, 0.0, 0.05, 0.16, 0.30, 0.10, 2),          # MMRTG mount
+    *[(-2.02, 0.0, 0.05 + sz_ * 0.40, 0.30, 0.012, 0.11, 4) for sz_ in (-1, 1)],                     # MMRTG fins (vertical)
+    *[(-2.02, sy * 0.40, 0.05, 0.30, 0.11, 0.012, 4) for sy in (-1, 1)],                            # MMRTG fins (sideways)
 ], np.float64)
 DF_C = np.array([
-    *[(sx * 1.35, sy * 1.55, 0.0, 0.09, 0.05, 0.70, 3) for sx in (-1, 1) for sy in (-1, 1)],    # rotor hubs
-    *[(sx * 1.35, sy * 1.55, zz, 0.675, 0.0, 0.015, 9) for sx in (-1, 1) for sy in (-1, 1) for zz in (0.12, 0.66)],  # rotors
-    (-0.35, 0.0, 0.42, 0.50, 0.0, 0.10, 5),           # high-gain dish (flat)
+    *[(sx * RX_, sy * RY_, 0.0, 0.075, 0.24, 0.46, 2) for sx in (-1, 1) for sy in (-1, 1)],       # motor pods at the arm ends
+    *[(sx * RX_, sy * RY_, 0.0, 0.028, -0.10, 0.62, 3) for sx in (-1, 1) for sy in (-1, 1)],      # rotor shafts
+    *[(sx * RX_, sy * RY_, 0.0, 0.045, 0.62, 0.70, 3) for sx in (-1, 1) for sy in (-1, 1)],      # hub caps
+    *[(sx * RX_, sy * RY_, zz, 0.675, 0.0, 0.012, 9) for sx in (-1, 1) for sy in (-1, 1) for zz in (-0.06, 0.56)],  # rotors
+    *[(sx * 0.95, sy * 0.62, -0.88, 0.028, 0.0, 0.46, 3) for sx in (-1, 1) for sy in (-1, 1)],   # skid struts
+    (-0.75, 0.0, 0.45, 0.04, 0.0, 0.30, 2),           # dish mast
+    (0.55, -0.40, 0.45, 0.012, 0.0, 0.50, 3),         # a whip antenna
+    (1.10, 0.35, 0.45, 0.06, 0.0, 0.14, 3),           # mast camera post
 ], np.float64)
+DF_CX = np.array([
+    # x-axis cylinders: (cy, cz, cx, r, x0, x1, mat) — y, z of the axis, x of the reference point, radius, x range
+    (0.0, 0.05, -2.02, 0.26, -0.30, 0.30, 4),        # the MMRTG
+    *[(sy * 0.62, -0.95, 0.0, 0.035, -1.30, 1.30, 3) for sy in (-1, 1)],                              # the skids
+    *[(sy * 0.28, 0.12, 1.50, 0.075, 0.0, 0.10, 3) for sy in (-1, 1)],                                # nose cameras
+    *[(sy * 0.28, 0.12, 1.50, 0.05, 0.10, 0.115, 8) for sy in (-1, 1)],                               # their lenses
+    (0.35, 0.66, 1.10, 0.055, -0.08, 0.10, 3),       # mast camera head
+], np.float64)
+DF_D = np.array([[-0.75, 0.0, 0.76, 0.50, 0.13, 5.0]], np.float64)    # the high-gain dish (R 0.5 m) on top
 
 def nrm(v): v = np.asarray(v, np.float64); return v / np.linalg.norm(v)
 def look(cam, tgt, upv=(0, 0, 1)):
@@ -129,18 +153,51 @@ def shot_fly(t):
     fw, rt, up = look(cam, tgt, upv=(0.05 * math.sin(t * 0.7), 0, 1))
     return ('surface', dict(g='coast', cam=cam, fw=fw, rt=rt, up=up, fov=62, expo=0.72, fogk=1 / 22000, dvis=0)), {}
 
+_RY = [16000, 13500, 11000, 9000, 7000, 6000, 4000, 2000, 0, -3000]
+_RX = [10330, 10200, 10250, 10050, 10280, 9860, 10770, 10700, 10300, 10000]
+def river_x(y):
+    return float(np.interp(-y, [-v for v in _RY], _RX))
+
 def shot_river(t):
-    # 16.2–26.0: down through the haze over the valleys, then along a river out to the sea, in the rain
+    # 16.2–26.0: down through a methane cloud deck and the haze over the valleys, then along a river out to the sea, in the rain
     k = (t - 16.2) / 9.8
-    p0 = np.array([-3300.0, 9000.0]); p1 = np.array([-3900.0, -2500.0])
-    xy = lerpv(p0, p1, ease(k) * 0.7 + k * 0.3)
-    alt = lerp(2600.0, 140.0, ease(min(1, k * 1.5))) + hat('coast', *xy) * (1 - k) * 0
+    # following one river (x ≈ 10 km) south to where it pours into the sea
+    yy = lerp(14500.0, -2200.0, ease(k) * 0.6 + k * 0.4)
+    xx = river_x(yy)
+    alt = lerp(2600.0, 140.0, ease(min(1, k * 1.5)))
+    xy = np.array([xx + lerp(300, 60, k), yy])
     cam = np.array([xy[0], xy[1], max(alt, hat('coast', *xy) + 90)])
-    look_at = np.array([xy[0] - 150, xy[1] - lerp(1500, 4000, k), lerp(-500, 0, sm(k * 1.4))])
+    ya = yy - lerp(900, 3500, k)
+    look_at = np.array([river_x(ya), ya, lerp(-300, 0, sm(k * 1.4))])
     fw, rt, up = look(cam, look_at)
-    fog = lerp(1 / 7000, 1 / 20000, sm(k * 1.6))
+    fog = lerp(1 / 14000, 1 / 20000, sm(k * 1.6))
     return ('surface', dict(g='coast', cam=cam, fw=fw, rt=rt, up=up, fov=58, expo=0.72, fogk=fog, dvis=0,
-                            haze=1 - sm(k * 5.0))), {}
+                            haze=0.0, cloud=1 - sm((t - 16.6) / 1.6), contrast=lerp(1.35, 1.12, sm(k * 1.5)))), {}
+
+def clouds(img, t, k):
+    # the methane cloud deck the camera falls through: billows of fbm noise growing past the lens (they rush outward as we
+    # descend), lit from above, darker underneath; k = 1 inside the deck, 0 below it
+    if k <= 0: return img
+    h_, w_ = img.shape[:2]
+    yy, xx = np.mgrid[0:h_, 0:w_].astype(np.float32)
+    cx, cy = w_ / 2, h_ * 0.55
+    z = 1.0 + (t - 16.2) * 1.6                      # zooming in as we fall
+    u = (xx - cx) / (w_ * 0.5) / z; v = (yy - cy) / (w_ * 0.5) / z
+    n = np.zeros_like(u); a = 0.5; f = 1.6
+    for o in range(5):
+        n += a * vnoise(u * f + 3.1 * o, v * f - 1.7 * o); a *= 0.5; f *= 2.1
+    d = np.clip((n - (0.62 - 0.55 * k)) / 0.22, 0, 1)
+    shade = np.clip(0.75 + 0.6 * (n - 0.5) - 0.25 * (yy / h_), 0.35, 1.1)
+    col = np.stack([0.95 * shade, 0.62 * shade, 0.30 * shade], -1).astype(np.float32)
+    al = (d * min(1.0, k * 1.3))[..., None]
+    return img * (1 - al) + col * al
+
+_VN = np.random.default_rng(77).random((256, 256)).astype(np.float32)
+def vnoise(x, y):
+    i = np.floor(x).astype(int); j = np.floor(y).astype(int); fx = x - i; fy = y - j
+    fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy)
+    g = lambda a, b: _VN[b & 255, a & 255]
+    return (g(i, j) * (1 - fx) + g(i + 1, j) * fx) * (1 - fy) + (g(i, j + 1) * (1 - fx) + g(i + 1, j + 1) * fx) * fy
 
 def df_pose(t):
     # Dragonfly cruising east along the dune field, ~70 m above the crests (it can fly up to ~4 km, ~10 m/s)
@@ -168,8 +225,9 @@ def shot_dunes(t):
     tgt = dp + away * 400.0 + np.array([0, 0, -150.0 + 0 * k])
     fw, rt, up = look(cam, tgt)
     R = rotz_pitch(0.0, 0.10, 0.02 * math.sin(t * 1.3))
+    # rendered at the final 1080 × 1920 with 2×2 samples: the drone close up has to be crisp
     return ('surface', dict(g='dunes', cam=cam, fw=fw, rt=rt, up=up, fov=fov, expo=0.72, fogk=1 / 30000,
-                            dvis=1.0, dpos=dp, dR=R)), {'df': proj(cam, fw, rt, up, fov, dp, 2.0)}
+                            dvis=1.0, dpos=dp, dR=R, res=(1920, 1080), ss=2)), {'df': proj(cam, fw, rt, up, fov, dp, 2.0)}
 
 SHOTS = [(0.0, 3.9, shot_open), (3.5, 6.4, shot_fly), (6.0, 16.6, shot_globe), (16.2, 26.0, shot_river), (25.6, 34.0, shot_dunes),
          (33.6, DUR + 0.1, shot_end)]
@@ -183,8 +241,12 @@ def render_shot(kind, P, t):
     else:
         Z, A, WL = G[P['g']]
         dpos = np.asarray(P.get('dpos', np.zeros(3)), float); dR = np.ascontiguousarray(P.get('dR', np.eye(3)), dtype=np.float64)
-        RD.surface(Z, A, WL, CELL, HALF, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), SUN_S, P['expo'], out, 1,
-                   P['fogk'], t, DF_B, DF_C, dpos, dR, float(P['dvis']), t * 37.0)
+        RD.surface(Z, A, WL, CELL, HALF, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), SUN_S, P['expo'], out, P.get('ss', 1),
+                   P['fogk'], t, DF_B, DF_C, DF_CX, DF_D, dpos, dR, float(P['dvis']), t * 23.0)
+        c_ = P.get('contrast', 1.0)
+        if c_ != 1.0:
+            # a little more contrast for the high views (the thick air flattens them): around a mid-orange pivot
+            out = np.clip(0.32 + (out - 0.32) * c_, 0, None)
         hz = P.get('haze', 0.0)
         if hz > 0:
             # inside the haze, high up: everything washes toward the orange glow
@@ -218,7 +280,9 @@ def frame(t):
             if w <= 0: continue
             (kind, P), lab = fn(t)
             img = render_shot(kind, P, t)
-            if fn is shot_river: img = rain(img, t, sm((t - 19.8) / 1.0))
+            if fn is shot_river:
+                img = clouds(img, t, P.get('cloud', 0.0))
+                img = rain(img, t, sm((t - 19.8) / 1.0))
             if acc is not None and img.shape != acc.shape:
                 big = img if img.shape[0] > acc.shape[0] else acc
                 if img.shape[0] < big.shape[0]: img = upsize(img, big.shape)
