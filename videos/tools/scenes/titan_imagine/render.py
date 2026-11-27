@@ -38,7 +38,8 @@ def stars(SK, dx, dy, dz):
     u = math.atan2(dx, -dy) / (2 * math.pi) + 0.5
     v = 0.5 - math.asin(max(-1.0, min(1.0, dz))) / math.pi
     r, g, b = tex2(SK, u, v)
-    return r * 0.30, g * 0.30, b * 0.32
+    # only the stars: the faint glow of the texture would read as grey fog behind the planets
+    return max(0.0, r - 0.10) * 0.45, max(0.0, g - 0.10) * 0.45, max(0.0, b - 0.10) * 0.48
 
 @njit(fastmath=True, inline='always')
 def ray_sphere(ox, oy, oz, dx, dy, dz, cx, cy, cz, R):
