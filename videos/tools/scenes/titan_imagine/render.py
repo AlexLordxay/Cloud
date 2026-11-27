@@ -34,12 +34,34 @@ def tex2(T, u, v):
     return r, g, b
 
 @njit(fastmath=True, inline='always')
-def stars(SK, dx, dy, dz):
-    u = math.atan2(dx, -dy) / (2 * math.pi) + 0.5
-    v = 0.5 - math.asin(max(-1.0, min(1.0, dz))) / math.pi
-    r, g, b = tex2(SK, u, v)
-    # only the stars: the faint glow of the texture would read as grey fog behind the planets
-    return max(0.0, r - 0.10) * 0.45, max(0.0, g - 0.10) * 0.45, max(0.0, b - 0.10) * 0.48
+def hs(i, j, s):
+    v = math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453
+    return v - math.floor(v)
+
+@njit(fastmath=True, inline='always')
+def stars(SK, dx, dy, dz, pix):
+    # sharp procedural stars (a texture would blur on the long-lens shots): one candidate star per 0.25° cell, a power-law
+    # of brightnesses, drawn as a point about a pixel wide; plus a trace of the Milky Way from the texture
+    lon = math.atan2(dx, -dy); lat = math.asin(max(-1.0, min(1.0, dz)))
+    cs = 0.25 * math.pi / 180
+    ci = math.floor(lon / cs); cj = math.floor(lat / cs)
+    r = 0.0; g = 0.0; b = 0.0
+    for oj in range(-1, 2):
+        for oi in range(-1, 2):
+            i = ci + oi; j = cj + oj
+            h = hs(i, j, 41.0)
+            if h < 0.10:
+                sl = (i + hs(i, j, 42.0)) * cs; sb = (j + hs(i, j, 43.0)) * cs
+                dl = (lon - sl) * math.cos(lat); db = lat - sb
+                d2 = (dl * dl + db * db) / (pix * pix * 0.55)
+                if d2 < 9.0:
+                    m = 0.25 * (0.02 + hs(i, j, 44.0)) ** -0.9 * 0.22
+                    k = m * math.exp(-d2)
+                    tint = hs(i, j, 45.0)
+                    r += k * (0.85 + 0.3 * tint); g += k * 0.92; b += k * (1.15 - 0.3 * tint)
+    u = lon / (2 * math.pi) + 0.5; v = 0.5 - lat / math.pi
+    tr, tg, tb = tex2(SK, u, v)
+    return r + max(0.0, tr - 0.10) * 0.10, g + max(0.0, tg - 0.10) * 0.10, b + max(0.0, tb - 0.10) * 0.11
 
 @njit(fastmath=True, inline='always')
 def ray_sphere(ox, oy, oz, dx, dy, dz, cx, cy, cz, R):
@@ -190,7 +212,7 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
                             if ba > 0 and tr_ < ts:
                                 cr = cr * (1 - ba) + br * ba; cg = cg * (1 - ba) + bg * ba; cb = cb * (1 - ba) + bb * ba
                         else:
-                            cr, cg, cb = stars(SK, dx, dy, dz)
+                            cr, cg, cb = stars(SK, dx, dy, dz, fov / H)
                             # the Sun: a tiny bright disc with a glow (bloom adds the rest)
                             cs = dx * sx + dy * sy + dz * sz
                             if cs > 0.99995: cr += 40.0; cg += 38.0; cb += 34.0
@@ -243,11 +265,6 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
 
 
 # ---------------------------------------------------------------- the surface (metres)
-
-@njit(fastmath=True, inline='always')
-def hs(i, j, s):
-    v = math.sin(i * 127.1 + j * 311.7 + s * 74.7) * 43758.5453
-    return v - math.floor(v)
 
 @njit(fastmath=True, inline='always')
 def vn(x, y, s):

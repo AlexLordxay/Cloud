@@ -56,7 +56,11 @@ def hat(nm, x, y):
 
 # ---------------- space: Titan at the origin, Saturn's ring plane = z = 0 (Titan orbits in it)
 S_DIR = nrm([0.30, 1.0, 0.0]); S_POS = S_DIR * 1221870.0
-EX = nrm(np.cross([0, 0, 1], S_DIR)); EY = nrm(np.cross([0, 0, 1], EX)); EZ = np.array([0.0, 0, 1])
+# Saturn's axis tipped 24° toward the camera side (an artistic liberty, asked by the author: seen from Titan, which orbits
+# in the ring plane, the rings are almost edge-on — tipped, they show open, lit from above)
+RING_TILT = math.radians(24)
+EZ = nrm(np.array([0.0, 0, 1]) * math.cos(RING_TILT) - S_DIR * math.sin(RING_TILT))
+EX = nrm(np.cross(EZ, S_DIR)); EY = nrm(np.cross(EZ, EX))
 SUN = nrm([-0.85, -0.30, 0.12])
 
 def proj(cam, fw, rt, up, fov, p, r):
@@ -66,6 +70,15 @@ def proj(cam, fw, rt, up, fov, p, r):
     return [W / 2 + float(np.dot(d, rt)) / z * f, H / 2 - float(np.dot(d, up)) / z * f, r / z * f]
 
 SAZ = math.atan2(S_DIR[1], S_DIR[0]) + math.pi        # the azimuth of the point opposite Saturn
+
+def shot_open(t):
+    # 0–3.9: the long-lens view: Titan in front, Saturn with its rings behind, both large; a slow drift
+    d = 47000.0 - 700.0 * t; el = 0.13
+    az = SAZ + 0.05 + 0.004 * t
+    cam = np.array([d * math.cos(el) * math.cos(az), d * math.cos(el) * math.sin(az), d * math.sin(el)])
+    sdir = nrm(S_POS - cam); tdir = nrm(-cam)
+    fw, rt, up = look(cam, cam + nrm(sdir * 0.42 + tdir * 0.58))
+    return ('space', dict(cam=cam, fw=fw, rt=rt, up=up, fov=30.0, mpos=np.zeros(3), mvis=0.0, expo=1.0, ss=2)), {}
 
 def shot_globe(t):
     # 6.0–16.6: Titan with Saturn behind it (the camera a little below the ring plane, so Saturn rises above Titan);
@@ -157,7 +170,7 @@ def shot_dunes(t):
     return ('surface', dict(g='dunes', cam=cam, fw=fw, rt=rt, up=up, fov=fov, expo=0.72, fogk=1 / 30000,
                             dvis=1.0, dpos=dp, dR=R)), {'df': proj(cam, fw, rt, up, fov, dp, 2.0)}
 
-SHOTS = [(0.0, 6.4, shot_fly), (6.0, 16.6, shot_globe), (16.2, 26.0, shot_river), (25.6, 34.0, shot_dunes),
+SHOTS = [(0.0, 3.9, shot_open), (3.5, 6.4, shot_fly), (6.0, 16.6, shot_globe), (16.2, 26.0, shot_river), (25.6, 34.0, shot_dunes),
          (33.6, DUR + 0.1, shot_end)]
 XF = 0.4
 
