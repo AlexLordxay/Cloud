@@ -18,9 +18,10 @@ CAPTIONS = [
 ]
 NAMES = []
 SUBS = []
-CREDITS = [(0.2, 3.6, 'Художня візуалізація · Сатурн: Solar System Scope (CC BY 4.0) · нахил кілець перебільшено'),
+CREDITS = [(0.2, 3.6, 'Художня візуалізація · нахил кілець перебільшено'),
            (3.9, 6.0, 'Моря й ріки — за радаром «Кассіні»'),
-           (6.2, 16.2, 'Карта: NASA/JPL/Univ. of Arizona (VIMS) · Сатурн, Меркурій: Solar System Scope (CC BY 4.0) · розміри справжні'),
+           (6.2, 10.9, 'Розміри справжні · карти: NASA/JPL, Solar System Scope (CC BY 4.0)'),
+           (11.0, 16.2, 'Карта Титана: NASA/JPL/Univ. of Arizona (VIMS «Кассіні»)'),
            (16.4, 25.6, 'Рельєф — художня реконструкція · освітлення підсилено'),
            (25.8, 33.4, '«Дрегонфлай» (NASA/APL) — художня модель'),
            (33.6, 36.0, 'Художня візуалізація')]
@@ -71,12 +72,12 @@ def DRAW(img, t, H_):
     # the air and the gravity
     a = _fade(t, 11.0, 13.5)
     if a > 0:
-        _text(img, (W / 2, 330), '×4', f_big, SUN_C, alpha=a)
-        _text(img, (W / 2, 440), 'щільніше повітря, ніж на Землі', f_mid, (235, 225, 210), alpha=a)
+        _text(img, (W / 2, 1560), '×4', f_big, SUN_C, alpha=a)
+        _text(img, (W / 2, 1670), 'щільніше повітря, ніж на Землі', f_mid, (235, 225, 210), alpha=a)
     a = _fade(t, 13.6, 16.2)
     if a > 0:
-        _text(img, (W / 2, 330), '1/7', f_big, SUN_C, alpha=a)
-        _text(img, (W / 2, 440), 'земного тяжіння', f_mid, (235, 225, 210), alpha=a)
+        _text(img, (W / 2, 1560), '1/7', f_big, SUN_C, alpha=a)
+        _text(img, (W / 2, 1670), 'земного тяжіння', f_mid, (235, 225, 210), alpha=a)
     # the cold
     a = _fade(t, 23.1, 25.6)
     if a > 0:
@@ -85,5 +86,5 @@ def DRAW(img, t, H_):
     # Dragonfly
     a = _fade(t, 26.4, 33.0)
     if a > 0:
-        _text(img, (W / 2, 300), '«Дрегонфлай» · NASA', f_mid, SUN_C, alpha=a)
-        _text(img, (W / 2, 356), 'старт 2028 · прибуття 2034', f_sm, (235, 225, 210), alpha=a)
+        _text(img, (W / 2, 1560), '«Дрегонфлай» · NASA', f_mid, SUN_C, alpha=a)
+        _text(img, (W / 2, 1616), 'старт 2028 · прибуття 2034', f_sm, (235, 225, 210), alpha=a)
