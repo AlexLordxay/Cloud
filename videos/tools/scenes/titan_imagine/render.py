@@ -39,6 +39,12 @@ def hs(i, j, s):
     return v - math.floor(v)
 
 @njit(fastmath=True, inline='always')
+def vn(x, y, s):
+    i = math.floor(x); j = math.floor(y); fx = x - i; fy = y - j
+    fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy)
+    return (hs(i, j, s) * (1 - fx) + hs(i + 1, j, s) * fx) * (1 - fy) + (hs(i, j + 1, s) * (1 - fx) + hs(i + 1, j + 1, s) * fx) * fy
+
+@njit(fastmath=True, inline='always')
 def stars(SK, dx, dy, dz, pix):
     # sharp procedural stars (a texture would blur on the long-lens shots): one candidate star per 0.25° cell, a power-law
     # of brightnesses, drawn as a point about a pixel wide; plus a trace of the Milky Way from the texture
@@ -61,7 +67,7 @@ def stars(SK, dx, dy, dz, pix):
                     r += k * (0.85 + 0.3 * tint); g += k * 0.92; b += k * (1.15 - 0.3 * tint)
     u = lon / (2 * math.pi) + 0.5; v = 0.5 - lat / math.pi
     tr, tg, tb = tex2(SK, u, v)
-    return r + max(0.0, tr - 0.10) * 0.10, g + max(0.0, tg - 0.10) * 0.10, b + max(0.0, tb - 0.10) * 0.11
+    return r + max(0.0, tr - 0.30) * 0.03, g + max(0.0, tg - 0.30) * 0.03, b + max(0.0, tb - 0.30) * 0.035
 
 @njit(fastmath=True, inline='always')
 def ray_sphere(ox, oy, oz, dx, dy, dz, cx, cy, cz, R):
@@ -103,7 +109,7 @@ def titan_albedo(TT, LK, nx, ny, nz, rot):
     u = lon / (2 * math.pi) + 0.5; v = 0.5 - lat / math.pi
     r, g, b = tex2(TT, u, v); lk, _, _ = tex2(LK, u, v)
     L = 0.30 * r + 0.55 * g + 0.15 * b
-    a = 0.06 + 0.16 * L
+    a = 0.035 + 0.24 * L
     a *= 1 - 0.75 * lk
     return a * 1.15, a * 0.82, a * 0.55
 
@@ -178,8 +184,12 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
                             rr = math.sqrt(rx * rx + ry * ry + rz * rz)
                             if rr > RING_IN and rr < RING_OUT:
                                 k = (rr - RING_IN) / (RING_OUT - RING_IN)
-                                hh = RG.shape[1]; xi = min(hh - 1, max(0, int(k * hh)))
-                                al = RG[0, xi, 3]
+                                hh = RG.shape[1]; fx_ = min(hh - 1.001, max(0.0, k * hh - 0.5)); xi = int(fx_); xf = fx_ - xi
+                                al = RG[0, xi, 3] * (1 - xf) + RG[0, xi + 1, 3] * xf
+                                # ringlets: fine radial structure finer than the profile (tens of km)
+                                rn = 0.5 * vn(rr / 160.0, 0.5, 50.0) + 0.3 * vn(rr / 55.0, 0.5, 51.0) + 0.2 * vn(rr / 21.0, 0.5, 52.0)
+                                rgl = 0.72 + 0.56 * rn
+                                al = min(1.0, al * (0.85 + 0.3 * rn))
                                 # Saturn's shadow on the rings
                                 a0, a1 = ray_sphere(rx, ry, rz, sx, sy, sz, 0.0, 0.0, 0.0, S_RPO)
                                 lit = 0.04 if a0 > 0 and a0 < 1e29 else 1.0
@@ -187,7 +197,10 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
                                 al = 1 - (1 - al) ** (1.0 / max(0.03, abs(dn)) * 0.05 + 1.0)
                                 sl = abs(sx * ez[0] + sy * ez[1] + sz * ez[2])
                                 lv = lit * (0.35 + 1.6 * sl)
-                                br = RG[0, xi, 0] * lv; bg = RG[0, xi, 1] * lv; bb = RG[0, xi, 2] * lv; ba = al
+                                lv *= rgl
+                                br = (RG[0, xi, 0] * (1 - xf) + RG[0, xi + 1, 0] * xf) * lv * 1.02
+                                bg = (RG[0, xi, 1] * (1 - xf) + RG[0, xi + 1, 1] * xf) * lv * 0.96
+                                bb = (RG[0, xi, 2] * (1 - xf) + RG[0, xi + 1, 2] * xf) * lv * 0.88; ba = al
                         if ts < 1e29:
                             nx = qx / S_REQ; ny = qy / S_REQ; nz = qz * S_REQ / (S_RPO * S_RPO)
                             nl = math.sqrt(nx * nx + ny * ny + nz * nz); nx /= nl; ny /= nl; nz /= nl
@@ -196,6 +209,24 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
                             lat = math.asin(max(-1.0, min(1.0, qz / S_RPO)))
                             lon = math.atan2(qy, qx)
                             r, g, b = tex2(ST, lon / (2 * math.pi) + 0.5, 0.5 - lat / math.pi)
+                            # more contrast in the belts, and finer bands with a little turbulence than the map holds
+                            r = 0.72 + (r - 0.72) * 1.55; g = 0.68 + (g - 0.68) * 1.6; b = 0.58 + (b - 0.58) * 1.6
+                            wob = vn(lon * 18.0, lat * 60.0, 61.0) - 0.5
+                            fb = 1.0 + 0.045 * math.sin(lat * 150.0 + 2.5 * wob) + 0.03 * math.sin(lat * 61.0 + 1.3) + 0.04 * (vn(lon * 50.0, lat * 400.0, 62.0) - 0.5)
+                            r *= fb; g *= fb; b *= fb
+                            # the hexagon around the north pole (~78° N), its blue-grey centre and the dark polar vortex
+                            if lat > 1.2:
+                                ph_ = math.atan2(qy, qx) + 0.3
+                                seg = (ph_ % (math.pi / 3)) - math.pi / 6
+                                rhex = 0.205 * math.cos(math.pi / 6) / math.cos(seg)
+                                rho_ = math.cos(lat)
+                                if rho_ < rhex:
+                                    w_ = min(1.0, (rhex - rho_) / 0.02)
+                                    r = r * (1 - 0.30 * w_); g = g * (1 - 0.22 * w_); b = b * (1 - 0.06 * w_)
+                                    if rho_ > rhex - 0.025:
+                                        r *= 0.85; g *= 0.85; b *= 0.88
+                                    pv = math.exp(-(rho_ / 0.035) ** 2)
+                                    r *= 1 - 0.45 * pv; g *= 1 - 0.40 * pv; b *= 1 - 0.30 * pv
                             # the rings' shadow on the globe
                             sh = 1.0
                             if abs(lsz) > 1e-6:
@@ -207,7 +238,9 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
                                         k = (rr - RING_IN) / (RING_OUT - RING_IN)
                                         hh = RG.shape[1]; xi = min(hh - 1, max(0, int(k * hh)))
                                         sh = 1 - 0.85 * RG[0, xi, 3]
-                            lim = 0.55 + 0.45 * ndl ** 0.5
+                            vdx = dx * ex[0] + dy * ex[1] + dz * ex[2]; vdy = dx * ey[0] + dy * ey[1] + dz * ey[2]; vdz = dx * ez[0] + dy * ez[1] + dz * ez[2]
+                            muv = max(0.0, -(nx * vdx + ny * vdy + nz * vdz))
+                            lim = (0.55 + 0.45 * ndl ** 0.5) * (0.45 + 0.55 * muv ** 0.45)
                             cr = r * ndl * sh * lim * 0.78; cg = g * ndl * sh * lim * 0.72; cb = b * ndl * sh * lim * 0.64
                             if ba > 0 and tr_ < ts:
                                 cr = cr * (1 - ba) + br * ba; cg = cg * (1 - ba) + bg * ba; cb = cb * (1 - ba) + bb * ba
@@ -240,7 +273,9 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
                             tm = t + dt * 0.5
                             px = ox + dx * tm; py = oy + dy * tm; pz = oz + dz * tm
                             r_ = math.sqrt(px * px + py * py + pz * pz); h = max(0.0, r_ - R_T)
-                            rho = K_HAZE * math.exp(-h / H_HAZE)
+                            la_ = pz / r_
+                            rho = K_HAZE * math.exp(-h / H_HAZE) * (1.0 + 0.10 * math.sin(la_ * 9.0 + 0.6) + 0.18 * max(0.0, la_ - 0.55))
+                            nh = 1.0 - 0.16 * min(1.0, max(0.0, (la_ - 0.05) / 0.6))
                             rdet = DET_K * math.exp(-((h - DET_H) / DET_W) ** 2)
                             if rho + rdet > 1e-7:
                                 tau = sun_tau(px, py, pz, sx, sy, sz)
@@ -253,7 +288,7 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
                                 ms = 0.10 * max(0.0, min(1.0, (mu + 0.12) / 0.4)) * math.exp(-h / 200.0)
                                 er = rho * 0.80 + rdet * 0.6; eg = rho * 1.0 + rdet * 0.9; eb = rho * 1.30 + rdet * 1.5
                                 # scattering colours: the haze orange, the detached layer blue
-                                s1r = rho * 0.95 * (lr * ph * 11.0 + ms); s1g = rho * 0.62 * (lg * ph * 11.0 + ms); s1b = rho * 0.26 * (lb * ph * 11.0 + ms)
+                                s1r = rho * 0.95 * (lr * ph * 11.0 + ms); s1g = rho * 0.62 * nh * (lg * ph * 11.0 + ms); s1b = rho * 0.26 * nh * nh * (lb * ph * 11.0 + ms)
                                 s2r = rdet * 0.40 * lr * phd * 9.0; s2g = rdet * 0.62 * lg * phd * 9.0; s2b = rdet * 1.10 * lb * phd * 9.0
                                 sr += trr * (s1r + s2r) * dt; sg += trg * (s1g + s2g) * dt; sb += trb * (s1b + s2b) * dt
                                 trr *= math.exp(-er * dt); trg *= math.exp(-eg * dt); trb *= math.exp(-eb * dt)
@@ -265,12 +300,6 @@ def space(TT, LK, ST, RG, MT, SK, cam, fw, rt, up, fov, sun, S, ex, ey, ez, mpos
 
 
 # ---------------------------------------------------------------- the surface (metres)
-
-@njit(fastmath=True, inline='always')
-def vn(x, y, s):
-    i = math.floor(x); j = math.floor(y); fx = x - i; fy = y - j
-    fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy)
-    return (hs(i, j, s) * (1 - fx) + hs(i + 1, j, s) * fx) * (1 - fy) + (hs(i, j + 1, s) * (1 - fx) + hs(i + 1, j + 1, s) * fx) * fy
 
 @njit(fastmath=True, inline='always')
 def hf(Z, x, y, cell, half):

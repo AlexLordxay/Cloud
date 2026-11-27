@@ -78,7 +78,8 @@ def shot_open(t):
     cam = np.array([d * math.cos(el) * math.cos(az), d * math.cos(el) * math.sin(az), d * math.sin(el)])
     sdir = nrm(S_POS - cam); tdir = nrm(-cam)
     fw, rt, up = look(cam, cam + nrm(sdir * 0.42 + tdir * 0.58))
-    return ('space', dict(cam=cam, fw=fw, rt=rt, up=up, fov=30.0, mpos=np.zeros(3), mvis=0.0, expo=1.0, ss=2)), {}
+    # rendered at the final 1080 × 1920 (not upscaled): the first frame has to be sharp
+    return ('space', dict(cam=cam, fw=fw, rt=rt, up=up, fov=30.0, mpos=np.zeros(3), mvis=0.0, expo=1.0, ss=2, res=(1920, 1080))), {}
 
 def shot_globe(t):
     # 6.0–16.6: Titan with Saturn behind it (the camera a little below the ring plane, so Saturn rises above Titan);
@@ -175,7 +176,7 @@ SHOTS = [(0.0, 3.9, shot_open), (3.5, 6.4, shot_fly), (6.0, 16.6, shot_globe), (
 XF = 0.4
 
 def render_shot(kind, P, t):
-    out = np.zeros((H, W, 3), np.float32)
+    out = np.zeros(P.get('res', (H, W)) + (3,), np.float32)
     if kind == 'space':
         RD.space(TT, LK, ST, RG, MT, SK, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), SUN, S_POS, EX, EY, EZ,
                  np.asarray(P['mpos'], float), float(P['mvis']), 0.0, P['expo'], out, P.get('ss', 1))
@@ -206,6 +207,9 @@ def rain(img, t, k):
     a = np.asarray(lay.filter(ImageFilter.GaussianBlur(1.1))).astype(np.float32)[..., None] / 255
     return img * (1 - 0.25 * a) + a * np.array([1.0, 0.78, 0.55], np.float32) * 0.55
 
+def upsize(a, shape):
+    return np.stack([np.asarray(Image.fromarray(a[..., c]).resize((shape[1], shape[0]), Image.LANCZOS)) for c in range(3)], -1)
+
 def frame(t):
     acc = None; wsum = 0.0; labs = {}
     for a, b, fn in SHOTS:
@@ -215,6 +219,10 @@ def frame(t):
             (kind, P), lab = fn(t)
             img = render_shot(kind, P, t)
             if fn is shot_river: img = rain(img, t, sm((t - 19.8) / 1.0))
+            if acc is not None and img.shape != acc.shape:
+                big = img if img.shape[0] > acc.shape[0] else acc
+                if img.shape[0] < big.shape[0]: img = upsize(img, big.shape)
+                else: acc = upsize(acc, big.shape)
             acc = img * w if acc is None else acc + img * w; wsum += w
             if w >= 0.5: labs = lab
     img = acc / max(wsum, 1e-6)
