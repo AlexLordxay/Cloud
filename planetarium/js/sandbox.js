@@ -1413,6 +1413,15 @@ const sandbox = (() => {
 
   /* ---------- Panel ---------- */
   const el = id => document.getElementById(id);
+  // the sandbox's ❚❚/▶ buttons follow the site's pause as well as their own
+  let shownPause = null;
+  function syncPause() {
+    const p = state.paused || (story.on ? story.paused : S.speed === 0);
+    if (p === shownPause) return;
+    shownPause = p;
+    el("sbsPause").textContent = p ? "▶" : "❚❚"; el("sbStory").classList.toggle("paused", p);
+    el("sbPlay").textContent = p ? "▶" : "❚❚"; el("sbPlay").setAttribute("aria-label", p ? "Пуск" : "Пауза");
+  }
   function renderPanel() {
     const sc = SCENARIOS[S.scenario];
     el("sbTitle").textContent = sc ? sc.title : "Справжня Сонячна система";
@@ -1422,6 +1431,7 @@ const sandbox = (() => {
     el("sbSpeedOut").textContent = SPEEDS[S.speed][1];
     el("sbDirector").setAttribute("aria-pressed", String(S.director));
     el("sbSlower").disabled = S.speed <= 1; el("sbFaster").disabled = S.speed >= SPEEDS.length - 1;
+    shownPause = null;                               // (syncPause redraws ❚❚/▶ with the site's pause in mind)
     el("sbPlay").textContent = S.speed === 0 ? "▶" : "❚❚";
     el("sbPlay").setAttribute("aria-label", S.speed === 0 ? "Пуск" : "Пауза");
   }
@@ -1493,7 +1503,12 @@ const sandbox = (() => {
   // One frame: run the physics, then put the bodies where it says. Returns the moons' clock for placeAll.
   function step(dt) {
     direct(dt);
-    const days = story.on ? storyTick(dt) : state.paused ? 0 : dt * SPEEDS[S.speed][0] * S.slow;
+    // one pause for everything: the site's own "Пауза" stops a story too (and its effects), and the sandbox's ❚❚
+    // buttons show it; the sandbox's buttons let the site go on again (js: wire)
+    const hold = state.paused || (story.on && story.paused) || (!story.on && S.speed === 0);
+    const fxdt = hold ? 0 : dt;
+    const days = story.on ? (state.paused ? 0 : storyTick(dt)) : state.paused ? 0 : dt * SPEEDS[S.speed][0] * S.slow;
+    syncPause();
     advance(days);
     watch();
     for (const b of S.bodies) {
@@ -1508,13 +1523,16 @@ const sandbox = (() => {
         B.group.visible = k > 0.02; B.group.scale.setScalar(SUN_K * Math.max(k, 0.02));
       } else B.group.visible = !b.bh && (b.m > 0 || S.days < 0.0058);   // gone, but its last light is still on the way for 8 minutes
     }
-    freeMoons(dt);
+    freeMoons(fxdt);
     shrinkClose(dt);
-    stretch(); blackHole(dt); streams(days, dt);
+    stretch(); blackHole(fxdt); streams(days, fxdt);
     drawTrails();
-    fireHits(); booms(dt); splashes(dt); impacts(dt); shells(dt);
+    fireHits(); booms(fxdt); splashes(fxdt); impacts(fxdt); shells(fxdt);
     readout();
-    return { jd: S.jd0 + S.days, dDays: days, fine: days / Math.max(dt, 1e-3) <= 1 };
+    // (stopped: the moons stay put instead of jumping to their exact places)
+    if (hold || days === 0) return { jd: S.jd0 + S.days, dDays: 0, fine: S.lastFine !== false && S.lastFine };
+    S.lastFine = days / Math.max(dt, 1e-3) <= 1;
+    return { jd: S.jd0 + S.days, dDays: days, fine: S.lastFine };
   }
 
   /* ---------- Black holes: the hole, tides and streams of debris ---------- */
@@ -1731,8 +1749,9 @@ const sandbox = (() => {
     el("sbSlower").addEventListener("click", () => { S.speed = Math.max(1, (S.speed || S.resume || 2) - 1); renderPanel(); });
     el("sbFaster").addEventListener("click", () => { S.speed = Math.min(SPEEDS.length - 1, (S.speed || S.resume || 1) + 1); renderPanel(); });
     el("sbPlay").addEventListener("click", () => {
-      if (S.speed) { S.resume = S.speed; S.speed = 0; } else S.speed = S.resume || 2;
-      renderPanel();
+      if (state.paused) { el("pause").click(); if (!S.speed) S.speed = S.resume || 2; }   // the site was paused: go on
+      else if (S.speed) { S.resume = S.speed; S.speed = 0; } else S.speed = S.resume || 2;
+      shownPause = null; renderPanel();
     });
     el("sbOverview").addEventListener("click", () => { endShot(false); S.holdUntil = performance.now() + 8000; showOverview(); });
     el("sbDirector").addEventListener("click", () => { S.director = !S.director; S.holdUntil = 0; renderPanel(); });
@@ -1757,9 +1776,9 @@ const sandbox = (() => {
       else story.ff = true;                                                       // let time run fast to the event
     });
     el("sbsPause").addEventListener("click", () => {
-      story.paused = !story.paused;
-      el("sbsPause").textContent = story.paused ? "▶" : "❚❚";
-      el("sbStory").classList.toggle("paused", story.paused);
+      if (state.paused) { el("pause").click(); story.paused = false; }    // the site was paused: go on
+      else story.paused = !story.paused;
+      shownPause = null; syncPause();
     });
     el("sbsSound").addEventListener("click", () => {
       const on = el("sbsSound").getAttribute("aria-pressed") !== "true";

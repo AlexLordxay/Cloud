@@ -476,7 +476,8 @@ function tick() {
     state.simMs = Math.min(MAX_MS, Math.max(MIN_MS, state.simMs));
     if (!state.paused) $("pause").click();
   }
-  let jd = jdOf(state.simMs), dDays = dt * rateS / 86400, fine = rateS <= 86400;
+  // (paused: the moons stay where they are — switching to their exact places would make them jump)
+  let jd = jdOf(state.simMs), dDays = dt * rateS / 86400, fine = state.paused && !sandbox.on ? state.fine : rateS <= 86400;
   if (sandbox.on) ({ jd, dDays, fine } = sandbox.step(dt));
   state.fine = fine;
   placeAll(jd, dDays, fine);
