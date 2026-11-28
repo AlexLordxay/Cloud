@@ -1110,7 +1110,8 @@ const sandbox = (() => {
     glide(dt);
   }
   function glide(dt) {
-    const k = 1 - Math.exp(-dt * (shot.t < 2.5 ? 1.6 : 4));   // glide in, then hold steady on the planet
+    const k = shot.snap ? 1 : 1 - Math.exp(-dt * (shot.t < 2.5 ? 1.6 : 4));   // glide in, then hold steady on the planet
+    shot.snap = false;
     shot.off.lerp(sC, k); shot.aim.lerp(sT, k);
     controls.target.copy(sP).add(shot.aim); camera.position.copy(sP).add(shot.off); camera.lookAt(controls.target);
   }
@@ -1420,6 +1421,7 @@ const sandbox = (() => {
     S.holdUntil = 0; story.wasHeld = false;
     if (typeof setActive === "function") setActive(null);
     storyShot();                                     // (it also lets go of the picked planet: the sandbox drives the camera)
+    shot.snap = true;                                // a clean cut to the story's shot, not a swing round from where the viewer was
     try { history.replaceState(null, "", "#sandbox" + (S.scenario ? "-" + S.scenario : "")); } catch (e) { /* not allowed here */ }
   }
   // the sandbox's ❚❚/▶ buttons follow the site's pause as well as their own
