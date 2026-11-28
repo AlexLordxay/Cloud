@@ -31,7 +31,7 @@ const sandbox = (() => {
     "stop-earth": { title: "Земля зупинилася", speed: 2,
       text: "Земля раптом зупинилася на своїй орбіті. Ніщо більше не відводить її вбік — і вона падає прямо на Сонце." },
   };
-  const S = { on: false, bodies: [], days: 0, t: 0, rips: [], streams: [], speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
+  const S = { on: false, bodies: [], days: 0, t: 0, rips: [], streams: [], speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], impacts: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
   const V = () => new THREE.Vector3();
 
   function body(id, m, pos, vel) { return { id, m, p: pos, v: vel, a: V(), alive: true, trail: [] }; }
@@ -338,17 +338,108 @@ const sandbox = (() => {
   // All of it is a shell over the planet's own material, shaded by the hottest star, plus a glow and a tail.
   const ramp = (x, a, b) => Math.min(1, Math.max(0, (x - a) / (b - a)));
   let tailTex = null;
+
+  /* ---------- Fire: a plume of burning rock and smoke, sparks, a jet ---------- */
+  // A tapered tube along +y from 0 (the base) to 1 (the end), shaped in the vertex shader: R the radius at the base,
+  // len its length, wid how many times wider it gets. The fire is bright where the tube is seen face-on (its middle)
+  // and fades to the sides, so it reads as a glowing volume; turbulence (noise) streams along it. A second, wider tube
+  // of dark smoke takes over further out (normal blending: it darkens the bright Sun behind it).
+  const PLUME_VS = `uniform float R; uniform float len; uniform float wid; varying vec3 vN; varying vec3 vV; varying vec3 vM; varying float vY; varying vec2 vCS;
+    void main(){ float y = position.y; float rad = R * mix(0.75, wid, pow(y, 1.1));   // slim at first: it comes out from behind the planet
+      float slope = R * (wid - 0.75) * 1.1 * pow(max(y, 0.001), 0.1) / len;          // the cone's own normal (its edges then fade out)
+      vec3 p = vec3(position.x * rad, y * len, position.z * rad); vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      vN = normalize(normalMatrix * normalize(vec3(position.x, -slope, position.z))); vV = normalize(-mv.xyz); vM = mv.xyz; vY = y; vCS = position.xz;
+      gl_Position = projectionMatrix * mv; }`;
+  // (pc, pr: the planet's centre in view space and its radius — fire passing in front of the planet is thinned, so
+  // its molten face still shows through)
+  const PLUME_FRONT = `uniform vec3 pc; uniform float pr;
+    float overPlanet(vec3 m){ if (pr <= 0.0) return 0.0; vec3 d = normalize(m); float t = dot(pc, d);
+      float perp = length(pc - d * t); return (1.0 - smoothstep(pr * 0.8, pr * 1.05, perp)) * step(length(m), length(pc)); }`;
+  const FIRE_FS = PLUME_FRONT + `uniform float time; uniform float k; uniform float stretch; varying vec3 vN; varying vec3 vV; varying vec3 vM; varying float vY; varying vec2 vCS;
+    void main(){
+      float core = abs(dot(normalize(vN), normalize(vV)));
+      vec3 q = vec3(vCS * 1.8, vY * stretch - time * 1.6);
+      float n = fbm2(q) * 0.6 + 0.5, n2 = snoise(q * 2.2 + vec3(0.0, 4.0, -time * 1.2)) * 0.5 + 0.5;
+      // soft tongues of flame, stretched along the flow, breaking up into wisps further out
+      float flick = smoothstep(0.3 + 0.3 * vY, 0.85, n * 0.8 + n2 * 0.32);
+      float along = pow(1.0 - vY, 1.3) * smoothstep(0.0, 0.05, vY);
+      float I = core * along * (0.1 + 1.5 * flick) * k * (1.0 - 0.55 * overPlanet(vM));
+      float t = clamp(vY * 1.3 + (1.0 - flick) * 0.45, 0.0, 1.0);
+      vec3 col = mix(vec3(1.0, 0.92, 0.72), vec3(1.0, 0.58, 0.16), smoothstep(0.0, 0.28, t));
+      col = mix(col, vec3(0.9, 0.22, 0.03), smoothstep(0.28, 0.6, t));
+      col = mix(col, vec3(0.35, 0.05, 0.01), smoothstep(0.6, 1.0, t));
+      gl_FragColor = vec4(col, clamp(I, 0.0, 1.0)); }`;
+  const SMOKE_FS = PLUME_FRONT + `uniform float time; uniform float k; uniform float stretch; varying vec3 vN; varying vec3 vV; varying vec3 vM; varying float vY; varying vec2 vCS;
+    void main(){
+      float core = pow(abs(dot(normalize(vN), normalize(vV))), 0.9) * (1.0 - 0.7 * overPlanet(vM));
+      vec3 q = vec3(vCS * 1.1, vY * stretch * 0.7 - time * 0.9);
+      float n = fbm2(q) * 0.6 + 0.5, n2 = snoise(q * 2.3 + vec3(0.0, 5.0, -time * 0.6)) * 0.5 + 0.5;
+      float d = smoothstep(0.2, 0.75, n * 0.75 + n2 * 0.4);
+      float a = core * d * smoothstep(0.12, 0.42, vY) * pow(1.0 - vY, 1.2) * k * 0.95;
+      gl_FragColor = vec4(mix(vec3(0.03, 0.022, 0.02), vec3(0.16, 0.09, 0.05), n2), clamp(a, 0.0, 0.9)); }`;
+  let plumeGeo = null;
+  function firePlume(R, parent = scene) {
+    if (!plumeGeo) { plumeGeo = new THREE.CylinderGeometry(1, 1, 1, 28, 40, true); plumeGeo.translate(0, 0.5, 0); }
+    const mk = (fs, add, wid) => {
+      const u = { time: { value: Math.random() * 40 }, k: { value: 0 }, R: { value: R }, len: { value: R }, wid: { value: wid }, stretch: { value: 5 }, pc: { value: V() }, pr: { value: 0 } };
+      const m = new THREE.Mesh(plumeGeo, new THREE.ShaderMaterial({ uniforms: u, vertexShader: PLUME_VS, fragmentShader: NOISE_GLSL + fs,
+        transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: add ? THREE.AdditiveBlending : THREE.NormalBlending }));
+      m.frustumCulled = false; return { m, u };
+    };
+    const smoke = mk(SMOKE_FS, false, 3.6), fire = mk(FIRE_FS, true, 2.2);
+    smoke.m.renderOrder = 3; fire.m.renderOrder = 4;
+    const g = new THREE.Group(); g.add(smoke.m, fire.m); g.visible = false; parent.add(g);
+    return { g, fire, smoke };
+  }
+  const Y_AXIS = new THREE.Vector3(0, 1, 0), qPl = new THREE.Quaternion();
+  // k 0..1 how fiercely the planet boils; dir the way the plume streams; R the planet's radius on the screen
+  function firePlumeSet(pl, k, pos, dir, R, dt) {
+    pl.g.visible = k > 0.01;
+    if (!pl.g.visible) return;
+    pl.g.position.copy(pos).addScaledVector(dir, R * 0.25); pl.g.quaternion.copy(qPl.setFromUnitVectors(Y_AXIS, dir));
+    const L = R * (2.5 + 10 * k);
+    for (const [part, len, wid] of [[pl.fire, L, 1.7 + 1.2 * k], [pl.smoke, L * 1.7, 2.6 + 2.2 * k]]) {
+      part.u.k.value = Math.min(1, k * 1.4); part.u.R.value = R; part.u.len.value = len; part.u.wid.value = wid;
+      part.u.stretch.value = 2.5 + len / R * 0.35; part.u.time.value += dt;
+      part.u.pc.value.copy(pos).applyMatrix4(camera.matrixWorldInverse); part.u.pr.value = R;
+    }
+  }
+  // Sparks: drops of molten rock thrown off the hot side, swept back with the plume and left behind as the planet
+  // races on, cooling from yellow to red as they go.
+  function sparks(sh, k, pos, dir, sunDir, R, dt) {
+    sh.tail.visible = k > 0.01 || sh.seeds.some(q => q.age < q.life);
+    if (!sh.tail.visible) return;
+    sh.tail.material.size = R * 0.16;
+    const pa = sh.tail.geometry.attributes.position, ca = sh.tail.geometry.attributes.color;
+    for (let i = 0; i < sh.seeds.length; i++) {
+      const q = sh.seeds[i];
+      q.age += dt;
+      if (q.age >= q.life && k > 0.01 && Math.random() < k * dt * 6) {
+        // from the sunward half, near the limb
+        tUp.set(Math.random() * 2 - 1, Math.random() * 2 - 1, Math.random() * 2 - 1).normalize().addScaledVector(sunDir, 0.5).normalize();
+        q.p.copy(pos).addScaledVector(tUp, R * 1.02);
+        q.v.copy(dir).multiplyScalar(R * (1.2 + Math.random() * 3.2)).addScaledVector(tUp, R * (0.3 + Math.random() * 0.9));
+        q.age = 0; q.life = 0.7 + Math.random() * 1.1;
+      }
+      if (q.age >= q.life) { ca.setXYZ(i, 0, 0, 0); continue; }
+      q.p.addScaledVector(q.v, dt); q.v.multiplyScalar(Math.exp(-dt * 0.6));
+      pa.setXYZ(i, q.p.x, q.p.y, q.p.z);
+      const f = q.age / q.life, b = (1 - f) * (1 - f) * 1.3;
+      ca.setXYZ(i, b, b * (0.75 - 0.5 * f), b * (0.35 - 0.3 * f));
+    }
+    pa.needsUpdate = true; ca.needsUpdate = true;
+  }
   function makeShells() {
     tailTex = glowSprite("255,255,255", 1, 1).material.map;
     for (const id of ID.slice(1)) {
       const B = byId[id], gas = !ROCKY.includes(id);
       const u = { dry: { value: 0 }, crack: { value: 0 }, melt: { value: 0 }, frost: { value: 0 }, flash: { value: 0 }, dark: { value: 0 },
-        time: { value: Math.random() * 50 }, sunDir: { value: new THREE.Vector3(1, 0, 0) } };
+        time: { value: Math.random() * 50 }, sunDir: { value: new THREE.Vector3(1, 0, 0) }, hitDir: { value: new THREE.Vector3(1, 0, 0) } };
       const m = new THREE.Mesh(new THREE.SphereGeometry(B.radius * 1.018, 96, 64), new THREE.ShaderMaterial({
         uniforms: u, transparent: true, depthWrite: false, defines: gas ? { GAS: 1 } : {},
         vertexShader: `varying vec3 vN; varying vec3 vW; varying vec3 vP;
           void main(){ vP = normalize(position); vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-        fragmentShader: NOISE_GLSL + `uniform float dry; uniform float crack; uniform float melt; uniform float frost; uniform float flash; uniform float dark; uniform float time; uniform vec3 sunDir;
+        fragmentShader: NOISE_GLSL + `uniform float dry; uniform float crack; uniform float melt; uniform float frost; uniform float flash; uniform float dark; uniform float time; uniform vec3 sunDir; uniform vec3 hitDir;
           varying vec3 vN; varying vec3 vW; varying vec3 vP;
           void main(){
             vec3 N = normalize(vN), V = normalize(cameraPosition - vW);
@@ -370,12 +461,19 @@ const sandbox = (() => {
             vec3 magma = mix(vec3(1.0, 0.25, 0.03), vec3(1.0, 0.7, 0.25), cr);
             col += magma * cr * 2.2;
             a = max(a, cr);
-            // molten: flowing lava, bright where it is hottest, crusting over in dark rafts
+            // molten: an ocean of lava. Convection cells — bright seams where hot rock wells up, cooling crust between —
+            // drifting slowly; yellow to white-hot on the side facing the star, dull red on the night side (never a
+            // featureless white ball: the brightest seams stay under ~1.2)
             float lv = fbm(vP * 3.0 + vec3(time * 0.05, time * 0.03, 0.0)) * 0.5 + 0.5;
-            float rafts = smoothstep(0.55, 0.7, fbm(vP * 5.0 - vec3(0.0, time * 0.04, 0.0)) * 0.5 + 0.5) * (1.0 - melt * 0.8);
-            vec3 lava = mix(vec3(0.8, 0.12, 0.01), vec3(1.0, 0.65, 0.2), lv);
-            lava = mix(lava, vec3(1.0, 0.92, 0.7), smoothstep(0.85, 1.0, melt) * lv);
-            lava = mix(lava * 2.0, crust * lit, rafts);
+            float cell = 1.0 - abs(snoise(vP * 7.0 + vec3(0.0, time * 0.06, time * 0.04)));
+            float seam = cell * cell * cell * cell * cell * cell;
+            float day = smoothstep(-0.35, 0.85, ndl);
+            float rafts = smoothstep(0.5, 0.68, fbm(vP * 5.0 - vec3(0.0, time * 0.04, 0.0)) * 0.5 + 0.5) * (1.0 - 0.7 * melt * day);
+            float glow = (0.35 + 0.65 * lv) * (0.45 + 0.55 * day) + seam * (0.6 + 0.6 * day);
+            vec3 lava = mix(vec3(0.5, 0.05, 0.01), vec3(1.0, 0.42, 0.07), clamp(glow, 0.0, 1.0));
+            lava = mix(lava, vec3(1.0, 0.84, 0.5), smoothstep(0.8, 1.3, glow) * day * melt);
+            lava *= 0.72 + 0.38 * min(glow, 1.25);
+            lava = mix(lava, crust * (0.25 + 0.75 * lit) + vec3(0.3, 0.05, 0.0) * seam, rafts);
             col = mix(col, lava, melt);
             a = mix(a, 1.0, melt);
           #else
@@ -387,8 +485,9 @@ const sandbox = (() => {
           #endif
             // the glowing limb of a hot planet, and the flash of an impact
             float hotRim = max(melt, crack * 0.6) * rim * rim;
-            col += vec3(1.0, 0.4, 0.08) * (hotRim * 1.5 + flash * 2.0);
-            a = max(a, max(hotRim, flash));
+            float fl = flash * (0.2 + 0.8 * pow(max(dot(N, hitDir), 0.0), 1.5));    // brightest on the side that was struck
+            col += vec3(1.0, 0.4, 0.08) * (hotRim * 1.0 + fl * 1.6);
+            a = max(a, max(hotRim, fl));
             // frost in the cold (rocky planets)
             float fa = frost * smoothstep(0.62 - 0.75 * frost, 0.7 - 0.55 * frost, n);   // deep cold: ice everywhere
             col = mix(col, vec3(0.88, 0.94, 1.0) * (0.25 + 0.75 * lit), fa);
@@ -402,16 +501,18 @@ const sandbox = (() => {
       }));
       m.visible = false; m.renderOrder = 2; B.tiltGroup.add(m);
       const glow = glowSprite("255,120,40", B.radius * 6, 0); glow.visible = false; B.group.add(glow);
-      // the tail: vapour boiled off the planet, streaming away from the star and fading
-      const NT = 240, tp = new Float32Array(NT * 3), tc = new Float32Array(NT * 3);
+      // the plume: rock boiled off the hot side streams away — fire near the planet, then dark smoke — and sparks
+      // (molten drops) fly off and are left behind along the way (js: firePlume, sparks)
+      const plume = firePlume(B.radius);
+      const NT = 150, tp = new Float32Array(NT * 3), tc = new Float32Array(NT * 3);
       const tg = new THREE.BufferGeometry(); tg.setAttribute("position", new THREE.BufferAttribute(tp, 3)); tg.setAttribute("color", new THREE.BufferAttribute(tc, 3));
-      const tail = new THREE.Points(tg, new THREE.PointsMaterial({ size: B.radius * 0.75, map: tailTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+      const tail = new THREE.Points(tg, new THREE.PointsMaterial({ size: B.radius * 0.16, map: tailTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
       tail.frustumCulled = false; tail.visible = false; scene.add(tail);
-      const seeds = Array.from({ length: NT }, () => [Math.random(), Math.random() * 2 - 1, Math.random() * 2 - 1, 0.6 + Math.random() * 0.8]);
+      const seeds = Array.from({ length: NT }, () => ({ p: V(), v: V(), age: 1, life: 1 }));
       // the Earth's blue air glow goes with the oceans
       // (and every rocky planet's air glow goes out when no star is left to light it)
       const air = ROCKY.includes(id) ? B.tiltGroup.children.filter(c => c !== m && c.material && c.material.blending === THREE.AdditiveBlending) : [];
-      S.shells[id] = { m, u, glow, tail, seeds, flash: 0, gas, air };
+      S.shells[id] = { m, u, glow, tail, seeds, plume, prev: V(), vel: V(), flash: 0, gas, air };
     }
   }
   // No star shines any more (its last light, 8 minutes on the way, has passed too).
@@ -437,8 +538,10 @@ const sandbox = (() => {
       ease(sh.u.dry, b.id === "earth" ? ramp(T, 330, 520) : 0, 2);
       // near a black hole, tides knead the planet: it heats up, cracks and glows before it is torn apart
       const tf = tidal(b);
-      ease(sh.u.crack, Math.max(sh.gas ? 0 : ramp(T, 600, 1100), sh.gas ? 0 : ramp(tf, 0.3, 0.75)), 3);
-      ease(sh.u.melt, Math.max(sh.gas ? ramp(T, 700, 1800) : ramp(T, 1100, 1700), ramp(tf, sh.gas ? 0.35 : 0.6, 1)), 3);
+      sh.impact = Math.max(0, (sh.impact || 0) - dt / 40);  // after a giant impact: an ocean of magma, slowly crusting over
+      const ih = b.alive ? sh.impact : 0;
+      ease(sh.u.crack, Math.max(sh.gas ? 0 : ramp(T, 600, 1100), sh.gas ? 0 : ramp(tf, 0.3, 0.75), sh.gas ? 0 : Math.min(1, ih * 2)), 3);
+      ease(sh.u.melt, Math.max(sh.gas ? ramp(T, 700, 1800) : ramp(T, 1100, 1700), ramp(tf, sh.gas ? 0.35 : 0.6, 1), sh.gas ? ih * 0.6 : ramp(ih, 0.15, 0.6)), 3);
       ease(sh.u.frost, !ROCKY.includes(b.id) ? 0 : COLD[S.scenario] ? ramp(S.days, 5, 400) : S.scenario === "jupiter-earth" && b.id === "earth" ? ramp(S.days, 30, 700) : ramp(-T, -175, -55), 1.5);
       sh.u.flash.value = sh.flash;
       ease(sh.u.dark, starless() ? 0.7 * (1 - Math.max(sh.u.melt.value, sh.u.crack.value * 0.8, sh.flash)) : 0, 1.2);
@@ -451,29 +554,25 @@ const sandbox = (() => {
       sh.m.visible = b.alive && any > 0.01;
       const heat = Math.max(u.crack.value * 0.6, u.melt.value, u.flash.value);
       sh.glow.visible = b.alive && heat > 0.03;
-      sh.glow.material.opacity = 0.55 * heat;
+      sh.glow.material.opacity = 0.32 * heat;
       // the Earth's clouds burn away as it dries
       if (b.id === "earth" && typeof earthClouds !== "undefined" && earthClouds) earthClouds.visible = !b.alive || u.dry.value < 0.4;
       for (const c of sh.air) c.visible = u.dry.value < 0.5 && u.crack.value < 0.3 && u.dark.value < 0.3;
-      // the vapour tail
+      // the plume: away from the star and back along the planet's path (its motion on the screen)
       const tk = b.alive && best ? ramp(T, 850, 1600) : 0;
-      sh.tail.visible = tk > 0.01;
-      if (sh.tail.visible) {
-        tOff.copy(sh.u.sunDir.value).negate();                  // away from the star
-        tSide.crossVectors(tOff, Math.abs(tOff.y) > 0.9 ? tUp.set(1, 0, 0) : tUp.set(0, 1, 0)).normalize(); tUp.crossVectors(tSide, tOff);
-        const pa = sh.tail.geometry.attributes.position, ca = sh.tail.geometry.attributes.color, L = B.radius * (4 + 14 * tk);
-        for (let k = 0; k < sh.seeds.length; k++) {
-          const [s0, x, y, sp] = sh.seeds[k], f = (s0 + sh.u.time.value * 0.25 * sp) % 1, d = f * L, w = B.radius * (0.5 + 1.6 * f);
-          pa.setXYZ(k, B.world.x + tOff.x * (B.radius + d) + (tSide.x * x + tUp.x * y) * w, B.world.y + tOff.y * (B.radius + d) + (tSide.y * x + tUp.y * y) * w, B.world.z + tOff.z * (B.radius + d) + (tSide.z * x + tUp.z * y) * w);
-          const fade = (1 - f) * (1 - f) * tk * 0.55;
-          ca.setXYZ(k, fade, fade * (0.5 - 0.3 * f), fade * (0.15 + 0.2 * f));
-        }
-        pa.needsUpdate = true; ca.needsUpdate = true;
-      }
+      if (dt > 0) { tA.copy(B.world).sub(sh.prev).divideScalar(dt); if (sh.prev.lengthSq() > 0 && tA.length() < B.radius * 60) sh.vel.lerp(tA, Math.min(1, dt * 3)); }
+      sh.prev.copy(B.world);
+      tOff.copy(sh.u.sunDir.value).negate();
+      const sp = sh.vel.length();
+      if (sp > B.radius * 0.05) tOff.addScaledVector(sh.vel, -0.7 / sp).normalize();
+      const R = B.radius * (B.sbScale || 1);
+      firePlumeSet(sh.plume, b.alive ? tk : 0, B.world, tOff, R, dt);
+      sparks(sh, b.alive ? tk : 0, B.world, tOff, sh.u.sunDir.value, R, dt);
     }
   }
   function hideShells() {
-    for (const id in S.shells) { const sh = S.shells[id]; sh.m.visible = sh.glow.visible = sh.tail.visible = false; sh.flash = 0; for (const k of ["dry", "crack", "melt", "frost", "flash", "dark"]) sh.u[k].value = 0; }
+    for (const id in S.shells) { const sh = S.shells[id]; sh.m.visible = sh.glow.visible = sh.tail.visible = false; sh.flash = 0; for (const k of ["dry", "crack", "melt", "frost", "flash", "dark"]) sh.u[k].value = 0;
+      sh.plume.g.visible = false; sh.prev.set(0, 0, 0); sh.vel.set(0, 0, 0); for (const q of sh.seeds) q.age = q.life; }
     if (typeof earthClouds !== "undefined" && earthClouds) earthClouds.visible = true;
     for (const id in S.shells) for (const c of S.shells[id].air) c.visible = true;
   }
@@ -519,7 +618,8 @@ const sandbox = (() => {
   function clearBooms() {
     for (const e of S.booms) scene.remove(e.g);
     for (const e of S.splashes) scene.remove(e.g);
-    S.booms.length = 0; S.splashes.length = 0;
+    for (const e of S.impacts) scene.remove(e.g);
+    S.booms.length = 0; S.splashes.length = 0; S.impacts.length = 0;
   }
 
   // A planet falling into a star: the surface takes the blow like a flare. Arcs of glowing plasma leap out of the spot,
@@ -529,7 +629,7 @@ const sandbox = (() => {
     const g = new THREE.Group(); g.position.copy(c); scene.add(g);
     const A = dir.clone().normalize();
     const arcs = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 7; i++) {
       const side = new THREE.Vector3().crossVectors(A, Math.abs(A.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
       side.applyAxisAngle(A, Math.random() * TAU);
       const start = A.clone().applyAxisAngle(side, (Math.random() - 0.5) * 0.12);
@@ -541,7 +641,7 @@ const sandbox = (() => {
         pts.push(d.multiplyScalar(R * (0.99 + height * Math.sin(PI * t))));
       }
       const u = { time: { value: Math.random() * 10 }, life: { value: 0 }, grow: { value: 0 }, seed: { value: Math.random() * 100 }, R: { value: R } };
-      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 72, R * (0.03 + Math.random() * 0.04), 10, false), new THREE.ShaderMaterial({
+      const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 72, R * (0.018 + Math.random() * 0.03), 10, false), new THREE.ShaderMaterial({
         uniforms: u, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
         vertexShader: `uniform float grow; uniform float R; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
           void main(){ vUv = uv; vec3 d = normalize(position); vec3 p = d * (R + (length(position) - R) * grow);
@@ -555,7 +655,7 @@ const sandbox = (() => {
             gl_FragColor = vec4(col, clamp(I, 0.0, 1.0));
           }`,
       }));
-      g.add(m); arcs.push({ m, u, delay: Math.random() * 0.5, speed: 0.8 + Math.random() * 0.6 });
+      g.add(m); arcs.push({ m, u, delay: 0.5 + Math.random() * 0.9, speed: 0.7 + Math.random() * 0.5 });   // after the jet
     }
     // the wave over the surface and the hot spot where it struck
     const wu = { A: { value: A }, w: { value: 0 }, k: { value: 1 } };
@@ -570,7 +670,42 @@ const sandbox = (() => {
     }));
     const flash = glowSprite("255,210,150", R * 2.5, 1); flash.position.copy(A).multiplyScalar(R * 1.05);
     g.add(wave, flash);
-    S.splashes.push({ g, arcs, wu, flash, t: 0, R });
+    // the blow itself: a white-hot core, a jet of fire thrown back out of the hole it punched, a bubble of plasma
+    // swelling away into space (like a coronal mass ejection), molten drops arcing up and falling back, and a dark
+    // scar left on the surface for a while, like a sunspot
+    const core = glowSprite("255,250,235", R, 1); core.position.copy(A).multiplyScalar(R * 1.02); g.add(core);
+    const jet = firePlume(R * 0.22, g); jet.g.visible = true; jet.g.position.copy(A).multiplyScalar(R * 0.96); jet.g.quaternion.setFromUnitVectors(Y_AXIS, A);
+    const cu = { k: { value: 0 }, time: { value: Math.random() * 10 }, A: { value: A } };
+    const cme = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), new THREE.ShaderMaterial({ uniforms: cu, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: "varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ vP = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }",
+      fragmentShader: NOISE_GLSL + `uniform float k; uniform float time; uniform vec3 A; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+        void main(){ float rim = 1.0 - abs(dot(normalize(vN), normalize(vV)));
+          float fil = fbm2(vP * 3.6 + vec3(0.0, 0.0, time * 0.25)) * 0.6 + 0.5;
+          float strand = 1.0 - abs(snoise(vP * vec3(5.0, 5.0, 5.0) + vec3(time * 0.2)));
+          float front = smoothstep(-0.3, 0.6, dot(normalize(vP), A));      // the leading face, not a full ball
+          float I = rim * rim * rim * front * (0.15 + 1.6 * fil * fil * strand * strand) * k * 0.6;
+          gl_FragColor = vec4(mix(vec3(1.0, 0.5, 0.18), vec3(1.0, 0.88, 0.72), clamp(fil, 0.0, 1.0)), clamp(I, 0.0, 1.0)); }` }));
+    g.add(cme);
+    const su = { A: { value: A }, k: { value: 0 } };
+    const scar = new THREE.Mesh(new THREE.SphereGeometry(R * 1.006, 96, 64), new THREE.ShaderMaterial({ uniforms: su, transparent: true, depthWrite: false,
+      vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+      fragmentShader: NOISE_GLSL + `uniform vec3 A; uniform float k; varying vec3 vP;
+        void main(){ float a = acos(clamp(dot(normalize(vP), A), -1.0, 1.0));
+          float n = snoise(vP * 16.0) * 0.5 + 0.5, umbra = exp(-a * a / 0.0035), pen = exp(-a * a / 0.016) * (0.5 + 0.5 * n);
+          gl_FragColor = vec4(mix(vec3(0.4, 0.12, 0.02), vec3(0.06, 0.015, 0.0), umbra), clamp(umbra * 0.9 + pen * 0.55, 0.0, 0.92) * k); }` }));
+    g.add(scar);
+    const ND = 220, dp = new Float32Array(ND * 3), dc = new Float32Array(ND * 3), drops = [];
+    const dside = new THREE.Vector3().crossVectors(A, Math.abs(A.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize(), dup = new THREE.Vector3().crossVectors(dside, A);
+    for (let i = 0; i < ND; i++) {
+      const ang = Math.random() * TAU, spr = Math.pow(Math.random(), 0.7) * 0.9;
+      const d = A.clone().addScaledVector(dside, Math.cos(ang) * spr).addScaledVector(dup, Math.sin(ang) * spr).normalize();
+      drops.push({ d, v: R * (0.5 + Math.random() * 1.4), t0: Math.random() * 0.6 });
+    }
+    const dg = new THREE.BufferGeometry(); dg.setAttribute("position", new THREE.BufferAttribute(dp, 3)); dg.setAttribute("color", new THREE.BufferAttribute(dc, 3));
+    if (!softTex) softTex = glowSprite("255,255,255", 1, 1).material.map;
+    const dpts = new THREE.Points(dg, new THREE.PointsMaterial({ size: R * 0.05, map: softTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    dpts.frustumCulled = false; g.add(dpts);
+    S.splashes.push({ g, arcs, wu, flash, core, jet, cme, cu, su, drops, dpts, A, t: 0, R });
   }
   function splashes(dt) {
     for (let k = S.splashes.length - 1; k >= 0; k--) {
@@ -580,17 +715,177 @@ const sandbox = (() => {
         const x = Math.max(0, t - a.delay) * a.speed;
         // up fast, hang, then sink back as it cools
         a.u.grow.value = Math.min(1, x / 0.9) * (1 - 0.6 * smooth01((x - 3.0) / 3.0));
-        a.u.life.value = Math.min(1, x / 0.3) * (1 - smooth01((x - 2.8) / 3.2));
+        a.u.life.value = 0.75 * Math.min(1, x / 0.3) * (1 - smooth01((x - 2.8) / 3.2));
         a.u.time.value += dt;
       }
       e.wu.w.value = 1.4 * (1 - Math.exp(-t * 0.9));
       e.wu.k.value = 1 - smooth01((t - 2) / 3);
       e.flash.material.opacity = Math.max(0, 1 - t / 1.2);
       e.flash.scale.setScalar(e.R * (1.5 + 2.5 * Math.min(1, t / 0.3)));
-      if (t > 8) { scene.remove(e.g); e.g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); }); S.splashes.splice(k, 1); }
+      const R = e.R;
+      e.core.material.opacity = Math.max(0, 1 - t / 0.9);
+      e.core.scale.setScalar(R * (0.5 + 1.6 * Math.min(1, t / 0.18)));
+      // the jet shoots up fast, then hangs and dies down
+      const jk = Math.min(1, t / 0.2) * (1 - smooth01((t - 1.0) / 3.2));
+      e.jet.g.visible = jk > 0.01;
+      for (const [part, f, w] of [[e.jet.fire, 1, 2.4], [e.jet.smoke, 1.25, 3.2]]) {
+        part.u.k.value = jk * (part === e.jet.smoke ? 0.6 : 1); part.u.R.value = R * 0.22 * (1 + t * 0.3);
+        part.u.len.value = R * f * (0.2 + 1.9 * (1 - Math.exp(-t * 1.4))); part.u.wid.value = w; part.u.stretch.value = 4; part.u.time.value += dt;
+      }
+      // the bubble swells away from the star and fades
+      const bs = 0.2 + 1.7 * (1 - Math.exp(-t * 0.35));
+      e.cme.position.copy(e.A).multiplyScalar(R * (1 + 0.8 * bs)); e.cme.scale.setScalar(R * 0.7 * bs);
+      e.cu.k.value = smooth01(t / 1.0) * (1 - smooth01((t - 3) / 6)); e.cu.time.value += dt;
+      e.su.k.value = smooth01((t - 0.8) / 1.5) * (1 - smooth01((t - 8) / 6));
+      // molten drops: thrown up, pulled back down by the star's gravity, hidden once they fall back in
+      const pa = e.dpts.geometry.attributes.position, ca = e.dpts.geometry.attributes.color, gR = R * 1.1;
+      for (let i = 0; i < e.drops.length; i++) {
+        const q = e.drops[i], tt = t - q.t0;
+        if (tt <= 0) { ca.setXYZ(i, 0, 0, 0); continue; }
+        tA.copy(e.A).multiplyScalar(R * 1.01).addScaledVector(q.d, q.v * tt).addScaledVector(e.A, -0.5 * gR * tt * tt);
+        if (tA.length() < R * 1.0) { ca.setXYZ(i, 0, 0, 0); continue; }
+        pa.setXYZ(i, tA.x, tA.y, tA.z);
+        const f = Math.min(1, tt / 3), b = 1.2 * (1 - 0.6 * f);
+        ca.setXYZ(i, b, b * (0.85 - 0.6 * f), b * (0.5 - 0.45 * f));
+      }
+      pa.needsUpdate = true; ca.needsUpdate = true;
+      if (t > 15) { scene.remove(e.g); e.g.traverse(o => { if (o.geometry && o.geometry !== plumeGeo) o.geometry.dispose(); if (o.material) o.material.dispose(); }); S.splashes.splice(k, 1); }
     }
   }
   const smooth01 = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+
+  // A planet striking another: drawn on the survivor (id), at the point facing the impactor (dir), Rb its radius on
+  // the screen, rs the impactor's. A white-hot flash; a fountain of fire out of the crater; a glowing wave running
+  // round the planet; rocks — real chunks, glowing and cooling — thrown out: the slow ones fall back, some settle
+  // into a ring round the planet (as the Moon's material once did round the Earth), the fastest fly off; a spray of
+  // molten drops. A gas giant takes it differently: a fireball and a dark scar in its clouds, no rocks.
+  let rockGeo = null;
+  function impact(id, dir, Rb, rs) {
+    const gas = !ROCKY.includes(id), A = dir.clone();
+    const g = new THREE.Group(); g.position.copy(byId[id].world); scene.add(g);
+    const tip = A.clone().multiplyScalar(Rb);
+    const core = glowSprite("255,250,235", Rb, 1); core.position.copy(tip);
+    const glow = glowSprite("255,150,60", Rb * 4, 1); glow.position.copy(tip);
+    g.add(core, glow);
+    const jet = firePlume(Rb * (gas ? 0.3 : 0.22), g); jet.g.visible = true; jet.g.position.copy(A).multiplyScalar(Rb * 0.92); jet.g.quaternion.setFromUnitVectors(Y_AXIS, A);
+    // the wave and the crater (or the scar in the clouds), on a shell round the planet
+    const wu = { A: { value: A }, w: { value: 0 }, k: { value: 1 }, c: { value: 0 }, gas: { value: gas ? 1 : 0 } };
+    const wave = new THREE.Mesh(new THREE.SphereGeometry(Rb * 1.02, 72, 48), new THREE.ShaderMaterial({ uniforms: wu, transparent: true, depthWrite: false,
+      vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+      fragmentShader: NOISE_GLSL + `uniform vec3 A; uniform float w; uniform float k; uniform float c; uniform float gas; varying vec3 vP;
+        void main(){ vec3 p = normalize(vP); float a = acos(clamp(dot(p, A), -1.0, 1.0)); float n = snoise(p * 9.0) * 0.5 + 0.5;
+          float ring = exp(-pow((a - w) / (0.06 + 0.1 * w), 2.0)) * (1.0 - smoothstep(1.2, 2.6, w)) * (0.6 + 0.6 * n) * k;
+          float spot = exp(-a * a / (0.03 + 0.02 * n)) * c;
+          vec3 hot = mix(vec3(1.0, 0.35, 0.05), vec3(1.0, 0.8, 0.45), spot);
+          if (gas > 0.5) { float scar = exp(-a * a / 0.05) * (0.55 + 0.45 * n) * c;     // a bruise in the clouds, like Shoemaker–Levy 9 on Jupiter
+            gl_FragColor = vec4(mix(hot, vec3(0.05, 0.03, 0.02), step(0.001, scar) * 0.9), clamp(ring * 0.8 + scar * 0.85, 0.0, 0.95)); }
+          else gl_FragColor = vec4(hot * (1.2 + spot), clamp(ring * 0.9 + spot, 0.0, 1.0)); }` }));
+    wave.renderOrder = 3; g.add(wave);
+    // the axis a ring of debris would circle: across the line of the blow
+    const ax = V().crossVectors(A, Math.abs(A.y) > 0.9 ? V().set(1, 0, 0) : UP).normalize();
+    const rocks = [];
+    let inst = null;
+    if (!gas) {
+      if (!rockGeo) {
+        // a lumpy, faceted rock: an icosphere with its corners pushed in and out
+        const ico = new THREE.IcosahedronGeometry(1, 1), pa = ico.attributes.position, seen = new Map();
+        for (let i = 0; i < pa.count; i++) {
+          const key = `${pa.getX(i).toFixed(3)},${pa.getY(i).toFixed(3)},${pa.getZ(i).toFixed(3)}`;
+          if (!seen.has(key)) seen.set(key, 0.7 + Math.random() * 0.5);
+          const f = seen.get(key); pa.setXYZ(i, pa.getX(i) * f, pa.getY(i) * f * 0.85, pa.getZ(i) * f);
+        }
+        ico.computeVertexNormals(); rockGeo = ico;
+      }
+      const NR = 170;
+      inst = new THREE.InstancedMesh(rockGeo, new THREE.ShaderMaterial({ uniforms: { sunDir: { value: V() } },
+        vertexShader: `varying vec3 vN; varying vec3 vC;
+          void main(){ vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal); vC = instanceColor;
+            gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `uniform vec3 sunDir; varying vec3 vN; varying vec3 vC;
+          void main(){ float heat = vC.x, lit = 0.06 + 0.94 * max(dot(normalize(vN), sunDir), 0.0);
+            vec3 rock = vec3(0.34, 0.29, 0.25) * vC.y * lit;
+            vec3 hot = mix(vec3(0.9, 0.22, 0.03), vec3(1.0, 0.82, 0.5), heat * heat) * heat * (1.0 + 0.6 * heat);
+            gl_FragColor = vec4(rock * (1.0 - 0.7 * heat) + hot, 1.0); }` }), NR);
+      inst.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(NR * 3), 3);
+      inst.frustumCulled = false; g.add(inst);
+      const side = V().crossVectors(A, ax);
+      for (let i = 0; i < NR; i++) {
+        const ang = Math.random() * TAU, spr = Math.pow(Math.random(), 0.6) * 1.3;
+        const d = A.clone().addScaledVector(ax, Math.cos(ang) * spr).addScaledVector(side, Math.sin(ang) * spr).normalize();
+        const kind = Math.random(), sp = Rb * (kind < 0.45 ? 0.5 + Math.random() * 0.6 : kind < 0.8 ? 1.0 + Math.random() * 0.5 : 1.8 + Math.random() * 1.6);
+        rocks.push({ p: tip.clone().addScaledVector(d, Rb * 0.03), v: d.multiplyScalar(sp), ring: kind >= 0.45 && kind < 0.8, rt: Rb * (1.45 + Math.random() * 1.1),
+          s: Rb * (0.006 + Math.pow(Math.random(), 4) * 0.032) * Math.min(1.5, 0.6 + rs / Rb * 2), live: true, q: new THREE.Quaternion().random(),
+          w: new THREE.Quaternion().setFromAxisAngle(V().randomDirection(), (Math.random() - 0.5) * 0.25), heat: 1, alb: 0.7 + Math.random() * 0.6 });
+      }
+    }
+    // molten spray
+    const ND = 260, dp = new Float32Array(ND * 3), dc = new Float32Array(ND * 3), drops = [];
+    for (let i = 0; i < ND; i++) {
+      const d = A.clone().addScaledVector(V().randomDirection(), 0.9).normalize();
+      drops.push({ p: tip.clone(), v: d.multiplyScalar(Rb * (0.8 + Math.random() * 2.4)), life: 0.8 + Math.random() * 1.8 });
+    }
+    const dg = new THREE.BufferGeometry(); dg.setAttribute("position", new THREE.BufferAttribute(dp, 3)); dg.setAttribute("color", new THREE.BufferAttribute(dc, 3));
+    if (!softTex) softTex = glowSprite("255,255,255", 1, 1).material.map;
+    const dpts = new THREE.Points(dg, new THREE.PointsMaterial({ size: Rb * 0.06, map: softTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    dpts.frustumCulled = false; g.add(dpts);
+    S.impacts.push({ id, g, A, ax, Rb, gas, core, glow, jet, wu, rocks, inst, drops, dpts, t: 0 });
+  }
+  const mI = new THREE.Matrix4(), vS = new THREE.Vector3(), cI = new THREE.Color();
+  function impacts(dt) {
+    for (let k = S.impacts.length - 1; k >= 0; k--) {
+      const e = S.impacts[k], B = byId[e.id], b = get(e.id);
+      e.t += dt; const t = e.t, Rb = e.Rb;
+      if (!b || !b.alive || t > 28) { scene.remove(e.g); e.g.traverse(o => { if (o.geometry && o.geometry !== plumeGeo && o.geometry !== rockGeo) o.geometry.dispose(); if (o.material) o.material.dispose(); }); S.impacts.splice(k, 1); continue; }
+      e.g.position.copy(B.world);                          // the planet moves on: everything goes with it,
+      e.g.scale.setScalar(B.sbScale || 1);                  // and is drawn smaller with it while another planet is close
+      e.core.material.opacity = Math.max(0, 1 - t / 0.8); e.core.scale.setScalar(Rb * (0.6 + 2.2 * Math.min(1, t / 0.15)));
+      e.glow.material.opacity = Math.max(0, 0.9 - t / 2.2); e.glow.scale.setScalar(Rb * (2 + 5 * Math.min(1, t / 0.4)));
+      const jk = Math.min(1, t / 0.15) * (1 - smooth01((t - 0.8) / 3));
+      e.jet.g.visible = jk > 0.01;
+      for (const [part, f, w] of [[e.jet.fire, 1, e.gas ? 3.4 : 2.6], [e.jet.smoke, 1.3, e.gas ? 4.2 : 3.4]]) {
+        part.u.k.value = jk * (part === e.jet.smoke ? 0.7 : 1); part.u.R.value = Rb * (e.gas ? 0.3 : 0.22) * (1 + t * 0.4);
+        part.u.len.value = Rb * f * (0.15 + 1.7 * (1 - Math.exp(-t * 1.6))); part.u.wid.value = w; part.u.stretch.value = 4; part.u.time.value += dt;
+      }
+      e.wu.w.value = 2.4 * (1 - Math.exp(-t * 0.8)); e.wu.k.value = 1 - smooth01((t - 1.5) / 3);
+      e.wu.c.value = Math.min(1, t / 0.3) * (1 - smooth01((t - (e.gas ? 10 : 6)) / 16));
+      // the rocks: gravity of the planet, a little drag; ring-bound ones are steered onto circular orbits
+      if (e.inst) {
+        const g0 = Rb * 0.9;                                // surface gravity on this scale (scene units / s²)
+        for (let i = 0; i < e.rocks.length; i++) {
+          const r = e.rocks[i];
+          if (!r.live) { mI.makeScale(0, 0, 0); e.inst.setMatrixAt(i, mI); continue; }
+          for (let sub = 0; sub < 2; sub++) {
+            const h = dt / 2, d = r.p.length();
+            r.v.addScaledVector(r.p, -g0 * Rb * Rb / (d * d * d) * h);
+            if (r.ring && d > Rb * 1.15) {
+              const vc = Math.sqrt(g0 * Rb * Rb / d);
+              tA.crossVectors(e.ax, r.p).normalize().multiplyScalar(vc).addScaledVector(r.p, (r.rt - d) / d * 0.6);
+              r.v.lerp(tA, Math.min(1, h * 1.4));
+            }
+            r.p.addScaledVector(r.v, h);
+          }
+          if (r.p.length() < Rb * 0.98 && t > 0.3) r.live = false;
+          r.q.multiply(r.w); r.heat = Math.max(0, 1 - t / (2.5 + (r.s / Rb) * 150));   // big rocks stay hot longer
+          const fade = r.ring ? 1 - smooth01((t - 18) / 9) : 1 - smooth01((t - 6) / 6);
+          vS.setScalar(r.s * Math.max(0, fade)); mI.compose(r.p, r.q, vS); e.inst.setMatrixAt(i, mI);
+          // (r: how hot, g: how bright the rock) white-hot, orange, then dark rock lit by the star
+          cI.setRGB(r.heat, r.alb, 0); e.inst.setColorAt(i, cI);
+        }
+        e.inst.instanceMatrix.needsUpdate = true; e.inst.instanceColor.needsUpdate = true;
+        if (S.shells[e.id]) e.inst.material.uniforms.sunDir.value.copy(S.shells[e.id].u.sunDir.value);
+      }
+      const pa = e.dpts.geometry.attributes.position, ca = e.dpts.geometry.attributes.color;
+      for (let i = 0; i < e.drops.length; i++) {
+        const q = e.drops[i];
+        if (t > q.life) { ca.setXYZ(i, 0, 0, 0); continue; }
+        q.p.addScaledVector(q.v, dt); q.v.multiplyScalar(Math.exp(-dt * 1.2));
+        pa.setXYZ(i, q.p.x, q.p.y, q.p.z);
+        const f = t / q.life, c = (1 - f) * 1.3;
+        ca.setXYZ(i, c, c * (0.8 - 0.55 * f), c * (0.4 - 0.35 * f));
+      }
+      pa.needsUpdate = true; ca.needsUpdate = true;
+    }
+  }
   // Turn this frame's collisions into explosions: on the star's surface facing the planet, or where two planets met.
   function fireHits() {
     for (const h of S.hits) {
@@ -599,10 +894,13 @@ const sandbox = (() => {
         const c = scenePos(big, V()), dir = scenePos(small, V()).sub(c);
         if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
         splash(c, dir, byId.sun.radius * SUN_K * (big.id === "sun2" ? 0.95 : 1));
-      } else {
-        boom(scenePos(small, V()), Math.max(byId[h.small].radius, 0.8), false);
-        if (S.shells[h.big]) S.shells[h.big].flash = 1;   // the survivor glows from the impact
-      }
+      } else if (byId[h.big]) {
+        const Bb = byId[h.big], dir = scenePos(small, V()).sub(Bb.world);
+        if (dir.lengthSq() < 1e-9) dir.set(1, 0, 0);
+        impact(h.big, dir.normalize(), Bb.radius, byId[h.small] ? byId[h.small].radius : 0.5);   // (drawn at the planet's own size; scaled with it)
+        const sh = S.shells[h.big];
+        if (sh) { sh.flash = 1; sh.impact = 1; sh.u.hitDir.value.copy(dir); }   // the survivor glows, then stays molten for a long while
+      } else boom(scenePos(small, V()), Math.max(byId[h.small].radius, 0.8), false);
     }
     S.hits.length = 0;
   }
@@ -1056,8 +1354,21 @@ const sandbox = (() => {
     if (el("sbSpeedOut").textContent !== out) { el("sbSpeedOut").textContent = out; el("sbSpeedOut").classList.toggle("slow", sl); }
   }
 
+  // The effects' shaders are compiled once, when the sandbox first opens, not at the moment of a blow (a stutter
+  // there would spoil it, on a phone most of all): one of each is built out of sight, compiled and thrown away.
+  function warmUp() {
+    try {
+      const far = V().set(0, -1e5, 0);
+      splash(far, V().set(0, 1, 0), 1);
+      impact("venus", V().set(1, 0, 0), 1, 0.4);
+      for (const id in S.shells) { const sh = S.shells[id]; sh.plume.g.visible = true; sh.plume.g.position.copy(far); }
+      renderer.compile(scene, camera);
+    } catch (e) { /* a missing piece only means compiling later */ }
+    clearBooms();
+    for (const id in S.shells) S.shells[id].plume.g.visible = false;
+  }
   function open(key) {
-    if (!S.trails) { makeTrails(); makeShells(); }
+    if (!S.trails) { makeTrails(); makeShells(); warmUp(); }
     if (typeof endTour === "function" && document.body.classList.contains("touring")) endTour();
     S.on = true;
     S.jd0 = jdOf(state.simMs);
@@ -1116,7 +1427,7 @@ const sandbox = (() => {
     shrinkClose(dt);
     stretch(); blackHole(dt); streams(days, dt);
     drawTrails();
-    fireHits(); booms(dt); splashes(dt); shells(dt);
+    fireHits(); booms(dt); splashes(dt); impacts(dt); shells(dt);
     readout();
     return { jd: S.jd0 + S.days, dDays: days, fine: days / Math.max(dt, 1e-3) <= 1 };
   }
@@ -1283,16 +1594,25 @@ const sandbox = (() => {
   }
   // Just before it is torn, a planet is drawn stretched along the line to the hole.
   const qStretch = new THREE.Quaternion(), X_AXIS = new THREE.Vector3(1, 0, 0);
+  // Near a star its tides stretch a planet too, the last moments before it falls in: the Roche limit, where a fluid
+  // body is torn apart, is 2.44 star radii × (star density / planet density)^⅓ — about 1.5 solar radii for the Earth.
+  const RHO = { mercury: 5.43, venus: 5.24, earth: 5.51, mars: 3.93, jupiter: 1.33, saturn: 0.69, uranus: 1.27, neptune: 1.64 };
   function stretch() {
     const h = get("sun");
     for (const b of S.bodies) {
       const B = byId[b.id];
       if (!B || isStar(b) || !R_KM[b.id]) continue;
-      const tf = h && h.bh ? tidal(b) : 0, k = ramp(tf, 0.45, 1);
+      let k = 0, star = h;
+      if (h && h.bh) k = ramp(tidal(b), 0.45, 1);
+      else if (b.alive) for (const o of S.bodies) if (shines(o)) {
+        const roche = 2.44 * R_SUN_AU * Math.cbrt(1.41 * o.m / (RHO[b.id] || 3));
+        const ks = ramp(Math.pow(roche / Math.max(b.p.distanceTo(o.p), 1e-9), 3), 0.3, 1.6);
+        if (ks > k) { k = ks; star = o; }
+      }
       if (k <= 0) { if (B.stretched) { B.group.quaternion.identity(); B.stretched = false; } continue; }
-      scenePos(h, tPa); tPb.copy(tPa).sub(B.world).normalize();
+      scenePos(star, tPa); tPb.copy(tPa).sub(B.world).normalize();
       qStretch.setFromUnitVectors(X_AXIS, tPb); B.group.quaternion.copy(qStretch); B.stretched = true;
-      const sc = B.sbScale || 1, sx = 1 + 0.9 * k;
+      const sc = B.sbScale || 1, sx = 1 + (h && h.bh ? 0.9 : 0.7) * k;
       B.group.scale.set(sc * sx, sc / Math.sqrt(sx), sc / Math.sqrt(sx));
     }
   }
@@ -1307,7 +1627,7 @@ const sandbox = (() => {
       let k = 1;
       scenePos(b, tA);
       for (const o of P) if (o !== b) k = Math.min(k, Math.max(0.12, scenePos(o, tB).distanceTo(tA) / ((B.radius + byId[o.id].radius) * 2.2)));
-      B.sbScale = (B.sbScale || 1) + (k - (B.sbScale || 1)) * Math.min(1, dt * 4);
+      B.sbScale = (B.sbScale || 1) + (k - (B.sbScale || 1)) * Math.min(1, dt * (k < (B.sbScale || 1) ? 4 : 0.9));
       B.group.scale.setScalar(B.sbScale);
     }
   }
