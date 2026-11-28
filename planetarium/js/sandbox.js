@@ -1737,16 +1737,25 @@ const sandbox = (() => {
   // Planets are drawn far bigger than their distances allow, so two that pass close would swallow each other on the
   // screen. While they are close, both are drawn smaller (moons and glow with them), so the gap between them is seen.
   const tA = new THREE.Vector3(), tB = new THREE.Vector3();
+  // The second Sun too: it has no squeezed scale round it like the first, so a planet circling it 1–2 AU away was
+  // drawn passing through it ("touching" it with nothing happening). Near it, both are drawn smaller.
   function shrinkClose(dt) {
     const P = S.bodies.filter(b => b.alive && !isStar(b) && byId[b.id] && !MOONSET.has(b.id));
+    const stars = S.bodies.filter(s => s.alive && s.id === "sun2"), Rs = byId.sun.radius * SUN_K * 0.95;
+    let ks = 1;
     for (const b of P) {
       const B = byId[b.id];
       let k = 1;
       scenePos(b, tA);
       for (const o of P) if (o !== b) k = Math.min(k, Math.max(0.12, scenePos(o, tB).distanceTo(tA) / ((B.radius + byId[o.id].radius) * 2.2)));
-      B.sbScale = (B.sbScale || 1) + (k - (B.sbScale || 1)) * Math.min(1, dt * (k < (B.sbScale || 1) ? 4 : 0.9));
+      for (const st of stars) {
+        const kk = scenePos(st, tB).distanceTo(tA) / ((B.radius + Rs) * 2.0);
+        if (kk < 1) { k = Math.min(k, Math.max(0.06, kk)); ks = Math.min(ks, Math.max(0.15, kk)); }
+      }
+      B.sbScale = (B.sbScale || 1) + (k - (B.sbScale || 1)) * Math.min(1, dt * (k < (B.sbScale || 1) ? 8 : 0.9));
       B.group.scale.setScalar(B.sbScale);
     }
+    if (S.sun2) { S.sun2K = (S.sun2K || 1) + (ks - (S.sun2K || 1)) * Math.min(1, dt * (ks < (S.sun2K || 1) ? 8 : 0.9)); S.sun2.scale.setScalar(S.sun2K); }
   }
 
   // Wire the panel.
