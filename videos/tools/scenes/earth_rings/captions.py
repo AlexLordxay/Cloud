@@ -19,11 +19,11 @@ CAPTIONS = [
 ]
 NAMES = []
 SUBS = []
-CREDITS = [(0.2, 6.4, 'Київ: Sentinel-2 cloudless 2016 (EOX, CC BY 4.0) · художня візуалізація'),
-           (6.6, 20.5, 'Земля 465 млн р. тому: PALEOMAP (Scotese & Wright 2018, CC BY 4.0)'),
-           (20.7, 30.0, 'Гіпотеза: Tomkins, Martin, Cawood, EPSL, 2024 · позначки кратерів умовні'),
-           (30.2, 36.6, 'Похолодання кінця ордовику (~445 млн р. тому) · художня візуалізація'),
-           (36.8, 40.2, 'Київ: Sentinel-2 cloudless 2016 (EOX, CC BY 4.0) · художня візуалізація')]
+CREDITS = [(0.2, 6.4, 'Київ: Sentinel-2 cloudless (EOX, CC BY 4.0) · художня візуалізація'),
+           (6.6, 20.5, 'Земля 465 млн р. тому: PALEOMAP (CC BY 4.0)'),
+           (20.7, 30.0, 'Гіпотеза: Tomkins et al., 2024 · позначки кратерів умовні'),
+           (30.2, 36.6, 'Похолодання кінця ордовику · художня візуалізація'),
+           (36.8, 40.2, 'Київ: Sentinel-2 cloudless (EOX, CC BY 4.0) · художня візуалізація')]
 CUTS = []
 FADE_IN = 0
 SUBSCRIBE_AT = 24.5
@@ -39,6 +39,14 @@ GOLD = (255, 210, 120)
 def _fade(t, a, b, d=0.4):
     x = max(0.0, min(1.0, (t - a) / d, (b - t) / d)); return x * x * (3 - 2 * x)
 
+def _fit(H_, file, size, wght, s, maxw):
+    # the font size that fits the widest line within maxw
+    while size > 20:
+        f = H_['font'](file, size, wght)
+        if max(ImageDraw.Draw(Image.new('L', (1, 1))).textlength(l, font=f) for l in s.split('\n')) <= maxw: return f
+        size -= 4
+    return H_['font'](file, size, wght)
+
 def _text(img, xy, s, fnt, fill, anchor='mm', alpha=1.0):
     lay = Image.new('RGBA', img.size, (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
     sh = Image.new('RGBA', img.size, (0, 0, 0, 0)); ImageDraw.Draw(sh).multiline_text((xy[0], xy[1] + 3), s, font=fnt, fill=(0, 0, 0, int(230 * alpha)), anchor=anchor, align='center', spacing=8)
@@ -53,13 +61,13 @@ def DRAW(img, t, H_):
     # when
     a = _fade(t, 6.8, 13.6)
     if a > 0:
-        _text(img, (W / 2, 330), '466 млн років тому', f_big, GOLD, alpha=a)
+        _text(img, (W / 2, 330), '466 млн років тому', _fit(H_, 'Unbounded.ttf', 96, 600, '466 млн років тому', W - 90), GOLD, alpha=a)
         _text(img, (W / 2, 430), 'за гіпотезою вчених (2024)', f_sm, (225, 230, 240), alpha=a)
     # the Roche limit: why it came apart
     a = _fade(t, 14.3, 17.2)
     if a > 0:
         _text(img, (W / 2, 330), 'межа Роша', f_big, (255, 170, 120), alpha=a)
-        _text(img, (W / 2, 430), 'ближче до Землі — і припливні сили рвуть тіло', f_sm, (225, 230, 240), alpha=a)
+        _text(img, (W / 2, 430), 'ближче — і припливні сили Землі рвуть тіло', f_sm, (225, 230, 240), alpha=a)
     # the craters
     a = _fade(t, 21.0, 27.0)
     if a > 0:
