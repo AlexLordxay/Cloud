@@ -346,15 +346,24 @@ def ray_sphere(ox, oy, oz, dx, dy, dz, cx, cy, cz, Rs):
     return -b - s, -b + s
 
 @njit(fastmath=True)
-def clouds(nx, ny, nz, rot, cov):
-    # procedural cloud cover on the sphere: domain-warped noise, belts by latitude (equatorial towers, storm belts)
-    lat = math.asin(max(-1.0, min(1.0, nz))); lon = math.atan2(ny, nx) + rot
-    x = lon * 6.0; y = lat * 6.0
+def cloud_n(x, y):
     w1 = vn(x * 1.3, y * 1.3, 51.0); w2 = vn(x * 1.3 + 5.2, y * 1.3, 52.0)
     x += 0.7 * w1; y += 0.4 * w2
     n = 0.0; a = 0.5; fq = 1.0
     for o in range(6):
         n += a * vn(x * fq * (2.0 if o > 2 else 1.0), y * fq * 1.6, 53.0 + o); a *= 0.5; fq *= 2.1
+    return n
+
+@njit(fastmath=True)
+def clouds(nx, ny, nz, rot, cov):
+    # procedural cloud cover on the sphere: domain-warped noise, belts by latitude (equatorial towers, storm belts);
+    # near the poles the noise is taken on the polar projection instead (no streaks converging on the pole)
+    lat = math.asin(max(-1.0, min(1.0, nz))); lon = math.atan2(ny, nx) + rot
+    n = cloud_n(lon * 6.0, lat * 6.0)
+    wp = min(1.0, max(0.0, (abs(lat) - 0.95) / 0.30))
+    if wp > 0:
+        ux = nx * math.cos(rot) - ny * math.sin(rot); uy = nx * math.sin(rot) + ny * math.cos(rot)
+        n = n * (1 - wp) + cloud_n(ux * 6.0 + 11.0, uy * 6.0 + (7.0 if nz > 0 else -7.0)) * wp
     band = 0.55 + 0.25 * math.exp(-(lat / 0.12) ** 2) + 0.30 * math.exp(-((abs(lat) - 0.95) / 0.25) ** 2) - 0.25 * math.exp(-((abs(lat) - 0.45) / 0.15) ** 2)
     return 0.88 * min(1.0, max(0.0, (n * band - (0.60 - cov)) / 0.30)) ** 1.3
 
@@ -387,10 +396,12 @@ def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, c
                         # the ice cap on the southern supercontinent (the late-Ordovician glaciation)
                         if ice > 0:
                             ip = math.degrees(lat) + 90.0
-                            ice_n = 0.6 * (vn(lon * 9.0, lat * 9.0, 60.0) - 0.5) + 0.35 * (vn(lon * 27.0, lat * 27.0, 61.0) - 0.5)
+                            # (noise on the polar projection, not on lon/lat: no spikes converging on the pole)
+                            ux = nx * math.cos(rot) - ny * math.sin(rot); uy = nx * math.sin(rot) + ny * math.cos(rot)
+                            ice_n = 0.6 * (vn(ux * 9.0, uy * 9.0, 60.0) - 0.5) + 0.35 * (vn(ux * 27.0, uy * 27.0, 61.0) - 0.5)
                             ic = min(1.0, max(0.0, (ice - ip) / 3.0 + ice_n * 3.0))
                             if ar < ab: ic *= 0.85                        # sea ice thinner than the ice sheet on land
-                            sh_ = 0.84 + 0.16 * vn(lon * 40.0, lat * 40.0, 62.0)
+                            sh_ = 0.84 + 0.16 * vn(ux * 60.0, uy * 60.0, 62.0)
                             ar = ar * (1 - ic) + 0.86 * sh_ * ic; ag = ag * (1 - ic) + 0.90 * sh_ * ic; ab = ab * (1 - ic) + 0.97 * sh_ * ic
                         ndl = nx * sx + ny * sy + nz * sz
                         cl = clouds(nx, ny, nz, rot * 1.02, cov)
@@ -409,7 +420,7 @@ def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, c
                         sea = 1.0 if (ab > ar and ab > 0.18 and ar < 0.25) else 0.0
                         hx = sx - dx; hy = sy - dy; hz = sz - dz
                         hl = math.sqrt(hx * hx + hy * hy + hz * hz) + 1e-9
-                        spec = sea * (1 - cl) * max(0.0, (nx * hx + ny * hy + nz * hz) / hl) ** 900 * 0.5
+                        spec = sea * (1 - cl) * max(0.0, (nx * hx + ny * hy + nz * hz) / hl) ** 900 * 0.12
                         cr_ = ar * (1 - cl) + 0.95 * cl; cg_ = ag * (1 - cl) + 0.96 * cl; cb_ = ab * (1 - cl) + 1.0 * cl
                         L = lit * rs
                         cr = cr_ * L * (1.0 + 0.10 * warm) + spec * L; cg = cg_ * L + spec * L * 0.9; cb = cb_ * L * (1.0 - 0.08 * warm) + spec * L * 0.75

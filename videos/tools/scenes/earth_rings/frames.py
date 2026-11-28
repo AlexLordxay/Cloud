@@ -175,7 +175,7 @@ CRATERS = craters()
 def shot_band(t):
     # 20.5–30.2: closer: the band ±30° lights up, 21 craters mark it; debris falling from the ring's inner edge into it
     k = (t - 20.5) / 9.7
-    az = lerp(-1.95, -1.60, k); el = lerp(0.42, 0.30, k); d = lerp(30000, 26000, ease(k))
+    az = lerp(-1.95, -1.60, k); el = lerp(0.62, 0.50, k); d = lerp(31000, 27000, ease(k))
     cam = np.array([d * math.cos(el) * math.cos(az), d * math.cos(el) * math.sin(az), d * math.sin(el)])
     band = sm((t - 23.6) / 1.2)
     rot = 1.35 + 0.025 * (t - 20.5)
@@ -191,9 +191,9 @@ def shot_band(t):
         if q: lab['craters'].append([q[0], q[1], cl((t - 21.0 - i * 0.13) / 0.4)])
     if t > 27.0:
         sr = np.random.default_rng(int(t * 30))
-        for j in range(18):
+        for j in range(26):
             ph = (t * 0.7 + j * 0.37) % 1.0
-            ang = -1.8 + j * 0.33 + 0.1 * math.sin(j)
+            ang = -2.6 + j * 0.24 + 0.1 * math.sin(j)
             r0 = 1.36 * R; r1 = R * 1.01
             lat_e = math.radians(((j * 37) % 50) - 25)
             p0 = np.array([r0 * math.cos(ang), r0 * math.sin(ang), 0.0])
@@ -242,8 +242,9 @@ def draw_marks(img, lab):
         d.ellipse([x - r, y - r, x + r, y + r], outline=(255, 214, 120, int(240 * a)), width=5)
         d.ellipse([x - 5, y - 5, x + 5, y + 5], fill=(255, 240, 200, int(255 * a)))
     for x0, y0, x1, y1, a in lab.get('streaks', []):
-        d.line([x0, y0, x1, y1], fill=(255, 200, 140, int(150 * a)), width=3)
-        d.ellipse([x1 - 4, y1 - 4, x1 + 4, y1 + 4], fill=(255, 235, 200, int(230 * a)))
+        d.line([x0, y0, x1, y1], fill=(255, 190, 120, int(200 * a)), width=6)
+        d.line([x0, y0, x1, y1], fill=(255, 245, 220, int(230 * a)), width=2)
+        d.ellipse([x1 - 7, y1 - 7, x1 + 7, y1 + 7], fill=(255, 240, 210, int(250 * a)))
     glow = lay.filter(ImageFilter.GaussianBlur(6))
     im.alpha_composite(glow); im.alpha_composite(lay)
     return np.asarray(im.convert('RGB'))
