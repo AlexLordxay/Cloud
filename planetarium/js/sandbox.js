@@ -1386,7 +1386,8 @@ const sandbox = (() => {
     const ripping = story.ripped === 1 || story.ripped === 2 && story.held - story.rippedAt < 9;
     if (!st.end && story.held >= st.min && done && story.after >= (st.after || 0) && !ripping) storyStep(story.i + 1);
     // touching the scene hands the camera to the viewer for a while; then it glides back
-    const held = performance.now() < S.holdUntil;
+    // (so does picking a planet: while the viewer looks at it, the story does not take the camera back)
+    const held = performance.now() < S.holdUntil || state.index >= 0;
     if (held) { if (!story.wasHeld) controls.enabled = true; }
     else {
       // a planet torn apart: draw back to show the hole and the stream of what was the planet
@@ -1413,6 +1414,14 @@ const sandbox = (() => {
 
   /* ---------- Panel ---------- */
   const el = id => document.getElementById(id);
+  // Play again after a look round: the camera goes back to the story's own shot (whatever planet was picked meanwhile).
+  function backToStory() {
+    if (!story.on) return;
+    S.holdUntil = 0; story.wasHeld = false;
+    if (typeof setActive === "function") setActive(null);
+    storyShot();                                     // (it also lets go of the picked planet: the sandbox drives the camera)
+    try { history.replaceState(null, "", "#sandbox" + (S.scenario ? "-" + S.scenario : "")); } catch (e) { /* not allowed here */ }
+  }
   // the sandbox's ❚❚/▶ buttons follow the site's pause as well as their own
   let shownPause = null;
   function syncPause() {
@@ -1778,8 +1787,11 @@ const sandbox = (() => {
     el("sbsPause").addEventListener("click", () => {
       if (state.paused) { el("pause").click(); story.paused = false; }    // the site was paused: go on
       else story.paused = !story.paused;
+      if (!story.paused) backToStory();
       shownPause = null; syncPause();
     });
+    // the site's own "Пауза / Далі" (on a computer it is over the story): going on brings the story's shot back too
+    el("pause").addEventListener("click", () => { if (S.on && story.on && !state.paused && !story.paused) backToStory(); });
     el("sbsSound").addEventListener("click", () => {
       const on = el("sbsSound").getAttribute("aria-pressed") !== "true";
       if (typeof tourMusicWanted !== "undefined") { tourMusicWanted = on; try { localStorage.setItem(TOUR_MUSIC_KEY, on ? "1" : "0"); } catch (e) { /* not saved */ } }
