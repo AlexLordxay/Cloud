@@ -1289,8 +1289,10 @@ function createSunFx(sun, tex) {
 
     // Keep the corona facing the camera; scale it so its inner edge matches the visible limb from this distance.
     corona.lookAt(camera.position);
-    const D = Math.max(camera.position.distanceTo(sun.world), R * 1.001);
-    const limb = D / Math.sqrt(D * D - R * R);
+    // (the Sun as drawn: the sandbox draws it at half size — with the full radius here a black gap opened round it)
+    const Rs = R * sun.group.scale.x;
+    const D = Math.max(camera.position.distanceTo(sun.world), Rs * 1.001);
+    const limb = D / Math.sqrt(D * D - Rs * Rs);
     corona.scale.setScalar(limb);
 
     // Flares: fast rise, slow fade; a big one often launches an eruptive prominence.

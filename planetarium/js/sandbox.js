@@ -344,10 +344,16 @@ const sandbox = (() => {
   // len its length, wid how many times wider it gets. The fire is bright where the tube is seen face-on (its middle)
   // and fades to the sides, so it reads as a glowing volume; turbulence (noise) streams along it. A second, wider tube
   // of dark smoke takes over further out (normal blending: it darkens the bright Sun behind it).
-  const PLUME_VS = `uniform float R; uniform float len; uniform float wid; varying vec3 vN; varying vec3 vV; varying vec3 vM; varying float vY; varying vec2 vCS;
+  const PLUME_VS = NOISE_GLSL + `uniform float R; uniform float len; uniform float wid; uniform float time; varying vec3 vN; varying vec3 vV; varying vec3 vM; varying float vY; varying vec2 vCS;
     void main(){ float y = position.y; float rad = R * mix(0.75, wid, pow(y, 1.1));   // slim at first: it comes out from behind the planet
+      // not a cone: the edge bulges and pinches (more so further out), and the whole plume sways and curls
+      float ang = atan(position.z, position.x);
+      rad *= 1.0 + (0.18 + 0.5 * y) * snoise(vec3(cos(ang) * 1.3, sin(ang) * 1.3, y * 3.0 - time * 0.8));
       float slope = R * (wid - 0.75) * 1.1 * pow(max(y, 0.001), 0.1) / len;          // the cone's own normal (its edges then fade out)
-      vec3 p = vec3(position.x * rad, y * len, position.z * rad); vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      vec3 p = vec3(position.x * rad, y * len, position.z * rad);
+      p.x += R * 1.4 * y * y * snoise(vec3(y * 1.6 - time * 0.35, 1.7, 0.0));
+      p.z += R * 1.4 * y * y * snoise(vec3(y * 1.6 - time * 0.35, 5.3, 2.0));
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
       vN = normalize(normalMatrix * normalize(vec3(position.x, -slope, position.z))); vV = normalize(-mv.xyz); vM = mv.xyz; vY = y; vCS = position.xz;
       gl_Position = projectionMatrix * mv; }`;
   // (pc, pr: the planet's centre in view space and its radius — fire passing in front of the planet is thinned, so
@@ -362,8 +368,10 @@ const sandbox = (() => {
       float n = fbm2(q) * 0.6 + 0.5, n2 = snoise(q * 2.2 + vec3(0.0, 4.0, -time * 1.2)) * 0.5 + 0.5;
       // soft tongues of flame, stretched along the flow, breaking up into wisps further out
       float flick = smoothstep(0.3 + 0.3 * vY, 0.85, n * 0.8 + n2 * 0.32);
-      float along = pow(1.0 - vY, 1.3) * smoothstep(0.0, 0.05, vY);
-      float I = core * along * (0.1 + 1.5 * flick) * k * (1.0 - 0.55 * overPlanet(vM));
+      // ragged sides and a ragged end: no straight edges
+      float edge = smoothstep(0.12, 0.65, core + (n2 - 0.5) * 0.7);
+      float along = pow(1.0 - vY, 1.3) * smoothstep(0.0, 0.05, vY) * smoothstep(1.0, 0.55, vY + (n - 0.5) * 0.5);
+      float I = edge * core * along * (0.1 + 1.25 * flick) * k * (1.0 - 0.55 * overPlanet(vM));
       float t = clamp(vY * 1.3 + (1.0 - flick) * 0.45, 0.0, 1.0);
       vec3 col = mix(vec3(1.0, 0.92, 0.72), vec3(1.0, 0.58, 0.16), smoothstep(0.0, 0.28, t));
       col = mix(col, vec3(0.9, 0.22, 0.03), smoothstep(0.28, 0.6, t));
@@ -374,6 +382,7 @@ const sandbox = (() => {
       float core = pow(abs(dot(normalize(vN), normalize(vV))), 0.9) * (1.0 - 0.7 * overPlanet(vM));
       vec3 q = vec3(vCS * 1.1, vY * stretch * 0.7 - time * 0.9);
       float n = fbm2(q) * 0.6 + 0.5, n2 = snoise(q * 2.3 + vec3(0.0, 5.0, -time * 0.6)) * 0.5 + 0.5;
+      core *= smoothstep(0.1, 0.6, core + (n - 0.5) * 0.8);
       float d = smoothstep(0.2, 0.75, n * 0.75 + n2 * 0.4);
       float a = core * d * smoothstep(0.12, 0.42, vY) * pow(1.0 - vY, 1.2) * k * 0.95;
       gl_FragColor = vec4(mix(vec3(0.03, 0.022, 0.02), vec3(0.16, 0.09, 0.05), n2), clamp(a, 0.0, 0.9)); }`;
