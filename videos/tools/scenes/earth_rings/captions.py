@@ -26,7 +26,7 @@ CREDITS = [(0.2, 6.4, 'Київ: Sentinel-2 cloudless (EOX, CC BY 4.0) · худ
            (36.8, 40.2, 'Київ: Sentinel-2 cloudless (EOX, CC BY 4.0) · художня візуалізація')]
 CUTS = []
 FADE_IN = 0
-SUBSCRIBE_AT = 24.5
+SUBSCRIBE_AT = 27.6
 END_CARD = 40.3
 END_TITLE = 'Кільця Землі'
 NEXT_TEASE = 'Не проґав наступне відео'
