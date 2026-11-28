@@ -180,7 +180,7 @@ def twilight(ex, ey, ez, sx, sy, sz):
 def lamps(x, y, dens, fp, tm):
     # city lights: a lamp per ~14 m cell where the ground is built up (probability = density), each a point of light
     # ~1 m across, sodium-orange or white LED; where a pixel covers many cells, their average glow instead
-    cs = 0.014
+    cs = 0.020
     lr = 0.0; lg = 0.0; lb = 0.0
     w = min(1.0, max(0.0, (fp / cs - 0.6) / 1.2))
     if w < 1.0 and dens > 0.01:
@@ -190,14 +190,14 @@ def lamps(x, y, dens, fp, tm):
         for oj in range(-1, 2):
             for oi in range(-1, 2):
                 i = ci + oi; j = cj + oj
-                if hs(i, j, 81.0) < dens * 0.85:
-                    lx_ = (i + 0.15 + 0.7 * hs(i, j, 82.0)) * cs; ly_ = (j + 0.15 + 0.7 * hs(i, j, 83.0)) * cs
+                if hs(i, j, 81.0) < dens * 0.75:
+                    lx_ = (i + hs(i, j, 82.0)) * cs; ly_ = (j + hs(i, j, 83.0)) * cs
                     d2 = (x - lx_) ** 2 + (y - ly_) ** 2
                     k = (0.35 + 0.65 * hs(i, j, 84.0)) * math.exp(-d2 / (rad * rad)) * sc * 4.0
                     k *= 0.94 + 0.06 * math.sin(tm * 9.0 + i * 1.7 + j * 2.3)
                     if hs(i, j, 85.0) < 0.6: lr += k * 1.30; lg += k * 0.70; lb += k * 0.28
                     else: lr += k * 0.95; lg += k * 0.93; lb += k * 0.86
-    avg = dens * 0.85 * 0.30
+    avg = dens * 0.75 * 0.30
     lr = lr * (1 - w) + avg * 1.18 * w; lg = lg * (1 - w) + avg * 0.78 * w; lb = lb * (1 - w) + avg * 0.50 * w
     # the glow of the streets and yards under the lamps
     lr += dens * 0.05; lg += dens * 0.033; lb += dens * 0.018
@@ -287,7 +287,7 @@ def kyiv(CI, CO, ZI, ZO, WI, WO, LI, LO, SK, cam, fw, rt, up, fov, B, P, sun_l, 
                             ar, ag, ab = img3(CO, gx, gy); wv = img2(WO, gx, gy); em = img2(LO, gx, gy)
                         # the sky's light on the ground (dim, blue) plus the ring's light from the south
                         skr, skg, skb = twilight(0.0, 0.0, 1.0, sx, sy, sz)
-                        amb_r = skr * 2.2 + 0.010; amb_g = skg * 2.2 + 0.010; amb_b = skb * 2.2 + 0.012
+                        amb_r = skr * 1.4 + 0.008; amb_g = skg * 1.4 + 0.008; amb_b = skb * 1.4 + 0.010
                         if wv > 0.5:
                             # the Dnipro: a mirror with ripples, Fresnel
                             nxr = (vn(x * 90.0 + tm * 0.4, y * 60.0, 5.0) - 0.5) * 0.06
@@ -351,15 +351,15 @@ def clouds(nx, ny, nz, rot, cov):
     lat = math.asin(max(-1.0, min(1.0, nz))); lon = math.atan2(ny, nx) + rot
     x = lon * 6.0; y = lat * 6.0
     w1 = vn(x * 1.3, y * 1.3, 51.0); w2 = vn(x * 1.3 + 5.2, y * 1.3, 52.0)
-    x += 1.4 * w1; y += 0.8 * w2
+    x += 0.7 * w1; y += 0.4 * w2
     n = 0.0; a = 0.5; fq = 1.0
     for o in range(6):
         n += a * vn(x * fq * (2.0 if o > 2 else 1.0), y * fq * 1.6, 53.0 + o); a *= 0.5; fq *= 2.1
     band = 0.55 + 0.25 * math.exp(-(lat / 0.12) ** 2) + 0.30 * math.exp(-((abs(lat) - 0.95) / 0.25) ** 2) - 0.25 * math.exp(-((abs(lat) - 0.45) / 0.15) ** 2)
-    return min(1.0, max(0.0, (n * band - (0.62 - cov)) / 0.16))
+    return 0.88 * min(1.0, max(0.0, (n * band - (0.60 - cov)) / 0.30)) ** 1.3
 
 @njit(parallel=True, fastmath=True)
-def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, cov, ice, warm):
+def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, cov, ice, warm, arc0, arclen, band):
     # ET: the Earth's map (equirectangular, lon from -180 at u = 0), rot: its rotation; ringk: the ring's strength (0–1)
     # ice: how far from the south pole (degrees) the ice cap reaches; warm: 0..1 the light colour (glow of the fresh ring)
     H, W = out.shape[0], out.shape[1]
@@ -387,8 +387,11 @@ def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, c
                         # the ice cap on the southern supercontinent (the late-Ordovician glaciation)
                         if ice > 0:
                             ip = math.degrees(lat) + 90.0
-                            ic = min(1.0, max(0.0, (ice - ip) / 4.0 + 0.5 * (vn(lon * 8.0, lat * 8.0, 60.0) - 0.5)))
-                            ar = ar * (1 - ic) + 0.92 * ic; ag = ag * (1 - ic) + 0.94 * ic; ab = ab * (1 - ic) + 0.98 * ic
+                            ice_n = 0.6 * (vn(lon * 9.0, lat * 9.0, 60.0) - 0.5) + 0.35 * (vn(lon * 27.0, lat * 27.0, 61.0) - 0.5)
+                            ic = min(1.0, max(0.0, (ice - ip) / 3.0 + ice_n * 3.0))
+                            if ar < ab: ic *= 0.85                        # sea ice thinner than the ice sheet on land
+                            sh_ = 0.84 + 0.16 * vn(lon * 40.0, lat * 40.0, 62.0)
+                            ar = ar * (1 - ic) + 0.86 * sh_ * ic; ag = ag * (1 - ic) + 0.90 * sh_ * ic; ab = ab * (1 - ic) + 0.97 * sh_ * ic
                         ndl = nx * sx + ny * sy + nz * sz
                         cl = clouds(nx, ny, nz, rot * 1.02, cov)
                         # the ring's shadow on the ground
@@ -406,7 +409,7 @@ def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, c
                         sea = 1.0 if (ab > ar and ab > 0.18 and ar < 0.25) else 0.0
                         hx = sx - dx; hy = sy - dy; hz = sz - dz
                         hl = math.sqrt(hx * hx + hy * hy + hz * hz) + 1e-9
-                        spec = sea * (1 - cl) * max(0.0, (nx * hx + ny * hy + nz * hz) / hl) ** 600 * 1.2
+                        spec = sea * (1 - cl) * max(0.0, (nx * hx + ny * hy + nz * hz) / hl) ** 900 * 0.5
                         cr_ = ar * (1 - cl) + 0.95 * cl; cg_ = ag * (1 - cl) + 0.96 * cl; cb_ = ab * (1 - cl) + 1.0 * cl
                         L = lit * rs
                         cr = cr_ * L * (1.0 + 0.10 * warm) + spec * L; cg = cg_ * L + spec * L * 0.9; cb = cb_ * L * (1.0 - 0.08 * warm) + spec * L * 0.75
@@ -419,6 +422,13 @@ def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, c
                         hz_ = 0.025 / mu
                         ah = (1 - math.exp(-hz_)) * term
                         cr = cr * (1 - ah) + 0.18 * ah; cg = cg * (1 - ah) + 0.36 * ah; cb = cb * (1 - ah) + 0.80 * ah
+                        # the equatorial band (±30°) where all 21 craters of the time lie: a glow and two bright lines
+                        if band > 0:
+                            la = abs(math.degrees(lat))
+                            ins = min(1.0, max(0.0, (30.0 - la) / 1.5))
+                            ln_ = math.exp(-((la - 30.0) / 0.45) ** 2)
+                            ln_ = math.exp(-((la - 30.0) / 0.22) ** 2)
+                            cr += band * (ins * 0.012 + ln_ * 0.85); cg += band * (ins * 0.016 + ln_ * 0.68); cb += band * (ins * 0.008 + ln_ * 0.22)
                         # the terminator: a reddened band
                         tb_ = math.exp(-((ndl - 0.02) / 0.05) ** 2) * 0.25 * (1 - cl * 0.5)
                         cr += tb_ * cr_ * 0.6; cg += tb_ * cg_ * 0.2
@@ -444,13 +454,72 @@ def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, c
                     if ringk > 0:
                         t, rr, rg, rb, al = ring_hit(ox, oy, oz, dx, dy, dz, sx, sy, sz)
                         if t < tend:
-                            al *= ringk
-                            cr = cr * (1 - al) + rr * ringk; cg = cg * (1 - al) + rg * ringk; cb = cb * (1 - al) + rb * ringk
+                            k_ = ringk
+                            if arclen < 6.283:
+                                # a ring still forming: only an arc of it, its front ragged
+                                qx = ox + dx * t; qy = oy + dy * t
+                                ph = (math.atan2(qy, qx) - arc0) % (2 * math.pi)
+                                fr_ = arclen + 0.25 * (vn(math.sqrt(qx * qx + qy * qy) / 900.0, 0.5, 31.0) - 0.5)
+                                k_ *= min(1.0, max(0.0, (fr_ - ph) / 0.35)) * min(1.0, ph / 0.2 + 0.3)
+                            al *= k_
+                            cr = cr * (1 - al) + rr * k_; cg = cg * (1 - al) + rg * k_; cb = cb * (1 - al) + rb * k_
                     dmin = min(dmin, tend)
                     acr += cr; acg += cg; acb += cb
             k = expo / (ss * ss)
             out[py_, px_, 0] = acr * k; out[py_, px_, 1] = acg * k; out[py_, px_, 2] = acb * k
             depth[py_, px_] = dmin
+
+@njit(fastmath=True)
+def splat(out, depth, cam, fw, rt, up, fov, P, sun, ss):
+    # rocky fragments as sphere impostors: P rows (x, y, z, radius km, albedo, seed, lumpiness, glow); depth-tested
+    # against the Earth (depth), lit by the Sun, a ragged silhouette and a cratered, bumpy surface by noise
+    H, W = out.shape[0], out.shape[1]
+    f = (H / 2) / math.tan(fov / 2)
+    n = P.shape[0]
+    for q in range(n):
+        dx = P[q, 0] - cam[0]; dy = P[q, 1] - cam[1]; dz = P[q, 2] - cam[2]
+        z = dx * fw[0] + dy * fw[1] + dz * fw[2]
+        if z <= 1e-3: continue
+        sx_ = W / 2 + (dx * rt[0] + dy * rt[1] + dz * rt[2]) / z * f
+        sy_ = H / 2 - (dx * up[0] + dy * up[1] + dz * up[2]) / z * f
+        pr = P[q, 3] / z * f
+        rpx = max(pr, 0.6)
+        if sx_ < -rpx - 2 or sx_ > W + rpx + 2 or sy_ < -rpx - 2 or sy_ > H + rpx + 2: continue
+        seed = P[q, 5]; lum = P[q, 6]; alb = P[q, 4]; glow = P[q, 7]
+        x0 = int(max(0, sx_ - rpx * 1.3 - 1)); x1 = int(min(W - 1, sx_ + rpx * 1.3 + 1))
+        y0 = int(max(0, sy_ - rpx * 1.3 - 1)); y1 = int(min(H - 1, sy_ + rpx * 1.3 + 1))
+        for yy in range(y0, y1 + 1):
+            for xx in range(x0, x1 + 1):
+                if depth[yy, xx] < z: continue
+                u = (xx + 0.5 - sx_) / rpx; v = -(yy + 0.5 - sy_) / rpx
+                ang = math.atan2(v, u)
+                rim = 1.0 + lum * (0.22 * (vn(math.cos(ang) * 2.0 + seed, math.sin(ang) * 2.0, 90.0) - 0.5) + 0.10 * (vn(math.cos(ang) * 6.0 + seed, math.sin(ang) * 6.0, 91.0) - 0.5))
+                d2 = (u * u + v * v) / (rim * rim)
+                if pr < 0.8:
+                    # a point too small to resolve: just its light
+                    a = math.exp(-d2 * 2.0) * min(1.0, pr / 0.8 + 0.25)
+                    lt = 0.5 + 0.5 * max(0.0, -(dx * sun[0] + dy * sun[1] + dz * sun[2]) / z)
+                    k = alb * lt * 3.5 + glow
+                    out[yy, xx, 0] += a * k * 1.0; out[yy, xx, 1] += a * k * 0.92; out[yy, xx, 2] += a * k * (0.82 + 0.4 * glow)
+                    continue
+                if d2 > 1.0: continue
+                w = math.sqrt(1.0 - d2)
+                # the normal in world space (impostor), bumped by noise
+                nxw = rt[0] * u + up[0] * v - fw[0] * w; nyw = rt[1] * u + up[1] * v - fw[1] * w; nzw = rt[2] * u + up[2] * v - fw[2] * w
+                bx = vn(u * 5.0 + seed, v * 5.0, 92.0) - 0.5; by = vn(u * 5.0, v * 5.0 + seed, 93.0) - 0.5
+                nxw += lum * 0.8 * (rt[0] * bx + up[0] * by); nyw += lum * 0.8 * (rt[1] * bx + up[1] * by); nzw += lum * 0.8 * (rt[2] * bx + up[2] * by)
+                nl = math.sqrt(nxw * nxw + nyw * nyw + nzw * nzw); nxw /= nl; nyw /= nl; nzw /= nl
+                ndl = nxw * sun[0] + nyw * sun[1] + nzw * sun[2]
+                cr_ = 0.5 + 0.5 * vn(u * 14.0 + seed, v * 14.0, 94.0)
+                crat = 1.0 - 0.35 * max(0.0, vn(u * 9.0 + seed * 2.0, v * 9.0, 95.0) - 0.62) * 3.0
+                a_ = alb * (0.75 + 0.5 * cr_) * crat
+                lt = max(0.0, ndl) * 1.3 + 0.015
+                edge = min(1.0, (1.0 - d2) * rpx * 0.5)
+                cr = a_ * lt * 1.02 + glow; cg = a_ * lt * 0.94 + glow * 0.85; cb = a_ * lt * 0.84 + glow * 0.75
+                out[yy, xx, 0] = out[yy, xx, 0] * (1 - edge) + cr * edge
+                out[yy, xx, 1] = out[yy, xx, 1] * (1 - edge) + cg * edge
+                out[yy, xx, 2] = out[yy, xx, 2] * (1 - edge) + cb * edge
+                if edge > 0.5: depth[yy, xx] = z
 
 def tonemap(img):
     x = img * 0.9
