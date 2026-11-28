@@ -459,19 +459,33 @@ def rock_shade(A, q, lx, ly, lz, sx, sy, sz, dx, dy, dz, ex, ey, ez):
     return alb * l * 1.08 + rim, alb * l * 1.0 + rim, alb * (l * 0.90 + ear * 0.6) + rim
 
 @njit(fastmath=True)
-def clouds3(ux, uy, uz, cov):
+def cloud_detail(ux, uy, uz, fp):
+    # fine cloud structure (cells, billows, ragged edges: ~20 km down to ~2 km), each octave only where it is larger than
+    # a couple of pixels (fp: the pixel's footprint on the unit sphere), so a close view gets crisp, a far one stays calm
+    dn = 0.0; amp = 0.075; fq = 150.0
+    x = ux; y = uy; z = uz
+    for o in range(5):
+        wgt = min(1.0, max(0.0, (1.0 / (fq * fp) - 3.0) / 3.0))    # off below 3 px, full from 6 px (no shimmer)
+        if wgt <= 0.0: break
+        dn += amp * wgt * (vn3(x * fq, y * fq, z * fq, 85.0 + o * 7.0) - 0.5)
+        amp *= 0.58; fq *= 2.07
+    return dn
+
+@njit(fastmath=True)
+def clouds3(ux, uy, uz, cov, fp):
     # clouds from 3-D noise on the sphere (no seams, no poles): a warped field, finer octaves, belts by latitude
     w1 = fbm3(ux * 2.2, uy * 2.2, uz * 2.2, 3, 80.0) - 0.5; w2 = fbm3(ux * 2.2 + 3.1, uy * 2.2, uz * 2.2, 3, 81.0) - 0.5
     x = ux * 5.0 + 1.6 * w1; y = uy * 5.0 + 1.6 * w2; z = uz * 7.0 + 0.8 * w1
-    n = fbm3(x, y, z, 7, 82.0) + 0.06 * (fbm3(ux * 60.0, uy * 60.0, uz * 60.0, 3, 83.0) - 0.5)
-    # streaky cirrus where the main field is thin
-    ci = fbm3(ux * 7.0 + w1, uy * 7.0, uz * 34.0, 4, 84.0)        # zonal: stretched east–west
+    dn = cloud_detail(ux, uy, uz, fp)
+    n = fbm3(x, y, z, 7, 82.0) + 0.06 * (fbm3(ux * 60.0, uy * 60.0, uz * 60.0, 3, 83.0) - 0.5) + dn
+    # streaky cirrus where the main field is thin, broken up by the fine detail
+    ci = fbm3(ux * 7.0 + w1, uy * 7.0, uz * 34.0, 4, 84.0) + 1.2 * dn   # zonal: stretched east–west
     lat = math.asin(max(-1.0, min(1.0, uz)))
     band = 0.55 + 0.22 * math.exp(-(lat / 0.12) ** 2) + 0.28 * math.exp(-((abs(lat) - 0.95) / 0.25) ** 2) - 0.22 * math.exp(-((abs(lat) - 0.45) / 0.15) ** 2)
-    c = (n * band - (0.65 - cov)) / 0.10
+    c = (n * band - (0.65 - cov)) / 0.08
     c = min(1.0, max(0.0, c)) ** 1.15
-    c = max(c, 0.28 * min(1.0, max(0.0, (ci - 0.62) / 0.10)))
-    return 0.92 * c
+    c = max(c, 0.18 * min(1.0, max(0.0, (ci - 0.62) / 0.10)))
+    return 0.92 * c, dn
 
 @njit(parallel=True, fastmath=True)
 def space(ET, RL, SM, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, cov, ice, warm, arc0, arclen, band, AST):
@@ -536,10 +550,12 @@ def space(ET, RL, SM, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, dept
                         ml = math.sqrt(mx * mx + my * my + mz * mz); mx /= ml; my /= ml; mz /= ml
                         ndl = nx * sx + ny * sy + nz * sz
                         ndb = mx * sx + my * sy + mz * sz
-                        cl = clouds3(ux, uy, uz, cov)
+                        mu0 = max(0.12, -(dx * nx + dy * ny + dz * nz))
+                        fp = t0 * pix / R / mu0 / ss                 # the (sub)pixel's footprint on the unit sphere
+                        cl, cdn = clouds3(ux, uy, uz, cov, fp)
                         # cloud shadows: the cloud cover a little toward the Sun from here
                         ox_ = ux + 0.010 * (sx * math.cos(rot) - sy * math.sin(rot)); oy_ = uy + 0.010 * (sx * math.sin(rot) + sy * math.cos(rot)); oz_ = uz + 0.010 * sz
-                        csh = 1.0 - 0.55 * clouds3(ox_, oy_, oz_, cov)
+                        csh = 1.0 - 0.55 * clouds3(ox_, oy_, oz_, cov, fp)[0]
                         # the ring's shadow on the ground
                         rs = 1.0
                         if abs(sz) > 1e-6:
@@ -561,7 +577,9 @@ def space(ET, RL, SM, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, dept
                         # clouds: lit on top, a little grey in their thick cores and toward the terminator
                         cb_ = (0.80 + 0.20 * min(1.0, max(0.0, ndl * 3.0))) * max(0.0, ndl) ** 0.85
                         core = fbm3(ux * 40.0, uy * 40.0, uz * 40.0, 3, 96.0)
-                        cwr = 0.95 * (0.88 + 0.12 * core) * cb_; cwg = 0.96 * (0.88 + 0.12 * core) * cb_; cwb = 1.0 * (0.88 + 0.12 * core) * cb_
+                        # the tops' own relief: brighter billows, greyer hollows between the cells
+                        tx_ = min(1.08, max(0.70, 0.88 + 0.12 * core + 2.2 * cdn))
+                        cwr = 0.95 * tx_ * cb_; cwg = 0.96 * tx_ * cb_; cwb = 1.0 * tx_ * cb_
                         cr = (gr * (1 - cl) + cwr * cl) * rs + spec * rs; cg = (gg * (1 - cl) + cwg * cl) * rs + spec * rs * 0.92; cb = (gb * (1 - cl) + cwb * cl) * rs + spec * rs * 0.80
                         cr_ = ar; cg_ = ag; cb_2 = ab
                         # the night side lit faintly by the sunlit ring ("ringshine")
@@ -587,18 +605,19 @@ def space(ET, RL, SM, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, dept
                         if cs > 0.99997: cr += 60.0; cg += 56.0; cb += 50.0
                         elif cs > 0.999: cr += 0.3 * (cs - 0.999) / 0.001; cg += 0.28 * (cs - 0.999) / 0.001; cb += 0.24 * (cs - 0.999) / 0.001
                     # the asteroid / its biggest pieces: real 3-D rocks (signed distance, ray-marched)
+                    trock = 1e30
                     for q in range(AST.shape[0]):
                         if AST[q, 3] <= 0: continue
                         tr, lx, ly, lz = rock_hit(AST, q, ox, oy, oz, dx, dy, dz)
                         if tr < tend:
-                            tend = tr
+                            tend = tr; trock = tr
                             el_ = math.sqrt(AST[q, 0] ** 2 + AST[q, 1] ** 2 + AST[q, 2] ** 2)
                             cr, cg, cb = rock_shade(AST, q, lx, ly, lz, sx, sy, sz, dx, dy, dz, -AST[q, 0] / el_, -AST[q, 1] / el_, -AST[q, 2] / el_)
                     # the atmosphere's limb glow (thin shell, H ~ 8 km), sunlit part only
                     b_ = ox * dx + oy * dy + oz * dz
                     cx_ = ox - dx * b_; cy_ = oy - dy * b_; cz_ = oz - dz * b_
                     hmin = math.sqrt(cx_ * cx_ + cy_ * cy_ + cz_ * cz_) - R
-                    if b_ < 0 and hmin > -30 and hmin < 160:
+                    if b_ < 0 and hmin > -30 and hmin < 160 and trock > -b_ - 400.0:   # (a rock in front hides it)
                         tl = -b_
                         tx = ox + dx * tl; ty = oy + dy * tl; tz = oz + dz * tl
                         tn = math.sqrt(tx * tx + ty * ty + tz * tz)
