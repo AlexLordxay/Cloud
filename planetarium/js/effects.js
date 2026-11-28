@@ -1212,11 +1212,12 @@ function createSunFx(sun, tex) {
         if (r < 0.9) discard;
         vec2 d = normalize(c);
         float x = max(r - 1.0, 0.0);
-        float base = exp(-x * 2.4) * 0.28 + exp(-x * 10.0) * 0.7;
+        // (dimmer right at the limb than it was: brighter than the disc, it read as a second, paler layer round the Sun)
+        float base = exp(-x * 2.4) * 0.24 + exp(-x * 10.0) * 0.3;
         float streamers = pow(fbm(vec3(d * 2.4, time * 0.02)) * 0.5 + 0.5, 2.6) * exp(-x * 1.1) * 0.8;
         float flames = pow(snoise(vec3(d * 9.0, x * 4.0 - time * 0.45)) * 0.5 + 0.5, 3.0) * exp(-x * 5.5) * 2.0;
         float I = (base + streamers + flames) * smoothstep(0.96, 1.0, r) * (1.0 - smoothstep(${(HALF * 0.7).toFixed(2)}, ${(HALF * 0.98).toFixed(2)}, r));
-        vec3 col = mix(vec3(1.0, 0.42, 0.08), vec3(1.0, 0.86, 0.6), clamp(1.0 - x * 0.7, 0.0, 1.0));
+        vec3 col = mix(vec3(1.0, 0.42, 0.08), vec3(1.0, 0.72, 0.38), clamp(1.0 - x * 0.7, 0.0, 1.0));
         gl_FragColor = vec4(col, clamp(I, 0.0, 1.0));
       }`,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
