@@ -11,7 +11,19 @@ const sandbox = (() => {
   const MASS = { sun: 1, mercury: 1.66e-7, venus: 2.448e-6, earth: 3.04e-6, mars: 3.227e-7, jupiter: 9.548e-4, saturn: 2.859e-4, uranus: 4.366e-5, neptune: 5.151e-5 };
   const NAME = { sun: "Сонце", sun2: "Друге Сонце", mercury: "Меркурій", venus: "Венера", earth: "Земля", mars: "Марс", jupiter: "Юпітер", saturn: "Сатурн", uranus: "Уран", neptune: "Нептун" };
   const WITH = { sun: "Сонцем", sun2: "другим Сонцем", mercury: "Меркурієм", venus: "Венерою", earth: "Землею", mars: "Марсом", jupiter: "Юпітером", saturn: "Сатурном", uranus: "Ураном", neptune: "Нептуном" };
-  const fem = id => id === "earth" || id === "venus";
+  // The moons: drawn round their planets by the site, but set free when their planet is lost (or, in "stop-earth",
+  // when only the planet stops) and then moved by gravity like the rest. Masses (Suns) and real orbit sizes (km).
+  Object.assign(NAME, { moon: "Місяць", phobos: "Фобос", deimos: "Деймос", io: "Іо", europa: "Європа", ganymede: "Ганімед", callisto: "Каллісто",
+    enceladus: "Енцелад", rhea: "Рея", titan: "Титан", miranda: "Міранда", titania: "Титанія", oberon: "Оберон", triton: "Тритон" });
+  Object.assign(WITH, { moon: "Місяцем", phobos: "Фобосом", deimos: "Деймосом", io: "Іо", europa: "Європою", ganymede: "Ганімедом", callisto: "Каллісто",
+    enceladus: "Енцеладом", rhea: "Реєю", titan: "Титаном", miranda: "Мірандою", titania: "Титанією", oberon: "Обероном", triton: "Тритоном" });
+  const MOON_M = { moon: 3.694e-8, phobos: 5.4e-15, deimos: 7.4e-16, io: 4.49e-8, europa: 2.41e-8, ganymede: 7.45e-8, callisto: 5.42e-8,
+    enceladus: 5.4e-11, rhea: 1.16e-9, titan: 6.76e-8, miranda: 3.3e-11, titania: 1.71e-9, oberon: 1.54e-9, triton: 1.08e-8 };
+  const MOON_A = { moon: 384400, phobos: 9376, deimos: 23463, io: 421700, europa: 671034, ganymede: 1070412, callisto: 1882709,
+    enceladus: 237948, rhea: 527108, titan: 1221870, miranda: 129390, titania: 435910, oberon: 583520, triton: 354759 };
+  const MOON_IDS = Object.keys(MOON_M), MOONSET = new Set(MOON_IDS);
+  const FEM = new Set(["earth", "venus", "io", "europa", "callisto", "rhea", "miranda", "titania"]);
+  const fem = id => FEM.has(id);
   const verb = (id, m, f) => fem(id) ? f : m;
   // Simulated days per real second.
   const SPEEDS = [[0, "стоп"], [0.25, "6 год/с"], [2, "2 доби/с"], [10, "10 діб/с"], [60, "2 міс/с"], [365, "1 рік/с"], [3650, "10 років/с"]];
@@ -31,7 +43,7 @@ const sandbox = (() => {
     "stop-earth": { title: "Земля зупинилася", speed: 2,
       text: "Земля раптом зупинилася на своїй орбіті. Ніщо більше не відводить її вбік — і вона падає прямо на Сонце." },
   };
-  const S = { on: false, bodies: [], days: 0, t: 0, rips: [], streams: [], speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], impacts: [], shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
+  const S = { on: false, bodies: [], days: 0, t: 0, rips: [], streams: [], speed: 5, scenario: "", jd0: 0, events: new Set(), trails: null, sun2: null, hits: [], booms: [], splashes: [], impacts: [], orphans: [], free: {}, shells: {}, log: [], slow: 1, director: true, holdUntil: 0, cool: {} };
   const V = () => new THREE.Vector3();
 
   function body(id, m, pos, vel) { return { id, m, p: pos, v: vel, a: V(), alive: true, trail: [] }; }
@@ -100,14 +112,15 @@ const sandbox = (() => {
   };
   const tLag = new THREE.Vector3();
   // Two bodies closer than this (AU) merge: a planet into a star, or the lighter planet into the heavier one.
-  const HIT = { star: 0.006, planet: 0.004 };
+  const HIT = { star: 0.006, planet: 0.004, moon: 0.0004 };
   const isStar = b => b.id === "sun" || b.id === "sun2";
   const shines = s => isStar(s) && s.alive && s.m > 0 && !s.bh;   // a black hole has the mass but gives no light
   // A black hole's horizon (AU): the Schwarzschild radius, 2.95 km per solar mass.
   const rsAU = b => 2.953 * b.m / 1.495978707e8;
   // Tidal disruption: a planet of radius R and mass m is torn apart closer than R·(M/m)^⅓ to a mass M — the pull on its
   // near side then beats its own gravity. The news of the black hole reaches it at the speed of light (r · 8.3 min/AU).
-  const R_KM = { mercury: 2440, venus: 6052, earth: 6371, mars: 3390, jupiter: 71492, saturn: 58232, uranus: 25559, neptune: 24764 };
+  const R_KM = { mercury: 2440, venus: 6052, earth: 6371, mars: 3390, jupiter: 71492, saturn: 58232, uranus: 25559, neptune: 24764,
+    moon: 1737, io: 1822, europa: 1561, ganymede: 2634, callisto: 2410, titan: 2575, triton: 1353, rhea: 764, titania: 789, oberon: 761 };
   const tidalAU = (b, h) => R_KM[b.id] / 1.495978707e8 * Math.cbrt(h.m / b.m);
   function tides() {
     const h = get("sun");
@@ -116,24 +129,25 @@ const sandbox = (() => {
       if (!b.alive || !R_KM[b.id]) continue;
       const r = b.p.distanceTo(h.p);
       if (r < tidalAU(b, h) && S.t > r * 499.005 / 86400) {
-        b.alive = false; S.rips.push({ id: b.id, p: b.p.clone().sub(h.p), v: b.v.clone().sub(h.v) });
+        b.alive = false; S.rips.push({ id: b.id, p: b.p.clone().sub(h.p), v: b.v.clone().sub(h.v) }); S.orphans.push(b);
         note("rip-" + b.id, `${ACC[b.id]} розірвало на шматки — через ${years(S.t)}.`);
       }
     }
   }
-  const ACC = { mercury: "Меркурій", venus: "Венеру", earth: "Землю", mars: "Марс", jupiter: "Юпітер", saturn: "Сатурн", uranus: "Уран", neptune: "Нептун" };
+  const ACC = { mercury: "Меркурій", venus: "Венеру", earth: "Землю", mars: "Марс", jupiter: "Юпітер", saturn: "Сатурн", uranus: "Уран", neptune: "Нептун",
+    moon: "Місяць", io: "Іо", europa: "Європу", ganymede: "Ганімед", callisto: "Каллісто", titan: "Титан", triton: "Тритон", rhea: "Рею", titania: "Титанію", oberon: "Оберон" };
   function collide() {
     const B = S.bodies;
     for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
       const a = B[i], b = B[j];
       if (!a.alive || !b.alive) continue;
       const bh = a.bh ? a : b.bh ? b : null;
-      const lim = bh ? Math.max(HIT.star, rsAU(bh)) : isStar(a) || isStar(b) ? HIT.star : HIT.planet;
+      const lim = bh ? Math.max(HIT.star, rsAU(bh)) : isStar(a) || isStar(b) ? HIT.star : MOONSET.has(a.id) || MOONSET.has(b.id) ? HIT.moon : HIT.planet;
       if (a.p.distanceTo(b.p) > lim) continue;
       const big = isStar(a) && !isStar(b) ? a : isStar(b) && !isStar(a) ? b : a.m >= b.m ? a : b, small = big === a ? b : a;
       if (small.m === 0 && isStar(small)) continue;
       big.v.multiplyScalar(big.m).addScaledVector(small.v, small.m).multiplyScalar(1 / (big.m + small.m || 1));
-      big.m += small.m; small.alive = false;
+      big.m += small.m; small.alive = false; S.orphans.push(small);
 
       S.hits.push({ small: small.id, big: big.id, star: isStar(big) });
       const who = NAME[small.id], when = `через ${years(S.days)}`;
@@ -185,7 +199,51 @@ const sandbox = (() => {
     "heavy-sun": {"jd":2461284.5,"bodies":[["sun",2,[0,0,0],[0,0,0]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.009067121410422596,-0.0013533878243529099,0.026736150795543694]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.01623758698677691,-0.0007747289772347885,-0.011804427963593489]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.006103149325228707,-9.606720727967957e-07,-0.015911724344803146]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.012617947830879106,0.00043480529313185204,-0.005983355099650645]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.0059818921752397,0.0001520486531615614,0.004375334065029435]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.0012562785245968655,-4.529654143409223e-05,-0.0054832253119529994]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0035113982721561854,5.15837649088316e-05,-0.0016441978961339032]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.00015515841646518425,-6.139143961414462e-05,-0.003154704488425253]]]},
     "two-suns": {"jd":2461284.5,"bodies":[["sun",1,[0,0,0],[-0.0031571457238594816,0,-0.002367859292894611]],["mercury",1.66e-07,[-0.37412871975394074,0.037835307808411316,-0.04308932160208013],[-0.012224267134282077,-0.0013533878243529099,0.024368291502649082]],["venus",2.448e-06,[0.42713524811837844,-0.03273709986437799,0.5888710816320306],[0.013080441262917427,-0.0007747289772347885,-0.0141722872564881]],["earth",3.04e-06,[0.9373057084200472,2.2663869282527352e-05,0.3744812715308984],[0.0029460036013692257,-9.606720727967957e-07,-0.018279583637697758]],["mars",3.227e-07,[0.5205122983414849,0.017159140685411713,-1.4278278325263192],[-0.01577509355473859,0.00043480529313185204,-0.008351214392545256]],["jupiter",0.0009548,[-3.3139558513459093,0.05698772074507977,-4.1289640748717416],[-0.009139037899099181,0.0001520486531615614,0.002007474772134824]],["saturn",0.0002859,[9.296131415160414,-0.39801345797913995,-1.614430627423567],[-0.004413424248456347,-4.529654143409223e-05,-0.00785108460484761]],["uranus",4.366e-05,[9.033600955578068,-0.05319776394240551,-17.214745517988877],[-0.0066685439960156665,5.15837649088316e-05,-0.0040120571890285145]],["neptune",5.151e-05,[29.841944808645934,-0.7140756416898539,-1.2808313774897009],[-0.003312304140324666,-6.139143961414462e-05,-0.005522563781319864]],["sun2",1,[-5.7,0,7.6000000000000005],[0.0031571457238594816,0,0.002367859292894611]]]},
   };
+  // Set a moon free: from now on a body of its own, at its real place round the planet (in the direction it is drawn)
+  // with the planet's velocity v plus its own orbital speed. It is still drawn at the site's (much larger) distance
+  // from where it really is; that offset fades out over a few seconds unless keep (then it stays: the moon is drawn
+  // where it was and simply moves on).
+  function freeMoon(id, parent, v, keep) {
+    const B = byId[id];
+    if (!B || S.free[id] || !MOON_M[id]) return;
+    // where it is drawn, relative to its planet (world axes are the simulation's axes)
+    B.group.updateWorldMatrix(true, false); B.group.getWorldPosition(tA);
+    const P = B.parent; P.group.updateWorldMatrix(true, false); P.group.getWorldPosition(tB);
+    const off = tA.clone().sub(tB), dir = off.lengthSq() > 0 ? off.clone().normalize() : V().set(1, 0, 0);
+    const local = B.group.position.clone();
+    const aAU = MOON_A[id] / 1.495978707e8, vo = Math.sqrt(G * parent.m / aAU);
+    const along = V().crossVectors(UP, dir).normalize();
+    const mb = body(id, MOON_M[id], parent.p.clone().addScaledVector(dir, aAU), v.clone().addScaledVector(along, vo));
+    mb.a.set(0, 0, 0); mb.r0 = mb.p.length();
+    S.bodies.push(mb);
+    scene.add(B.group); B.group.position.copy(tA);
+    B.sbFree = true;
+    S.free[id] = { b: mb, B, off, local, t: 0, keep };
+  }
+  function freeMoons(dt) {
+    while (S.orphans.length) {
+      const pb = S.orphans.shift(), P = byId[pb.id];
+      if (P && P.moons) for (const m of P.moons) freeMoon(m.id, pb, pb.v, false);
+    }
+    for (const id in S.free) {
+      const f = S.free[id], B = f.B;
+      f.t += dt;
+      B.group.visible = f.b.alive;
+      if (!f.b.alive) continue;
+      const k = f.keep ? 1 : Math.exp(-f.t / 2.5);
+      scenePos(f.b, B.group.position).addScaledVector(f.off, k);
+    }
+  }
+  function unfreeMoons() {
+    for (const id in S.free) {
+      const f = S.free[id], B = f.B;
+      B.plane.add(B.group); B.group.position.copy(f.local);   // back on its orbit round the planet
+      B.sbFree = false; B.group.visible = true; B.group.scale.setScalar(1); B.group.quaternion.identity(); B.stretched = false;
+    }
+    S.free = {}; S.orphans.length = 0;
+  }
   function setup(key, fixed) {
+    unfreeMoons();
     S.scenario = SCENARIOS[key] ? key : "";
     const start = fixed && STORY_START[key];
     if (start) S.jd0 = start.jd;
@@ -211,7 +269,11 @@ const sandbox = (() => {
     } else if (key === "no-sun") {
       sun.m = 0;
     } else if (key === "stop-earth") {
+      // only the Earth stops: the Moon keeps its 30 km/s and flies on along the old orbit — far too fast for the
+      // Earth to hold it (it would need to move under ~1.4 km/s relative to the Earth to stay)
+      const v0 = earth.v.clone();
       earth.v.set(0, 0, 0);
+      freeMoon("moon", earth, v0, true);
     }
     accel();
     for (const b of S.bodies) { b.trail.length = 0; b.r0 = b.p.length(); }
@@ -329,7 +391,7 @@ const sandbox = (() => {
     for (const s of S.bodies) if (shines(s) && s !== b) flux += Math.pow(s.m, 3.5) / Math.max(b.p.distanceToSquared(s.p), 1e-8);
     return 278 * Math.pow(flux, 0.25);
   }
-  const ROCKY = ["mercury", "venus", "earth", "mars"];
+  const ROCKY = ["mercury", "venus", "earth", "mars"], GIANTS = ["jupiter", "saturn", "uranus", "neptune"];
   // How a planet changes with the light it gets, as in reality, in stages by its bare-rock temperature T (K):
   //  the Earth dries out first (330–520 K: the oceans boil off, it turns to desert, the clouds go);
   //  rocky planets char and crack (600–1100 K: a dark crust with magma glowing through the cracks, more and more of them);
@@ -440,11 +502,11 @@ const sandbox = (() => {
   }
   function makeShells() {
     tailTex = glowSprite("255,255,255", 1, 1).material.map;
-    for (const id of ID.slice(1)) {
-      const B = byId[id], gas = !ROCKY.includes(id);
+    for (const id of ID.slice(1).concat(MOON_IDS.filter(m => byId[m]))) {
+      const B = byId[id], gas = GIANTS.includes(id), moon = MOONSET.has(id);
       const u = { dry: { value: 0 }, crack: { value: 0 }, melt: { value: 0 }, frost: { value: 0 }, flash: { value: 0 }, dark: { value: 0 },
         time: { value: Math.random() * 50 }, sunDir: { value: new THREE.Vector3(1, 0, 0) }, hitDir: { value: new THREE.Vector3(1, 0, 0) } };
-      const m = new THREE.Mesh(new THREE.SphereGeometry(B.radius * 1.018, 96, 64), new THREE.ShaderMaterial({
+      const m = new THREE.Mesh(new THREE.SphereGeometry(B.radius * 1.018, moon ? 48 : 96, moon ? 32 : 64), new THREE.ShaderMaterial({
         uniforms: u, transparent: true, depthWrite: false, defines: gas ? { GAS: 1 } : {},
         vertexShader: `varying vec3 vN; varying vec3 vW; varying vec3 vP;
           void main(){ vP = normalize(position); vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
@@ -542,9 +604,15 @@ const sandbox = (() => {
       m.opacity += ((starless() || (h && h.bh) || close ? 0 : o) - m.opacity) * Math.min(1, dt * 0.8);
       belt.visible = m.opacity > 0.01;
     }
-    for (const b of S.bodies) {
+    // the planets, and the moons still round them (they get the same light, so they heat up and melt alike)
+    const targets = S.bodies.filter(b => S.shells[b.id]);
+    for (const id of MOON_IDS) {
+      if (!S.shells[id] || S.free[id]) continue;
+      const P = byId[id].parent, pb = P && get(P.id);
+      if (pb) targets.push({ id, p: pb.p, r0: pb.r0, m: MOON_M[id], alive: pb.alive });
+    }
+    for (const b of targets) {
       const sh = S.shells[b.id];
-      if (!sh) continue;
       const B = byId[b.id], T = tempK(b);
       sh.flash = Math.max(0, sh.flash - dt * 0.5);
       const ease = (u, v, k) => { u.value += (v - u.value) * Math.min(1, dt * k); };
@@ -638,11 +706,11 @@ const sandbox = (() => {
   // A planet falling into a star: the surface takes the blow like a flare. Arcs of glowing plasma leap out of the spot,
   // hang and fall back as they fade (drawn like the Sun's own prominences), a bright wave runs out over the surface,
   // and the spot flashes. c: the star's centre in the scene, dir: towards the impact, R: the star's radius on screen.
-  function splash(c, dir, R) {
+  function splash(c, dir, R, pw = 1) {
     const g = new THREE.Group(); g.position.copy(c); scene.add(g);
     const A = dir.clone().normalize();
     const arcs = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < Math.round(7 * pw); i++) {
       const side = new THREE.Vector3().crossVectors(A, Math.abs(A.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0)).normalize();
       side.applyAxisAngle(A, Math.random() * TAU);
       const start = A.clone().applyAxisAngle(side, (Math.random() - 0.5) * 0.12);
@@ -687,7 +755,7 @@ const sandbox = (() => {
     // swelling away into space (like a coronal mass ejection), molten drops arcing up and falling back, and a dark
     // scar left on the surface for a while, like a sunspot
     const core = glowSprite("255,250,235", R, 1); core.position.copy(A).multiplyScalar(R * 1.02); g.add(core);
-    const jet = firePlume(R * 0.22, g); jet.g.visible = true; jet.g.position.copy(A).multiplyScalar(R * 0.96); jet.g.quaternion.setFromUnitVectors(Y_AXIS, A);
+    const jet = firePlume(R * 0.22 * pw, g); jet.g.visible = true; jet.g.position.copy(A).multiplyScalar(R * 0.96); jet.g.quaternion.setFromUnitVectors(Y_AXIS, A);
     const cu = { k: { value: 0 }, time: { value: Math.random() * 10 }, A: { value: A } };
     const cme = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), new THREE.ShaderMaterial({ uniforms: cu, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
       vertexShader: "varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ vP = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }",
@@ -718,7 +786,7 @@ const sandbox = (() => {
     if (!softTex) softTex = glowSprite("255,255,255", 1, 1).material.map;
     const dpts = new THREE.Points(dg, new THREE.PointsMaterial({ size: R * 0.05, map: softTex, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     dpts.frustumCulled = false; g.add(dpts);
-    S.splashes.push({ g, arcs, wu, flash, core, jet, cme, cu, su, drops, dpts, A, t: 0, R });
+    S.splashes.push({ g, arcs, wu, flash, core, jet, cme, cu, su, drops, dpts, A, t: 0, R, pw });
   }
   function splashes(dt) {
     for (let k = S.splashes.length - 1; k >= 0; k--) {
@@ -742,14 +810,14 @@ const sandbox = (() => {
       const jk = Math.min(1, t / 0.2) * (1 - smooth01((t - 1.0) / 3.2));
       e.jet.g.visible = jk > 0.01;
       for (const [part, f, w] of [[e.jet.fire, 1, 2.4], [e.jet.smoke, 1.25, 3.2]]) {
-        part.u.k.value = jk * (part === e.jet.smoke ? 0.6 : 1); part.u.R.value = R * 0.22 * (1 + t * 0.3);
-        part.u.len.value = R * f * (0.2 + 1.9 * (1 - Math.exp(-t * 1.4))); part.u.wid.value = w; part.u.stretch.value = 4; part.u.time.value += dt;
+        part.u.k.value = jk * (part === e.jet.smoke ? 0.6 : 1); part.u.R.value = R * 0.22 * e.pw * (1 + t * 0.3);
+        part.u.len.value = R * f * e.pw * (0.2 + 1.9 * (1 - Math.exp(-t * 1.4))); part.u.wid.value = w; part.u.stretch.value = 4; part.u.time.value += dt;
       }
       // the bubble swells away from the star and fades
       const bs = 0.2 + 1.7 * (1 - Math.exp(-t * 0.35));
       e.cme.position.copy(e.A).multiplyScalar(R * (1 + 0.8 * bs)); e.cme.scale.setScalar(R * 0.7 * bs);
-      e.cu.k.value = smooth01(t / 1.0) * (1 - smooth01((t - 3) / 6)); e.cu.time.value += dt;
-      e.su.k.value = smooth01((t - 0.8) / 1.5) * (1 - smooth01((t - 8) / 6));
+      e.cu.k.value = smooth01(t / 1.0) * (1 - smooth01((t - 3) / 6)) * e.pw; e.cu.time.value += dt;
+      e.su.k.value = smooth01((t - 0.8) / 1.5) * (1 - smooth01((t - 8) / 6)) * e.pw;
       // molten drops: thrown up, pulled back down by the star's gravity, hidden once they fall back in
       const pa = e.dpts.geometry.attributes.position, ca = e.dpts.geometry.attributes.color, gR = R * 1.1;
       for (let i = 0; i < e.drops.length; i++) {
@@ -774,7 +842,7 @@ const sandbox = (() => {
   // molten drops. A gas giant takes it differently: a fireball and a dark scar in its clouds, no rocks.
   let rockGeo = null;
   function impact(id, dir, Rb, rs) {
-    const gas = !ROCKY.includes(id), A = dir.clone();
+    const gas = GIANTS.includes(id), A = dir.clone();
     const g = new THREE.Group(); g.position.copy(byId[id].world); scene.add(g);
     const tip = A.clone().multiplyScalar(Rb);
     const core = glowSprite("255,250,235", Rb, 1); core.position.copy(tip);
@@ -809,7 +877,7 @@ const sandbox = (() => {
         }
         ico.computeVertexNormals(); rockGeo = ico;
       }
-      const NR = 170;
+      const NR = Math.round(170 + 230 * Math.min(1, rs / Rb));   // a bigger impactor throws out more
       inst = new THREE.InstancedMesh(rockGeo, new THREE.ShaderMaterial({ uniforms: { sunDir: { value: V() } },
         vertexShader: `varying vec3 vN; varying vec3 vC;
           void main(){ vN = normalize(mat3(modelMatrix) * mat3(instanceMatrix) * normal); vC = instanceColor;
@@ -903,10 +971,11 @@ const sandbox = (() => {
   function fireHits() {
     for (const h of S.hits) {
       const small = get(h.small), big = get(h.big);
-      if (h.star) {
-        const c = scenePos(big, V()), dir = scenePos(small, V()).sub(c);
+      if (h.star && big.bh) { if (BHG) BHG.glow = Math.min(1.2, BHG.glow + 0.3); }
+      else if (h.star) {
+        const c = scenePos(big, V()), dir = (byId[h.small] ? tA.copy(byId[h.small].world) : scenePos(small, tA)).clone().sub(c);
         if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0);
-        splash(c, dir, byId.sun.radius * SUN_K * (big.id === "sun2" ? 0.95 : 1));
+        splash(c, dir, byId.sun.radius * SUN_K * (big.id === "sun2" ? 0.95 : 1), MOONSET.has(h.small) ? 0.5 : 1);
       } else if (byId[h.big]) {
         const Bb = byId[h.big], dir = scenePos(small, V()).sub(Bb.world);
         if (dir.lengthSq() < 1e-9) dir.set(1, 0, 0);
@@ -934,7 +1003,7 @@ const sandbox = (() => {
       if (!best || prio > best.prio) best = { b, o, kind, prio };
     };
     for (const b of S.bodies) {
-      if (!b.alive || isStar(b)) continue;
+      if (!b.alive || isStar(b) || MOONSET.has(b.id)) continue;   // (the camera follows planets, not their moons)
       for (const st of S.bodies) {
         if (!isStar(st) || !st.alive || st.m <= 0) continue;
         const rv = tRel.copy(b.p).sub(st.p), vv = tS.copy(b.v).sub(st.v), r = rv.length();
@@ -1190,7 +1259,7 @@ const sandbox = (() => {
       { title: "Венера і Марс", shot: { mode: "meet", b: "mars", o: "venus", dk: 1, wide: 1.7 }, at: 668.36, k: 3, low: 0.15, max: 30, min: 11, until: () => S.days > 668.36, after: 3,
         text: "Перша зустріч: Венера проноситься за 2,8 мільйона кілометрів від Марса — лише в 7 разів далі, ніж Місяць від Землі." },
       { title: "Меркурій", shot: { mode: "meet", b: "mercury", o: "venus", dk: 1, wide: 1.7 }, at: 1531.3, k: 2.2, low: 0.1, max: 120, min: 12, until: () => !get("mercury").alive, after: 4,
-        text: "Меркурій тепер підходить до Сонця втричі ближче, ніж раніше, і розжарюється до лави. Через 4 роки він врізається у Венеру на швидкості 60 км/с. Венера поглинає його." },
+        text: "Меркурій тепер підходить до Сонця втричі ближче, ніж раніше, і розжарюється до лави. Через 4 роки він врізається у Венеру на швидкості 60 км/с. Енергії удару вистачить, щоб розплавити Венеру всю, до самого ядра, і викинути в космос величезну масу каміння." },
       { title: "Земля і Венера", shot: { mode: "meet", b: "earth", o: "venus", dk: 1, wide: 1.7 }, at: 2497.16, k: 2.5, low: 0.2, max: 150, min: 11, until: () => S.days > 2497.16, after: 3,
         text: "Ще за три роки вже Венера проноситься за 6 мільйонів кілометрів від Землі. Орбіти й далі перетинаються, і кожна така зустріч може стати останньою." },
       { title: "Нова система", shot: { mode: "sun", dk: 6 }, hl: ["jupiter", "earth"], rate: 30, min: 12, end: true,
@@ -1226,8 +1295,8 @@ const sandbox = (() => {
     ],
     "stop-earth": [
       { title: "Земля зупинилася", shot: { b: "earth", o: "sun", dk: 1.7 }, rate: 0.6, min: 8,
-        life: "Люди: поки що нічого не помічають.",
-        text: "Уяви: Земля раптом зупинилася на своїй орбіті. Її швидкість — 30 км/с — щезла. Ніщо більше не несе її вбік, і Сонце починає тягнути її до себе." },
+        life: "Люди: живі. Але Місяць тане в небі — за добу він у 7 разів менший, — і припливи слабнуть приблизно втричі.",
+        text: "Уяви: Земля раптом зупинилася на своїй орбіті. Її швидкість — 30 км/с — щезла. Ніщо більше не несе її вбік, і Сонце починає тягнути її до себе. А Місяць не зупинився: він летить далі старою орбітою і вже за добу буде за 2,6 млн км від Землі." },
       { title: "Падіння", shot: { b: "earth", o: "sun", dk: 1.3 }, rate: 4, min: 9, until: () => rSun("earth") < 0.62,
         life: "Люди: живі, але спека росте щодня. За сім тижнів на Землі вже +90 °C — без укриттів не вижити.",
         text: "Перші тижні майже нічого не помітно: Земля лише повільно набирає швидкість. Але кожного дня вона падає швидше, ніж учора, а Сонце в небі стає більшим." },
@@ -1413,6 +1482,7 @@ const sandbox = (() => {
     for (const belt of typeof asteroidBelt !== "undefined" ? [asteroidBelt, kuiperBelt] : []) { if (belt.material.userData.o !== undefined) belt.material.opacity = belt.material.userData.o; belt.visible = true; }
     for (const id of ID.slice(1)) { byId[id].sbScale = 1; byId[id].group.scale.setScalar(1); byId[id].group.quaternion.identity(); byId[id].stretched = false; }
     clearStreams(); if (BHG) BHG.g.visible = false;
+    unfreeMoons();
     for (const b of BODIES) {
       if (b.orbitLine) b.orbitLine.visible = state.orbits;
       b.group.visible = true;
@@ -1430,6 +1500,7 @@ const sandbox = (() => {
       const B = byId[b.id];
       if (b.id === "sun2") { scenePos(b, S.sun2.position); S.sun2.visible = b.alive; continue; }
       if (!B) continue;
+      if (S.free[b.id]) continue;
       if (b.id !== "sun") { B.group.visible = b.alive; shown(b, tRel).sub(shown(get("sun"), tLag)); B.simAU = tRel.clone(); }
       else if (b.bh && sbDist(rsAU(b)) < 1) {
         // the Sun collapsing into a hole of its own mass: it shrinks to nothing over a few seconds of the story
@@ -1437,6 +1508,7 @@ const sandbox = (() => {
         B.group.visible = k > 0.02; B.group.scale.setScalar(SUN_K * Math.max(k, 0.02));
       } else B.group.visible = !b.bh && (b.m > 0 || S.days < 0.0058);   // gone, but its last light is still on the way for 8 minutes
     }
+    freeMoons(dt);
     shrinkClose(dt);
     stretch(); blackHole(dt); streams(days, dt);
     drawTrails();
@@ -1634,7 +1706,7 @@ const sandbox = (() => {
   // screen. While they are close, both are drawn smaller (moons and glow with them), so the gap between them is seen.
   const tA = new THREE.Vector3(), tB = new THREE.Vector3();
   function shrinkClose(dt) {
-    const P = S.bodies.filter(b => b.alive && !isStar(b) && byId[b.id]);
+    const P = S.bodies.filter(b => b.alive && !isStar(b) && byId[b.id] && !MOONSET.has(b.id));
     for (const b of P) {
       const B = byId[b.id];
       let k = 1;

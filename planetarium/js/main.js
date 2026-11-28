@@ -405,7 +405,7 @@ function placeAll(jd, dDays, fine) {
   }
   const d = jd - J2000;
   for (const b of BODIES) {
-    if (!b.parent) continue;
+    if (!b.parent || b.sbFree) continue;              // (a moon set free in the sandbox flies on its own)
     if (b.id === "moon" && fine) {
       const m = moonPos(jd);
       state.moonKm = m.dist;
