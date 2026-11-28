@@ -70,13 +70,19 @@ def water(c, zz):
     return nd.binary_fill_holes(w) & (nd.uniform_filter(L, 3) < 0.2) | w
 
 def lights(c, w):
-    # the density of built-up ground (bright, grey, not green, not water), streets (thin bright lines) denser: 0..1
+    # where the lamps are: mostly along the streets (thin bright lines in the mosaic: a difference of Gaussians, kept
+    # where it is long and line-like), fewer in the yards of built-up blocks, none in forests, fields or water. 0..1
     L = c.mean(-1); sat = c.max(-1) - c.min(-1)
     green = c[..., 1] > c[..., 0] * 1.06
     built = ((L > 0.22) & (sat < 0.16) & ~green & ~w).astype(np.float32)
-    dens = nd.uniform_filter(built, 9)
-    road = np.clip((L - nd.uniform_filter(L, 15)) * 6, 0, 1) * (dens > 0.2)
-    return np.clip(nd.gaussian_filter(dens * 0.9 + road * 0.6, 1.5) * 1.2, 0, 1)
+    dens = nd.uniform_filter(built, 15)
+    dog = nd.gaussian_filter(L, 0.8) - nd.gaussian_filter(L, 3.5)
+    road = np.clip(dog * 14.0, 0, 1) * (dens > 0.12) * ~w
+    # line-like: keep what survives an opening along either axis or a diagonal (blobs and roofs drop out more)
+    road = np.maximum.reduce([nd.grey_opening(road, size=(1, 5)), nd.grey_opening(road, size=(5, 1)),
+                              nd.grey_opening(road, footprint=np.eye(5, dtype=bool)), nd.grey_opening(road, footprint=np.eye(5, dtype=bool)[::-1])])
+    m = np.clip(road * 1.1 + dens * 0.22, 0, 1)
+    return nd.gaussian_filter(m, 0.6)
 
 def ring_profile():
     # Saturn's ring texture (planetarium/textures/saturn_ring.png: radial colour + opacity from the C ring to the A ring's

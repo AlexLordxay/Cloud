@@ -21,7 +21,9 @@ ZI = np.ascontiguousarray(np.load(os.path.join(WK, 'inner_z.npy')).astype(np.flo
 ZO = np.ascontiguousarray(np.load(os.path.join(WK, 'outer_z.npy')).astype(np.float32))
 MO = ldg(os.path.join(WK, 'monument.png'))
 SK = ldc(os.path.join(TOOLS, 'work', 'neutron_spoon', 'sky.jpg'))
-ET = ldc(os.path.join(TOOLS, 'work', 'earth_history', 'paleo', 'ep_465.png'))
+Image.MAX_IMAGE_PIXELS = None
+ET = ldc(os.path.join(WK, 'ep465_col.jpg'))                       # earth_maps.py: 8192 × 4096
+RL = ldc(os.path.join(WK, 'ep465_rel.png')); SM = ldg(os.path.join(WK, 'ep465_sea.png'))
 
 def nrm(v): v = np.asarray(v, np.float64); return v / np.linalg.norm(v)
 def look(cam, tgt, upv=(0, 0, 1)):
@@ -95,9 +97,9 @@ F_SEED = rng.uniform(0, 50, NF); F_RING = rng.uniform(1.42, 2.65, NF); F_PH = rn
 def fragments(t, ringk_arc, near=False):
     th = th_at(t)
     if th < TH_BREAK and not (near and t >= 14.4):
-        # still whole: one lumpy asteroid ~12 km across, dark (an L-chondrite rock)
+        # still whole: one rock ~12 km across (drawn ray-marched: AST), no small pieces yet
         p = orbit(th)
-        return np.array([[p[0], p[1], p[2], 6.0, 0.09, 3.3, 0.55, 0.0]])
+        return np.zeros((0, 8)), np.array([[p[0], p[1], p[2], 6.0, 3.3, 0.25 * t]])
     P = np.zeros((NF, 8))
     if near:
         # close up (13.8–17.6): the rock coming apart: chunks drifting along the orbit, a cloud of debris, stretching
@@ -123,12 +125,17 @@ def fragments(t, ringk_arc, near=False):
             P[i, :3] = P[i, :3] * (1 - sm(q)) + pr * sm(q)
     P[:, 3] = F_SZ; P[:, 4] = 0.10; P[:, 5] = F_SEED; P[:, 6] = 0.6
     P[:, 7] = 0.0
-    return P
+    # the eight biggest chunks as real 3-D rocks (close up only), the rest as small impostors
+    if near:
+        A = np.stack([P[:8, 0], P[:8, 1], P[:8, 2], F_SZ[:8], F_SEED[:8], 0.25 * t + F_SEED[:8]], 1)
+        return P[8:], A
+    return P, np.zeros((0, 6))
 
 def space_view(cam, tgt, fov, ringk=1.0, rot=0.0, arc=(0.0, 7.0), band=0.0, ice=0.0, cov=0.34, parts=None, upv=(0, 0, 1), sun=SUN):
     fw, rt, up = look(cam, tgt, upv)
+    P, A = parts if parts is not None else (None, np.zeros((0, 6)))
     return ('space', dict(cam=np.asarray(cam, float), fw=fw, rt=rt, up=up, fov=fov, ringk=ringk, rot=rot, arc=arc, band=band,
-                          ice=ice, cov=cov, parts=parts, sun=sun))
+                          ice=ice, cov=cov, parts=P, ast=A, sun=sun))
 
 def shot_approach(t):
     # 6.3–14.2: the young Earth (465 Ma) and the asteroid coming in; the camera rides beside the rock
@@ -137,7 +144,7 @@ def shot_approach(t):
     k = (t - 6.3) / 7.9
     # behind the rock as seen from the Earth: the Earth always beyond it
     out_ = nrm(a)
-    cam = a + out_ * lerp(75, 110, k) + side * lerp(22, 34, k) + np.array([0, 0, lerp(10, 16, k)])
+    cam = a + out_ * lerp(60, 85, k) + side * lerp(48, 62, k) + np.array([0, 0, lerp(10, 16, k)])   # side-lit: the relief shows
     tgt = a - out_ * 40.0
     lab = {}
     return space_view(cam, tgt, 46, ringk=0.0, rot=1.2 + 0.01 * t, parts=fragments(t, 0)), lab
@@ -227,9 +234,9 @@ def render_shot(kind, P, t, ss):
     else:
         dep = np.full((H, W), 1e30, np.float32)
         a0, ln = P['arc']
-        RD.space(ET, SK, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), P['sun'], P['rot'], P['ringk'], 1.0, out, dep, ss,
-                 P['cov'], P['ice'], 0.0, a0, ln, P['band'])
-        if P['parts'] is not None:
+        RD.space(ET, RL, SM, SK, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), P['sun'], P['rot'], P['ringk'], 1.0, out, dep, ss,
+                 P['cov'], P['ice'], 0.0, a0, ln, P['band'], np.ascontiguousarray(P['ast'], dtype=np.float64))
+        if P['parts'] is not None and len(P['parts']):
             RD.splat(out, dep, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), np.ascontiguousarray(P['parts']), P['sun'], 1)
     return out
 

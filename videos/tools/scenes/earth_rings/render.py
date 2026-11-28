@@ -26,6 +26,35 @@ def vn(x, y, s):
     return (hs(i, j, s) * (1 - fx) + hs(i + 1, j, s) * fx) * (1 - fy) + (hs(i, j + 1, s) * (1 - fx) + hs(i + 1, j + 1, s) * fx) * fy
 
 @njit(fastmath=True, inline='always')
+def h3(i, j, k, s):
+    v = math.sin(i * 127.1 + j * 311.7 + k * 191.3 + s * 74.7) * 43758.5453
+    return v - math.floor(v)
+
+@njit(fastmath=True, inline='always')
+def vn3(x, y, z, s):
+    i = math.floor(x); j = math.floor(y); k = math.floor(z); fx = x - i; fy = y - j; fz = z - k
+    fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy); fz = fz * fz * (3 - 2 * fz)
+    a = (h3(i, j, k, s) * (1 - fx) + h3(i + 1, j, k, s) * fx) * (1 - fy) + (h3(i, j + 1, k, s) * (1 - fx) + h3(i + 1, j + 1, k, s) * fx) * fy
+    b = (h3(i, j, k + 1, s) * (1 - fx) + h3(i + 1, j, k + 1, s) * fx) * (1 - fy) + (h3(i, j + 1, k + 1, s) * (1 - fx) + h3(i + 1, j + 1, k + 1, s) * fx) * fy
+    return a * (1 - fz) + b * fz
+
+@njit(fastmath=True)
+def fbm3(x, y, z, oct, s):
+    n = 0.0; a = 0.5; t = 0.0
+    for o in range(oct):
+        n += a * vn3(x, y, z, s + o * 13.0); t += a
+        x = x * 2.03 + 1.7; y = y * 2.03 - 0.9; z = z * 2.03 + 0.4; a *= 0.5
+    return n / t
+
+@njit(fastmath=True, inline='always')
+def tex1(T, u, v):
+    h, w = T.shape[0], T.shape[1]
+    x = (u - math.floor(u)) * w - 0.5; y = min(max(v, 0.0), 1.0) * (h - 1)
+    i = int(math.floor(x)); j = int(y); fx = x - i; fy = y - j
+    i0 = i % w; i1 = (i + 1) % w; j1 = min(j + 1, h - 1)
+    return (T[j, i0] * (1 - fx) + T[j, i1] * fx) * (1 - fy) + (T[j1, i0] * (1 - fx) + T[j1, i1] * fx) * fy
+
+@njit(fastmath=True, inline='always')
 def tex2(T, u, v):
     h, w = T.shape[0], T.shape[1]
     x = (u - math.floor(u)) * w - 0.5; y = min(max(v, 0.0), 1.0) * (h - 1)
@@ -174,13 +203,16 @@ def twilight(ex, ey, ez, sx, sy, sz):
     # night: airglow, a faint greenish band low down
     ag = 0.004 * math.exp(-ee / 12.0)
     r += ag * 0.6; g += ag * 1.0; b += ag * 0.7
+    # the city's own glow on the haze over the horizon (light pollution), once the sky is dark
+    cg_ = 0.035 * math.exp(-ee / 5.0) * min(1.0, max(0.0, (-hsun - 8.0) / 6.0))
+    r += cg_ * 1.0; g += cg_ * 0.62; b += cg_ * 0.30
     return r, g, b
 
 @njit(fastmath=True)
 def lamps(x, y, dens, fp, tm):
     # city lights: a lamp per ~14 m cell where the ground is built up (probability = density), each a point of light
     # ~1 m across, sodium-orange or white LED; where a pixel covers many cells, their average glow instead
-    cs = 0.020
+    cs = 0.016
     lr = 0.0; lg = 0.0; lb = 0.0
     w = min(1.0, max(0.0, (fp / cs - 0.6) / 1.2))
     if w < 1.0 and dens > 0.01:
@@ -190,17 +222,17 @@ def lamps(x, y, dens, fp, tm):
         for oj in range(-1, 2):
             for oi in range(-1, 2):
                 i = ci + oi; j = cj + oj
-                if hs(i, j, 81.0) < dens * 0.75:
+                if hs(i, j, 81.0) < dens * 0.95:
                     lx_ = (i + hs(i, j, 82.0)) * cs; ly_ = (j + hs(i, j, 83.0)) * cs
                     d2 = (x - lx_) ** 2 + (y - ly_) ** 2
-                    k = (0.35 + 0.65 * hs(i, j, 84.0)) * math.exp(-d2 / (rad * rad)) * sc * 4.0
+                    k = (0.35 + 0.65 * hs(i, j, 84.0)) * math.exp(-d2 / (rad * rad)) * sc * 7.0
                     k *= 0.94 + 0.06 * math.sin(tm * 9.0 + i * 1.7 + j * 2.3)
                     if hs(i, j, 85.0) < 0.6: lr += k * 1.30; lg += k * 0.70; lb += k * 0.28
                     else: lr += k * 0.95; lg += k * 0.93; lb += k * 0.86
-    avg = dens * 0.75 * 0.30
+    avg = dens * 0.95 * 0.52
     lr = lr * (1 - w) + avg * 1.18 * w; lg = lg * (1 - w) + avg * 0.78 * w; lb = lb * (1 - w) + avg * 0.50 * w
     # the glow of the streets and yards under the lamps
-    lr += dens * 0.05; lg += dens * 0.033; lb += dens * 0.018
+    lr += dens * 0.10; lg += dens * 0.062; lb += dens * 0.026
     return lr, lg, lb
 
 @njit(fastmath=True, inline='always')
@@ -367,8 +399,82 @@ def clouds(nx, ny, nz, rot, cov):
     band = 0.55 + 0.25 * math.exp(-(lat / 0.12) ** 2) + 0.30 * math.exp(-((abs(lat) - 0.95) / 0.25) ** 2) - 0.25 * math.exp(-((abs(lat) - 0.45) / 0.15) ** 2)
     return 0.88 * min(1.0, max(0.0, (n * band - (0.60 - cov)) / 0.30)) ** 1.3
 
+@njit(fastmath=True)
+def rock_sdf(x, y, z, seed):
+    # a lumpy, cratered rock of unit size (local coordinates), potato-shaped
+    qx = x; qy = y * 1.18; qz = z * 1.45
+    d = math.sqrt(qx * qx + qy * qy + qz * qz) - 1.0
+    d -= 0.26 * (fbm3(x * 1.1 + seed, y * 1.1, z * 1.1, 3, 70.0) - 0.5)
+    d -= 0.11 * (fbm3(x * 4.0, y * 4.0 + seed, z * 4.0, 3, 71.0) - 0.5)
+    d -= 0.045 * (fbm3(x * 13.0, y * 13.0, z * 13.0 + seed, 2, 72.0) - 0.5)
+    d -= 0.014 * (vn3(x * 40.0, y * 40.0, z * 40.0 + seed, 74.0) - 0.5)
+    # craters: bowls with raised rims round a few random points on the surface
+    ln = math.sqrt(x * x + y * y + z * z) + 1e-9
+    for k in range(11):
+        cx = h3(k, 1, 0, seed) - 0.5; cy = h3(k, 2, 0, seed) - 0.5; cz = h3(k, 3, 0, seed) - 0.5
+        cl_ = math.sqrt(cx * cx + cy * cy + cz * cz) + 1e-9
+        e = math.sqrt((x / ln - cx / cl_) ** 2 + (y / ln - cy / cl_) ** 2 + (z / ln - cz / cl_) ** 2)
+        rad = 0.18 + 0.30 * h3(k, 4, 0, seed)
+        if e < rad * 1.4:
+            s_ = e / rad
+            if s_ < 1.0: d += 0.17 * rad * (1 - s_ * s_)
+            else: d -= 0.07 * rad * math.exp(-((s_ - 1.05) / 0.12) ** 2)
+    return d * 0.8
+
+@njit(fastmath=True)
+def rock_hit(A, q, ox, oy, oz, dx, dy, dz):
+    # -> t (km) and the local hit point for rock q (A rows: cx, cy, cz, radius, seed, spin)
+    cx, cy, cz, rr, seed, sp = A[q, 0], A[q, 1], A[q, 2], A[q, 3], A[q, 4], A[q, 5]
+    t0, t1 = ray_sphere(ox, oy, oz, dx, dy, dz, cx, cy, cz, rr * 1.45)
+    if t1 < 0 or t0 > 1e29: return 1e30, 0.0, 0.0, 0.0
+    cs = math.cos(sp); sn = math.sin(sp)
+    t = max(t0, 0.0)
+    for it in range(110):
+        px = (ox + dx * t - cx) / rr; py = (oy + dy * t - cy) / rr; pz = (oz + dz * t - cz) / rr
+        lx = px * cs - py * sn; ly = px * sn + py * cs
+        d = rock_sdf(lx, ly, pz, seed)
+        if d < 0.002: return t, lx, ly, pz
+        t += d * rr
+        if t > t1: break
+    return 1e30, 0.0, 0.0, 0.0
+
+@njit(fastmath=True)
+def rock_shade(A, q, lx, ly, lz, sx, sy, sz, dx, dy, dz, ex, ey, ez):
+    seed, sp = A[q, 4], A[q, 5]
+    e = 0.004
+    nx = rock_sdf(lx + e, ly, lz, seed) - rock_sdf(lx - e, ly, lz, seed)
+    ny = rock_sdf(lx, ly + e, lz, seed) - rock_sdf(lx, ly - e, lz, seed)
+    nz = rock_sdf(lx, ly, lz + e, seed) - rock_sdf(lx, ly, lz - e, seed)
+    nl = math.sqrt(nx * nx + ny * ny + nz * nz) + 1e-12; nx /= nl; ny /= nl; nz /= nl
+    # back to world orientation (undo the spin about z)
+    cs = math.cos(sp); sn = math.sin(sp)
+    wx = nx * cs + ny * sn; wy = -nx * sn + ny * cs; wz = nz
+    ndl = wx * sx + wy * sy + wz * sz
+    m = fbm3(lx * 5.0, ly * 5.0, lz * 5.0 + seed, 3, 73.0)
+    alb = 0.11 * (0.70 + 0.6 * m)
+    # sunlight, a little light from the bright Earth (blue-white), a dark-side minimum
+    ear = max(0.0, wx * ex + wy * ey + wz * ez) * 0.06
+    l = max(0.0, ndl) * 1.7 + ear + 0.002
+    rim = max(0.0, 1.0 + (wx * dx + wy * dy + wz * dz)) ** 4 * 0.03 * max(0.0, ndl)
+    return alb * l * 1.08 + rim, alb * l * 1.0 + rim, alb * (l * 0.90 + ear * 0.6) + rim
+
+@njit(fastmath=True)
+def clouds3(ux, uy, uz, cov):
+    # clouds from 3-D noise on the sphere (no seams, no poles): a warped field, finer octaves, belts by latitude
+    w1 = fbm3(ux * 2.2, uy * 2.2, uz * 2.2, 3, 80.0) - 0.5; w2 = fbm3(ux * 2.2 + 3.1, uy * 2.2, uz * 2.2, 3, 81.0) - 0.5
+    x = ux * 5.0 + 1.6 * w1; y = uy * 5.0 + 1.6 * w2; z = uz * 7.0 + 0.8 * w1
+    n = fbm3(x, y, z, 7, 82.0) + 0.06 * (fbm3(ux * 60.0, uy * 60.0, uz * 60.0, 3, 83.0) - 0.5)
+    # streaky cirrus where the main field is thin
+    ci = fbm3(ux * 7.0 + w1, uy * 7.0, uz * 34.0, 4, 84.0)        # zonal: stretched east–west
+    lat = math.asin(max(-1.0, min(1.0, uz)))
+    band = 0.55 + 0.22 * math.exp(-(lat / 0.12) ** 2) + 0.28 * math.exp(-((abs(lat) - 0.95) / 0.25) ** 2) - 0.22 * math.exp(-((abs(lat) - 0.45) / 0.15) ** 2)
+    c = (n * band - (0.65 - cov)) / 0.10
+    c = min(1.0, max(0.0, c)) ** 1.15
+    c = max(c, 0.28 * min(1.0, max(0.0, (ci - 0.62) / 0.10)))
+    return 0.92 * c
+
 @njit(parallel=True, fastmath=True)
-def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, cov, ice, warm, arc0, arclen, band):
+def space(ET, RL, SM, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, cov, ice, warm, arc0, arclen, band, AST):
     # ET: the Earth's map (equirectangular, lon from -180 at u = 0), rot: its rotation; ringk: the ring's strength (0–1)
     # ice: how far from the south pole (degrees) the ice cap reaches; warm: 0..1 the light colour (glow of the fresh ring)
     H, W = out.shape[0], out.shape[1]
@@ -391,20 +497,49 @@ def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, c
                         tend = t0
                         px = ox + dx * t0; py = oy + dy * t0; pz = oz + dz * t0
                         nx = px / R; ny = py / R; nz = pz / R
-                        lat = math.asin(max(-1.0, min(1.0, nz))); lon = math.atan2(ny, nx) + rot
-                        ar, ag, ab = tex2(ET, lon / (2 * math.pi) + 0.5, 0.5 - lat / math.pi)
+                        lat = math.asin(max(-1.0, min(1.0, nz))); lonw = math.atan2(ny, nx); lon = lonw + rot
+                        uu = lon / (2 * math.pi) + 0.5; vv = 0.5 - lat / math.pi
+                        ar, ag, ab = tex2(ET, uu, vv)
+                        seaw = tex1(SM, uu, vv)
+                        # the surface's own frame (fixed to the ground, rotating with it) for the 3-D noise
+                        ux = nx * math.cos(rot) - ny * math.sin(rot); uy = nx * math.sin(rot) + ny * math.cos(rot); uz = nz
+                        # land: detail finer than the map (rock outcrops, dunes, dry valleys) and relief shading
+                        bx = 0.0; by = 0.0
+                        if seaw < 0.99:
+                            lw = 1.0 - seaw
+                            d1 = fbm3(ux * 55.0, uy * 55.0, uz * 55.0, 4, 90.0)
+                            d2 = fbm3(ux * 260.0, uy * 260.0, uz * 260.0, 3, 91.0)
+                            rid = 1.0 - abs(2.0 * fbm3(ux * 30.0, uy * 30.0, uz * 30.0, 4, 92.0) - 1.0)
+                            k = 1.0 + lw * (0.34 * (d1 - 0.5) + 0.16 * (d2 - 0.5) + 0.10 * (rid - 0.6))
+                            ar *= k; ag *= k * 0.99; ab *= k * 0.97
+                            rr_, rg_, rb_ = tex2(RL, uu, vv)
+                            bx = ((rr_ * 255.0 - 128.0) / 635.0) * 9.0 * lw + (fbm3(ux * 90.0, uy * 90.0, uz * 90.0, 3, 93.0) - 0.5) * 0.9 * lw
+                            by = ((rg_ * 255.0 - 128.0) / 635.0) * 9.0 * lw + (fbm3(ux * 90.0 + 7.0, uy * 90.0, uz * 90.0, 3, 94.0) - 0.5) * 0.9 * lw
+                        else:
+                            # the open sea: slow swirls of colour (plankton, currents)
+                            cu = fbm3(ux * 18.0, uy * 18.0, uz * 18.0, 3, 95.0)
+                            ar *= (0.92 + 0.16 * cu) * 0.70; ag *= (0.94 + 0.12 * cu) * 0.72; ab *= (0.96 + 0.08 * cu) * 0.78
                         # the ice cap on the southern supercontinent (the late-Ordovician glaciation)
                         if ice > 0:
                             ip = math.degrees(lat) + 90.0
-                            # (noise on the polar projection, not on lon/lat: no spikes converging on the pole)
-                            ux = nx * math.cos(rot) - ny * math.sin(rot); uy = nx * math.sin(rot) + ny * math.cos(rot)
-                            ice_n = 0.6 * (vn(ux * 9.0, uy * 9.0, 60.0) - 0.5) + 0.35 * (vn(ux * 27.0, uy * 27.0, 61.0) - 0.5)
+                            ice_n = 0.6 * (fbm3(ux * 9.0, uy * 9.0, uz * 9.0, 3, 60.0) - 0.5) + 0.35 * (fbm3(ux * 30.0, uy * 30.0, uz * 30.0, 3, 61.0) - 0.5)
                             ic = min(1.0, max(0.0, (ice - ip) / 3.0 + ice_n * 3.0))
-                            if ar < ab: ic *= 0.85                        # sea ice thinner than the ice sheet on land
-                            sh_ = 0.84 + 0.16 * vn(ux * 60.0, uy * 60.0, 62.0)
+                            if seaw > 0.5: ic *= 0.85                     # sea ice thinner than the ice sheet on land
+                            sh_ = 0.84 + 0.16 * fbm3(ux * 80.0, uy * 80.0, uz * 80.0, 3, 62.0)
                             ar = ar * (1 - ic) + 0.86 * sh_ * ic; ag = ag * (1 - ic) + 0.90 * sh_ * ic; ab = ab * (1 - ic) + 0.97 * sh_ * ic
+                            bx *= 1 - ic; by *= 1 - ic
+                        # the bumped normal
+                        ex_ = -math.sin(lonw); ey_ = math.cos(lonw)
+                        sl_ = math.sin(lat); cl_l = math.cos(lat)
+                        nox = -sl_ * math.cos(lonw); noy = -sl_ * math.sin(lonw); noz = cl_l
+                        mx = nx - (ex_ * bx + nox * by) * 0.12; my = ny - (ey_ * bx + noy * by) * 0.12; mz = nz - (noz * by) * 0.12
+                        ml = math.sqrt(mx * mx + my * my + mz * mz); mx /= ml; my /= ml; mz /= ml
                         ndl = nx * sx + ny * sy + nz * sz
-                        cl = clouds(nx, ny, nz, rot * 1.02, cov)
+                        ndb = mx * sx + my * sy + mz * sz
+                        cl = clouds3(ux, uy, uz, cov)
+                        # cloud shadows: the cloud cover a little toward the Sun from here
+                        ox_ = ux + 0.010 * (sx * math.cos(rot) - sy * math.sin(rot)); oy_ = uy + 0.010 * (sx * math.sin(rot) + sy * math.cos(rot)); oz_ = uz + 0.010 * sz
+                        csh = 1.0 - 0.55 * clouds3(ox_, oy_, oz_, cov)
                         # the ring's shadow on the ground
                         rs = 1.0
                         if abs(sz) > 1e-6:
@@ -414,40 +549,51 @@ def space(ET, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, c
                                 rq = math.sqrt(qx * qx + qy * qy)
                                 tau = ring_tau(rq) * ringk
                                 if tau > 0: rs = math.exp(-tau / max(abs(sz), 0.05))
-                        lit = max(0.0, ndl)
                         term = min(1.0, max(0.0, (ndl + 0.06) / 0.12))
-                        # sea glint
-                        sea = 1.0 if (ab > ar and ab > 0.18 and ar < 0.25) else 0.0
+                        litg = max(0.0, ndb) * min(1.0, max(0.0, ndl * 6.0 + 0.3))
+                        # the sea: a broad soft sheen round the Sun's reflection, brighter toward the limb (Fresnel)
                         hx = sx - dx; hy = sy - dy; hz = sz - dz
                         hl = math.sqrt(hx * hx + hy * hy + hz * hz) + 1e-9
-                        spec = sea * (1 - cl) * max(0.0, (nx * hx + ny * hy + nz * hz) / hl) ** 900 * 0.12
-                        cr_ = ar * (1 - cl) + 0.95 * cl; cg_ = ag * (1 - cl) + 0.96 * cl; cb_ = ab * (1 - cl) + 1.0 * cl
-                        L = lit * rs
-                        cr = cr_ * L * (1.0 + 0.10 * warm) + spec * L; cg = cg_ * L + spec * L * 0.9; cb = cb_ * L * (1.0 - 0.08 * warm) + spec * L * 0.75
+                        nh = max(0.0, (nx * hx + ny * hy + nz * hz) / hl)
+                        mu = max(0.05, -(dx * nx + dy * ny + dz * nz))
+                        spec = seaw * (1 - cl) * (nh ** 90 * 0.35 + nh ** 12 * 0.03) * max(0.0, ndl) ** 0.5
+                        gr = ar * litg * csh; gg = ag * litg * csh; gb = ab * litg * csh
+                        # clouds: lit on top, a little grey in their thick cores and toward the terminator
+                        cb_ = (0.80 + 0.20 * min(1.0, max(0.0, ndl * 3.0))) * max(0.0, ndl) ** 0.85
+                        core = fbm3(ux * 40.0, uy * 40.0, uz * 40.0, 3, 96.0)
+                        cwr = 0.95 * (0.88 + 0.12 * core) * cb_; cwg = 0.96 * (0.88 + 0.12 * core) * cb_; cwb = 1.0 * (0.88 + 0.12 * core) * cb_
+                        cr = (gr * (1 - cl) + cwr * cl) * rs + spec * rs; cg = (gg * (1 - cl) + cwg * cl) * rs + spec * rs * 0.92; cb = (gb * (1 - cl) + cwb * cl) * rs + spec * rs * 0.80
+                        cr_ = ar; cg_ = ag; cb_2 = ab
                         # the night side lit faintly by the sunlit ring ("ringshine")
                         if ringk > 0 and ndl < 0.1:
                             rsn = 0.02 * ringk * max(0.0, 1.0 - abs(nz) * 1.2) * min(1.0, (0.1 - ndl) * 4)
-                            cr += cr_ * rsn; cg += cg_ * rsn; cb += cb_ * rsn * 1.05
-                        # the atmosphere over the disc: blue haze toward the limb
-                        mu = max(0.05, -(dx * nx + dy * ny + dz * nz))
-                        hz_ = 0.025 / mu
-                        ah = (1 - math.exp(-hz_)) * term
-                        cr = cr * (1 - ah) + 0.18 * ah; cg = cg * (1 - ah) + 0.36 * ah; cb = cb * (1 - ah) + 0.80 * ah
-                        # the equatorial band (±30°) where all 21 craters of the time lie: a glow and two bright lines
+                            cr += (cr_ * (1 - cl) + 0.9 * cl) * rsn; cg += (cg_ * (1 - cl) + 0.9 * cl) * rsn; cb += (cb_2 * (1 - cl) + 0.95 * cl) * rsn * 1.05
+                        # the atmosphere over the disc: blue haze, thicker toward the limb
+                        hz_ = 0.022 / mu
+                        ah = (1 - math.exp(-hz_)) * term * min(1.0, max(0.0, ndl * 3.0 + 0.2))
+                        cr = cr * (1 - ah) + 0.12 * ah; cg = cg * (1 - ah) + 0.27 * ah; cb = cb * (1 - ah) + 0.62 * ah
+                        # the equatorial band (±30°) where all 21 craters of the time lie: two bright lines, a faint glow
                         if band > 0:
                             la = abs(math.degrees(lat))
                             ins = min(1.0, max(0.0, (30.0 - la) / 1.5))
-                            ln_ = math.exp(-((la - 30.0) / 0.45) ** 2)
                             ln_ = math.exp(-((la - 30.0) / 0.22) ** 2)
                             cr += band * (ins * 0.012 + ln_ * 0.85); cg += band * (ins * 0.016 + ln_ * 0.68); cb += band * (ins * 0.008 + ln_ * 0.22)
-                        # the terminator: a reddened band
-                        tb_ = math.exp(-((ndl - 0.02) / 0.05) ** 2) * 0.25 * (1 - cl * 0.5)
-                        cr += tb_ * cr_ * 0.6; cg += tb_ * cg_ * 0.2
+                        # the terminator: sunset colours
+                        tb_ = 0.0
+                        cr += tb_ * 0.9; cg += tb_ * 0.35; cb += tb_ * 0.05
                     else:
                         cr, cg, cb = stars(SK, dx, dy, dz, pix)
                         cs = dx * sx + dy * sy + dz * sz
                         if cs > 0.99997: cr += 60.0; cg += 56.0; cb += 50.0
                         elif cs > 0.999: cr += 0.3 * (cs - 0.999) / 0.001; cg += 0.28 * (cs - 0.999) / 0.001; cb += 0.24 * (cs - 0.999) / 0.001
+                    # the asteroid / its biggest pieces: real 3-D rocks (signed distance, ray-marched)
+                    for q in range(AST.shape[0]):
+                        if AST[q, 3] <= 0: continue
+                        tr, lx, ly, lz = rock_hit(AST, q, ox, oy, oz, dx, dy, dz)
+                        if tr < tend:
+                            tend = tr
+                            el_ = math.sqrt(AST[q, 0] ** 2 + AST[q, 1] ** 2 + AST[q, 2] ** 2)
+                            cr, cg, cb = rock_shade(AST, q, lx, ly, lz, sx, sy, sz, dx, dy, dz, -AST[q, 0] / el_, -AST[q, 1] / el_, -AST[q, 2] / el_)
                     # the atmosphere's limb glow (thin shell, H ~ 8 km), sunlit part only
                     b_ = ox * dx + oy * dy + oz * dz
                     cx_ = ox - dx * b_; cy_ = oy - dy * b_; cz_ = oz - dz * b_
