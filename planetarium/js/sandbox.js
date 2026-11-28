@@ -1129,6 +1129,9 @@ const sandbox = (() => {
     shot.off.copy(camera.position).sub(sP); shot.aim.copy(controls.target).sub(sP);
     state.flight = null; state.mode = "overview"; state.index = -1;   // the sandbox drives the camera now
     controls.enabled = false;
+    // and no leftover limits: after a planet was picked the site keeps the camera within a few of its sizes, and its
+    // controls would pull the story's camera in to there (a close, odd view)
+    controls.minDistance = 0.001; controls.maxDistance = 1e5;
   }
   function endShot(toOverview) {
     if (!shot.on) return;
