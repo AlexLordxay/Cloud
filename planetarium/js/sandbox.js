@@ -477,11 +477,15 @@ const sandbox = (() => {
             col = mix(col, lava, melt);
             a = mix(a, 1.0, melt);
           #else
-            // a gas giant heating up: the cloud tops glow from dull red to orange, brightest towards the star
+            // a gas giant heating up: its cloud bands glow, deep red to orange, yellow-white where they face the star
+            // (it covers the planet's own colours as it heats: a mix of the two looked sickly green)
             float bands = 0.5 + 0.5 * sin(vP.y * 18.0 + fbm(vP * 3.0 + time * 0.04) * 3.0);
-            vec3 hot = mix(vec3(0.7, 0.12, 0.02), vec3(1.0, 0.6, 0.2), bands * melt);
-            float ga = melt * (0.45 + 0.35 * bands + 0.3 * max(ndl, 0.0));
-            col = hot * 1.8 * ga; a = ga;
+            float day = smoothstep(-0.4, 0.9, ndl);
+            vec3 hot = mix(vec3(0.42, 0.06, 0.02), vec3(1.0, 0.48, 0.12), bands);
+            hot = mix(hot, vec3(1.0, 0.8, 0.5), smoothstep(0.55, 1.0, bands * day) * melt);
+            hot *= 0.45 + 0.8 * day;
+            float ga = clamp(melt * 1.4, 0.0, 1.0) * (0.8 + 0.2 * bands);
+            col = hot * ga; a = ga;
           #endif
             // the glowing limb of a hot planet, and the flash of an impact
             float hotRim = max(melt, crack * 0.6) * rim * rim;
@@ -682,8 +686,8 @@ const sandbox = (() => {
         void main(){ float rim = 1.0 - abs(dot(normalize(vN), normalize(vV)));
           float fil = fbm2(vP * 3.6 + vec3(0.0, 0.0, time * 0.25)) * 0.6 + 0.5;
           float strand = 1.0 - abs(snoise(vP * vec3(5.0, 5.0, 5.0) + vec3(time * 0.2)));
-          float front = smoothstep(-0.3, 0.6, dot(normalize(vP), A));      // the leading face, not a full ball
-          float I = rim * rim * rim * front * (0.15 + 1.6 * fil * fil * strand * strand) * k * 0.6;
+          float front = smoothstep(0.15, 0.85, dot(normalize(vP), A));      // only the leading front, not a ball
+          float I = rim * rim * front * (0.05 + 1.8 * fil * fil * strand * strand * strand) * k * 0.45;
           gl_FragColor = vec4(mix(vec3(1.0, 0.5, 0.18), vec3(1.0, 0.88, 0.72), clamp(fil, 0.0, 1.0)), clamp(I, 0.0, 1.0)); }` }));
     g.add(cme);
     const su = { A: { value: A }, k: { value: 0 } };
