@@ -1121,10 +1121,11 @@ const sandbox = (() => {
     const B = byId[ev.b.id];
     if (shot.mode === "sun") scenePos(get("sun"), sP); else if (B && ev.b.id !== "sun" && ev.b.alive) sP.copy(B.world); else if (ev.b.alive) scenePos(ev.b, sP);
     if (shot.mode === "meet") {
-      // looking down from above and a little outward (away from the Sun), so the Sun is toward the top of the screen
+      // looking down from above and a little from the Sun's side, so the planets show their lit faces (from the
+      // outer side the meeting was a long, almost black shot of two night sides); the Sun is toward the bottom
       tA.copy(sP).sub(scenePos(get("sun"), tB)).setY(0).normalize();
-      shot.view.copy(tA).multiplyScalar(0.5).add(UP).normalize();
-      shot.down.copy(tA);                                   // on screen, outward is down
+      shot.view.copy(tA).multiplyScalar(-0.45).add(UP).normalize();
+      shot.down.copy(tA).negate();                          // on screen, the Sun's side is down
     }
     shot.off.copy(camera.position).sub(sP); shot.aim.copy(controls.target).sub(sP);
     state.flight = null; state.mode = "overview"; state.index = -1;   // the sandbox drives the camera now
