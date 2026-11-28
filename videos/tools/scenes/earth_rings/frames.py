@@ -78,11 +78,12 @@ def orbit(th, dr=0.0):
     x, y = r * math.cos(th), r * math.sin(th)
     x, y = x * math.cos(OMG) - y * math.sin(OMG), x * math.sin(OMG) + y * math.cos(OMG)
     return np.array([x, y * math.cos(INC), y * math.sin(INC)])
+from scipy.interpolate import PchipInterpolator
+# 6.5 -> 14: inbound; 14 -> 17.5: through perigee (the breakup); 17.5 -> 20.5: away (the debris spreading).
+# A smooth (C1) curve through these: the rock speeds up toward perigee and slows after it with no jolt
+_TH = PchipInterpolator([5.5, 6.5, 14.0, 17.5, 20.5, 22.0], [-2.02, -1.95, -0.85, 0.30, 1.30, 1.36])
 def th_at(t):
-    # 6.5 -> 14: inbound; 14 -> 17.5: through perigee (the breakup); 17.5 -> 20.5: away (the debris spreading)
-    if t < 14.0: return lerp(-1.95, -0.85, sm((t - 6.5) / 7.5) * 0.5 + (t - 6.5) / 7.5 * 0.5)
-    if t < 17.5: return lerp(-0.85, 0.75, (t - 14.0) / 3.5)
-    return lerp(0.75, 1.30, cl((t - 17.5) / 3.0))
+    return float(_TH(min(max(t, 5.5), 22.0)))
 TH_BREAK = -0.45
 
 rng = np.random.default_rng(7)
@@ -94,9 +95,10 @@ F_SZ[:8] = [4.2, 3.4, 2.8, 2.3, 1.9, 1.6, 1.4, 1.2]                    # the big
 F_U[:8] = [-0.02, 0.05, -0.09, 0.12, -0.15, 0.2, -0.25, 0.3]
 F_SEED = rng.uniform(0, 50, NF); F_RING = rng.uniform(1.42, 2.65, NF); F_PH = rng.uniform(0, 1, NF)
 
+T_CRACK = 14.4
 def fragments(t, ringk_arc, near=False):
     th = th_at(t)
-    if th < TH_BREAK and not (near and t >= 14.4):
+    if th < TH_BREAK and not (near and t >= T_CRACK):
         # still whole: one rock ~12 km across (drawn ray-marched: AST), no small pieces yet
         p = orbit(th)
         return np.zeros((0, 8)), np.array([[p[0], p[1], p[2], 6.0, 3.3, 0.25 * t]])
@@ -104,7 +106,7 @@ def fragments(t, ringk_arc, near=False):
     if near:
         # close up (13.8–17.6): the rock coming apart: chunks drifting along the orbit, a cloud of debris, stretching
         c = orbit(th); v = nrm(orbit(th + 0.01) - c); n_ = nrm(c); z_ = np.cross(v, n_)
-        S = 260.0 * sm((t - 14.4) / 3.4) ** 1.3 + 4.0 * cl((t - 14.4) / 0.4)
+        S = 260.0 * sm((t - T_CRACK) / 3.4) ** 1.3 + 4.0 * cl((t - T_CRACK) / 0.4)
         P[:, :3] = c + np.outer(F_U * S, v) + np.outer(F_DR * S * 0.10, n_) + np.outer(F_DZ * S * 0.06, z_)
     else:
         s = (th - TH_BREAK)                                   # how far past the breakup
@@ -128,6 +130,10 @@ def fragments(t, ringk_arc, near=False):
     # the eight biggest chunks as real 3-D rocks (close up only), the rest as small impostors
     if near:
         A = np.stack([P[:8, 0], P[:8, 1], P[:8, 2], F_SZ[:8], F_SEED[:8], 0.25 * t + F_SEED[:8]], 1)
+        # the biggest piece IS the rock that cracks: the same shape and spin, shedding the others (which start hidden
+        # inside it) and shrinking to its own size as they drift off: no swap, no jump
+        g = sm((t - T_CRACK) / 1.2)
+        A[0, 3] = lerp(6.0, F_SZ[0], g); A[0, 4] = 3.3; A[0, 5] = 0.25 * t
         return P[8:], A
     return P, np.zeros((0, 6))
 
@@ -137,26 +143,32 @@ def space_view(cam, tgt, fov, ringk=1.0, rot=0.0, arc=(0.0, 7.0), band=0.0, ice=
     return ('space', dict(cam=np.asarray(cam, float), fw=fw, rt=rt, up=up, fov=fov, ringk=ringk, rot=rot, arc=arc, band=band,
                           ice=ice, cov=cov, parts=P, ast=A, sun=sun))
 
-def shot_approach(t):
-    # 6.3–14.2: the young Earth (465 Ma) and the asteroid coming in; the camera rides beside the rock
+def cam_approach(t):
+    # the camera rides beside the rock, behind it as seen from the Earth (the Earth always beyond it), side-lit
     th = th_at(t); a = orbit(th); v = nrm(orbit(th + 0.01) - a)
     side = nrm(np.cross(v, [0, 0, 1]))
-    k = (t - 6.3) / 7.9
-    # behind the rock as seen from the Earth: the Earth always beyond it
+    k = min((t - 6.3) / 7.9, 1.15)
     out_ = nrm(a)
-    cam = a + out_ * lerp(60, 85, k) + side * lerp(48, 62, k) + np.array([0, 0, lerp(10, 16, k)])   # side-lit: the relief shows
-    tgt = a - out_ * 40.0
-    lab = {}
-    return space_view(cam, tgt, 46, ringk=0.0, rot=1.2 + 0.01 * t, parts=fragments(t, 0)), lab
+    cam = a + out_ * lerp(60, 85, k) + side * lerp(48, 62, k) + np.array([0, 0, lerp(10, 16, k)])
+    return cam, a - out_ * 40.0
+
+def shot_approach(t):
+    # 6.3–14.2: the young Earth (465 Ma) and the asteroid coming in
+    cam, tgt = cam_approach(t)
+    return space_view(cam, tgt, 46, ringk=0.0, rot=1.2 + 0.01 * t, parts=fragments(t, 0)), {}
 
 def shot_break(t):
     # 13.8–17.6: inside the Roche limit, close up: the rock cracks and the pieces drift apart along the orbit;
-    # the Earth's limb fills the background
+    # the Earth's limb fills the background. One continuous move: it starts exactly where the approach camera is
+    # (so the dissolve between the two shots is invisible) and glides out to the wide view of the debris
     k = (t - 13.8) / 3.8
     th = th_at(t); a = orbit(th); v = nrm(orbit(th + 0.01) - a); n_ = nrm(a); z_ = np.cross(v, n_)
-    cam = a - v * lerp(35, 230, ease(k)) + n_ * lerp(55, 330, ease(k)) + z_ * lerp(20, 110, ease(k))
-    tgt = a - n_ * lerp(60, 380, ease(k)) + v * lerp(10, 90, k)   # the pieces in front, the Earth's lit face behind
-    return space_view(cam, tgt, 48, ringk=0.0, rot=1.25 + 0.01 * t, parts=fragments(t, 0, near=True)), {}
+    cb = a - v * lerp(35, 230, ease(k)) + n_ * lerp(55, 330, ease(k)) + z_ * lerp(20, 110, ease(k))
+    tb = a - n_ * lerp(60, 380, ease(k)) + v * lerp(10, 90, k)   # the pieces in front, the Earth's lit face behind
+    ca, ta = cam_approach(t)
+    w = sm((t - 13.8) / 1.8)
+    return space_view(lerpv(ca, cb, w), lerpv(ta, tb, w), lerp(46, 48, w), ringk=0.0, rot=1.2 + 0.01 * t,
+                      parts=fragments(t, 0, near=True)), {}
 
 def shot_ring(t):
     # 17.3–20.7: the debris spreads all round: the ring closing; the camera pulls back and up
@@ -224,7 +236,7 @@ SHOTS = [(0.0, 6.6, shot_dusk), (6.3, 14.2, shot_approach), (13.8, 17.6, shot_br
          (20.5, 30.2, shot_band), (30.0, 37.0, shot_ice), (36.7, DUR + 0.1, shot_night)]
 XF = 0.35
 
-def render_shot(kind, P, t, ss):
+def render_shot(kind, P, t, ss, stw=1.0):
     out = np.zeros((H, W, 3), np.float32)
     if kind == 'kyiv':
         cam = P['cam']; se = BM @ P['sl']
@@ -235,7 +247,7 @@ def render_shot(kind, P, t, ss):
         dep = np.full((H, W), 1e30, np.float32)
         a0, ln = P['arc']
         RD.space(ET, RL, SM, SK, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), P['sun'], P['rot'], P['ringk'], 1.0, out, dep, ss,
-                 P['cov'], P['ice'], 0.0, a0, ln, P['band'], np.ascontiguousarray(P['ast'], dtype=np.float64))
+                 P['cov'], P['ice'], 0.0, a0, ln, P['band'], np.ascontiguousarray(P['ast'], dtype=np.float64), stw)
         if P['parts'] is not None and len(P['parts']):
             RD.splat(out, dep, P['cam'], P['fw'], P['rt'], P['up'], math.radians(P['fov']), np.ascontiguousarray(P['parts']), P['sun'], 1)
     return out
@@ -256,17 +268,29 @@ def draw_marks(img, lab):
     im.alpha_composite(glow); im.alpha_composite(lay)
     return np.asarray(im.convert('RGB'))
 
-def frame(t, ss=1):
+def frame_hdr(t, ss, stw=1.0):
     acc = None; wsum = 0.0; labs = {}
     for a, b, fn in SHOTS:
         if a <= t < b:
             w = min(1.0, (t - a) / XF if a > 0 else 1.0, (b - t) / XF if b < DUR else 1.0)
             if w <= 0: continue
             (kind, P), lab = fn(t)
-            img = render_shot(kind, P, t, ss)
+            img = render_shot(kind, P, t, ss, stw)
             acc = img * w if acc is None else acc + img * w; wsum += w
             if w >= 0.5: labs = lab
-    img = acc / max(wsum, 1e-6)
+    return acc / max(wsum, 1e-6), labs
+
+# the close fly-by (the camera rides the rock round the Earth): the planet sweeps past fast, so a film camera's
+# motion blur (180° shutter: 4 moments across half a frame) keeps it smooth instead of stepping
+MB = (13.8, 17.6)
+def frame(t, ss=1):
+    if MB[0] <= t < MB[1]:
+        img = 0.0
+        for d in (-0.375, -0.125, 0.125, 0.375):
+            im_, labs = frame_hdr(t + d / (2 * FPS), ss, 4.0 if d == -0.125 else 0.0)
+            img = img + im_ * 0.25
+    else:
+        img, labs = frame_hdr(t, ss)
     img = (RD.tonemap(RD.bloom(img, 1.5)) * 255).astype(np.uint8)
     img = draw_marks(img, labs)
     return img, {k: v for k, v in labs.items() if k not in ('craters', 'streaks')}

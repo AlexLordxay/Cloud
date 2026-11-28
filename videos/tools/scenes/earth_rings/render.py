@@ -408,17 +408,21 @@ def rock_sdf(x, y, z, seed):
     d -= 0.11 * (fbm3(x * 4.0, y * 4.0 + seed, z * 4.0, 3, 71.0) - 0.5)
     d -= 0.045 * (fbm3(x * 13.0, y * 13.0, z * 13.0 + seed, 2, 72.0) - 0.5)
     d -= 0.014 * (vn3(x * 40.0, y * 40.0, z * 40.0 + seed, 74.0) - 0.5)
-    # craters: bowls with raised rims round a few random points on the surface
+    # craters: soft, worn bowls with low, broad rims (no sharp edge, so no drawn-on circles), their outlines
+    # wobbled by noise so they are not perfect rounds
     ln = math.sqrt(x * x + y * y + z * z) + 1e-9
-    for k in range(11):
+    wob = 1.0 + 0.30 * (vn3(x * 6.0, y * 6.0, z * 6.0 + seed, 75.0) - 0.5)
+    for k in range(7):
         cx = h3(k, 1, 0, seed) - 0.5; cy = h3(k, 2, 0, seed) - 0.5; cz = h3(k, 3, 0, seed) - 0.5
         cl_ = math.sqrt(cx * cx + cy * cy + cz * cz) + 1e-9
         e = math.sqrt((x / ln - cx / cl_) ** 2 + (y / ln - cy / cl_) ** 2 + (z / ln - cz / cl_) ** 2)
-        rad = 0.18 + 0.30 * h3(k, 4, 0, seed)
-        if e < rad * 1.4:
-            s_ = e / rad
-            if s_ < 1.0: d += 0.17 * rad * (1 - s_ * s_)
-            else: d -= 0.07 * rad * math.exp(-((s_ - 1.05) / 0.12) ** 2)
+        rad = 0.16 + 0.30 * h3(k, 4, 0, seed)
+        if e < rad * 2.0:
+            s_ = e / rad * wob
+            if s_ < 1.0:
+                q_ = 1.0 - s_ * s_
+                d += 0.14 * rad * q_ * q_                       # zero slope at the edge: it blends in
+            d -= 0.035 * rad * math.exp(-((s_ - 0.95) / 0.32) ** 2)
     return d * 0.8
 
 @njit(fastmath=True)
@@ -488,7 +492,8 @@ def clouds3(ux, uy, uz, cov, fp):
     return 0.92 * c, dn
 
 @njit(parallel=True, fastmath=True)
-def space(ET, RL, SM, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, cov, ice, warm, arc0, arclen, band, AST):
+def space(ET, RL, SM, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, depth, ss, cov, ice, warm, arc0, arclen, band, AST, stw):
+    # stw: the stars' weight (a motion-blurred frame draws them once, sharp, instead of in every sub-frame)
     # ET: the Earth's map (equirectangular, lon from -180 at u = 0), rot: its rotation; ringk: the ring's strength (0–1)
     # ice: how far from the south pole (degrees) the ice cap reaches; warm: 0..1 the light colour (glow of the fresh ring)
     H, W = out.shape[0], out.shape[1]
@@ -601,6 +606,7 @@ def space(ET, RL, SM, SK, cam, fw, rt, up, fov, sun, rot, ringk, expo, out, dept
                         cr += tb_ * 0.9; cg += tb_ * 0.35; cb += tb_ * 0.05
                     else:
                         cr, cg, cb = stars(SK, dx, dy, dz, pix)
+                        cr *= stw; cg *= stw; cb *= stw
                         cs = dx * sx + dy * sy + dz * sz
                         if cs > 0.99997: cr += 60.0; cg += 56.0; cb += 50.0
                         elif cs > 0.999: cr += 0.3 * (cs - 0.999) / 0.001; cg += 0.28 * (cs - 0.999) / 0.001; cb += 0.24 * (cs - 0.999) / 0.001
